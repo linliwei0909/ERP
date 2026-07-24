@@ -10,6 +10,9 @@ describe("server environment validation", () => {
     ).toEqual({
       DATABASE_URL: "postgresql://user:password@localhost:5432/erp",
       LOG_LEVEL: "info",
+      AUTH_MAX_FAILED_ATTEMPTS: 5,
+      AUTH_LOCK_MINUTES: 15,
+      SESSION_ACTIVITY_THROTTLE_MINUTES: 5,
     });
   });
 

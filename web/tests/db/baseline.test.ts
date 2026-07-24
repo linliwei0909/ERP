@@ -51,6 +51,7 @@ describeDatabase("P1 foundation baseline", () => {
 
     expect(result.rows.map((row) => row.migration_name)).toEqual([
       "0001_p1_foundation_baseline",
+      "0002_p1_authentication_and_access",
     ]);
   });
 
@@ -88,6 +89,7 @@ describeDatabase("P1 foundation baseline", () => {
           'document_sequences_last_value_check',
           'idempotency_keys_expiry_check',
           'background_jobs_attempt_count_check'
+          ,'users_failed_login_attempts_check'
         )
        UNION ALL
        SELECT indexname AS object_name
@@ -109,6 +111,7 @@ describeDatabase("P1 foundation baseline", () => {
       "user_sessions_active_idx",
       "user_sessions_idle_window_check",
       "user_sessions_revocation_reason_check",
+      "users_failed_login_attempts_check",
     ]);
   });
 

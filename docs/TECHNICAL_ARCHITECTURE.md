@@ -1,6 +1,6 @@
 # Ragic 本地端系統技術架構
 
-文件狀態：依正式決議同步之架構草稿，尚未授權開發  
+文件狀態：P1.2 Identity & Access 基礎已實作；後續模組仍為架構草稿
 同步基線：`DECISIONS.md` V0.3  
 版本日期：2026-07-24
 
@@ -64,7 +64,7 @@ flowchart TB
 | Web | Next.js + TypeScript | 前後端同一程式庫，適合本機與內網部署 |
 | UI | Server-rendered list/detail forms | 緊湊清單、完整新增頁、唯讀明細與明確狀態動作 |
 | Validation | 共用 schema validation | 前端提示，後端完整重驗 |
-| ORM | Prisma | 型別、一般 CRUD 與 migration 管理；本輪不建立 migration |
+| ORM | Prisma | 型別、一般 CRUD 與 migration 管理；P1.2 以獨立測試資料庫驗證 0001、0002 |
 | Database | PostgreSQL | UUID、ACID、partial index、exclusion constraint、JSONB |
 | Authentication | Server-side revocable session | token 只存 hash、閒置 8 小時到期、帳號停用時撤銷全部 Session |
 | Background Jobs | PostgreSQL-backed queue | 月結、移轉與票據工作可追蹤及重跑 |
@@ -156,7 +156,7 @@ flowchart TB
 - 上線前一天凍結 Ragic 寫入，執行增量匯入與最終核對；切換後 Ragic 唯讀，失敗時恢復 Ragic 寫入。
 - 新系統只移未結案件與整理後主檔；完整歷史保留於唯讀 Ragic 或封存至少 7 年。
 - 上線後回退窗口（OQ-044）與附件移轉範圍（OQ-045）在 P8 切換前確認，不阻塞 P1。
-- 現有資料為測試資料，可在另案授權後重建資料庫或 schema；本輪不刪除資料、不建立 migration。
+- 現有資料用途無法只由資料庫完全確認；重建資料庫或 schema 必須另案授權。P1.2 未修改現有 `erp` 資料庫。
 
 ## 12. Prisma 與 PostgreSQL migration 策略
 
@@ -166,7 +166,7 @@ flowchart TB
 4. 審查資料前置條件、鎖定影響、執行順序及 rollback／forward-fix 後，才可在測試環境執行。
 5. 在乾淨資料庫及前一版本升級路徑執行 DB integration test，驗證 constraint 存在性及正反案例。
 
-本輪不產生或執行 migration。
+P1.2 依上述流程建立 `0002_p1_authentication_and_access`，並只在獨立 P1 測試資料庫由空白依序套用 0001、0002；已定稿的 0001 未修改。
 
 ## 13. 部署與營運
 
@@ -194,6 +194,6 @@ flowchart TB
 | 公司隔離 | 查詢、命令、匯出與背景工作均驗證公司範圍 |
 | 可追溯 | 交易可追至來源、快照、操作者、狀態、作廢／反向紀錄及 Ragic ID |
 
-## 15. 本輪限制
+## 15. P1.2 實作邊界
 
-本輪只同步文件，不開始功能開發、不修改應用程式碼、不刪除測試資料，也不建立或執行 migration。
+P1.2 只實作帳號、密碼、Session、`ADMIN`／`ORDER_ENTRY` 後端 RBAC、公司 scope、登入／登出／公司切換、最小使用者管理與初始管理員 bootstrap。未實作客戶、品項、價格、訂單、銷貨、帳款、票據、月結、採購、庫存、批號、倉庫或 Ragic 移轉；未重建或修改現有 `erp` 資料庫。

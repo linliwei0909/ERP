@@ -1,6 +1,6 @@
 # Ragic 本地端系統資料庫設計草稿
 
-文件狀態：依正式決議同步之 ERD 草稿，尚未核准 migration  
+文件狀態：P1.2 authentication／access schema 已實作；P2 以後仍為 ERD 草稿
 同步基線：`DECISIONS.md` V0.3  
 版本日期：2026-07-24
 
@@ -14,7 +14,7 @@
 - 日期使用 `date`；時間使用 `timestamptz` 並保存 UTC。
 - 交易外鍵與交易快照並存；主檔修改不得改變既有交易內容。
 - 交易資料不實體刪除；作廢、撤銷、退款、反向分配、退票及調整均保留稽核。
-- 本文件只更新設計，不建立 migration；既有測試 schema／資料的移除另案執行。
+- P1 migration 只在獨立測試資料庫驗證；既有 `erp` schema／資料的重建或移除仍須另案核准。
 
 ## 2. 共通欄位與限制
 
@@ -136,8 +136,8 @@ erDiagram
 | --- | --- | --- | --- |
 | `companies` | — | `code` | `(status, name)` |
 | `company_settings` | `company_id -> companies.id` | `(company_id, setting_key, effective_from)` | `(company_id, setting_key, effective_from desc)` |
-| `users` | — | normalized `username` | `status`, `last_active_at` |
-| `user_sessions` | `user_id -> users.id` | `token_hash` | `(user_id, revoked_at)`, `(idle_expires_at)`, partial active `(user_id, idle_expires_at)` |
+| `users` | `default_company_id -> companies.id` nullable | normalized `username` | `status`, `last_active_at`, `locked_until`, `default_company_id` |
+| `user_sessions` | `user_id -> users.id`, `selected_company_id -> companies.id` nullable | `token_hash` | `(user_id, revoked_at)`, `(idle_expires_at)`, `(selected_company_id)`, partial active `(user_id, idle_expires_at)` |
 | `roles` | — | `code` | `status` |
 | `user_roles` | `user_id -> users.id`, `role_id -> roles.id` | `(user_id, role_id)` | `(role_id, user_id)` |
 | `user_company_scopes` | `user_id -> users.id`, `company_id -> companies.id` | `(user_id, company_id)` | `(company_id, user_id)` |
@@ -146,7 +146,9 @@ erDiagram
 | `background_jobs` | `company_id -> companies.id` nullable | active partial UQ `(job_type, dedupe_key)` | `(status, run_after)`, `(job_type, created_at desc)` |
 | `audit_logs` | `actor_user_id -> users.id` nullable, `company_id -> companies.id` nullable | — | `(entity_type, entity_id, occurred_at desc)`, `(actor_user_id, occurred_at desc)` |
 
-`user_sessions` 為 server-side revocable session，只保存不可逆的 `token_hash`，並保存 `last_activity_at`、`idle_expires_at`、`revoked_at`、`revoked_reason`、建立及裝置 metadata。每次使用都驗證未撤銷且距最後活動未滿 8 小時；停用帳號必須在同一管理操作中撤銷該使用者全部有效 Session。
+`users` 以 `failed_login_attempts` 與 `locked_until` 實作可恢復的帳號層級登入保護；門檻及鎖定期間由環境設定管理，成功登入後歸零。`default_company_id` 只可由應用層在同一使用者的 `user_company_scopes` 內選擇。
+
+`user_sessions` 為 server-side revocable session，只保存不可逆的 `token_hash`，並保存 `last_activity_at`、`idle_expires_at`、`selected_company_id`、`revoked_at`、`revoked_reason`、建立及裝置 metadata。每次使用都驗證未撤銷、未過期且帳號仍啟用；活動時間採節流更新並延長 8 小時閒置期限。停用帳號必須在同一 transaction 停用使用者、撤銷全部有效 Session 並寫入 audit log。
 
 `company_settings` 保留泛用 key/value 表，但應用程式必須維護 `setting_key -> validation schema` registry；未登錄 key、型別不符或值域不合法時拒絕寫入。`audit_logs` 可使用 `entity_type + entity_id`，由應用層驗證；核心交易來源與 allocation 不得使用 generic reference 取代真實 FK。
 
@@ -297,7 +299,8 @@ erDiagram
 
 ## 7. Migration 限制
 
-- P1.1 已建立新的正式 active migration chain：`web/prisma/migrations/`；首筆為 `0001_p1_foundation_baseline`。
+- P1.1 已建立新的正式 active migration chain：`web/prisma/migrations/`；首筆為 immutable 的 `0001_p1_foundation_baseline`。
+- P1.2 新增 immutable 的 `0002_p1_authentication_and_access`，只加入登入鎖定、預設公司、Session 目前公司及相關 FK、CHECK、index；不建立 P2 業務資料表。
 - P1.1 前的舊 ERP migration 原檔封存於 `web/legacy/erp-mvp/prisma/migrations/`，不再由正式 Prisma 設定執行，且不得修改。
 - 正式 baseline 目前只允許套用到全新 disposable test database；未經另行核准，不得套用到現有開發 database、schema 或資料。
 - `DECISIONS.md` 已確認現有資料為測試資料，但任何移除、reset、drop 或 volume 清除仍需另案授權。

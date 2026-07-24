@@ -1,7 +1,8 @@
-import { getServerEnv } from "@/lib/env";
-
 type LogLevel = "debug" | "info" | "warn" | "error";
 type LogContext = Record<string, unknown>;
+
+const sensitiveKeyPattern =
+  /password|passphrase|secret|token|authorization|cookie/i;
 
 const levelWeight: Record<LogLevel, number> = {
   debug: 10,
@@ -22,8 +23,35 @@ function normalizeValue(value: unknown): unknown {
   return value;
 }
 
+function redact(value: unknown, key = ""): unknown {
+  if (sensitiveKeyPattern.test(key)) {
+    return "[REDACTED]";
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((entry) => redact(entry));
+  }
+
+  if (value && typeof value === "object" && !(value instanceof Error)) {
+    return Object.fromEntries(
+      Object.entries(value).map(([entryKey, entryValue]) => [
+        entryKey,
+        redact(entryValue, entryKey),
+      ]),
+    );
+  }
+
+  return normalizeValue(value);
+}
+
 function write(level: LogLevel, message: string, context: LogContext = {}) {
-  if (levelWeight[level] < levelWeight[getServerEnv().LOG_LEVEL]) {
+  const configuredLevel = process.env.LOG_LEVEL;
+  const minimumLevel =
+    configuredLevel && configuredLevel in levelWeight
+      ? (configuredLevel as LogLevel)
+      : "info";
+
+  if (levelWeight[level] < levelWeight[minimumLevel]) {
     return;
   }
 
@@ -34,7 +62,7 @@ function write(level: LogLevel, message: string, context: LogContext = {}) {
     ...Object.fromEntries(
       Object.entries(context).map(([key, value]) => [
         key,
-        normalizeValue(value),
+        redact(value, key),
       ]),
     ),
   };

@@ -1,6 +1,6 @@
 # Ragic 本地端系統開發階段與任務拆分
 
-文件狀態：依正式決議同步之規劃草稿，尚未授權開發  
+文件狀態：P1.2 已執行，待本輪驗收；P2 以後尚未授權
 同步基線：`DECISIONS.md` V0.3  
 版本日期：2026-07-24
 
@@ -11,7 +11,7 @@
 - 新決議先更新 `DECISIONS.md`，再同步規格、資料庫設計、計畫與程式。
 - 所有跨單據操作使用資料庫 transaction；核心規則必須有測試；重要狀態異動保留 audit log。
 - 每次只實作指定模組，不提前實作後續模組。
-- 本輪只更新文件，不開始功能開發、不刪除測試資料，也不建立 migration。
+- 本輪只執行 P1.2，不刪除現有資料、不重建現有 `erp` 資料庫，也不開始 P1.3 或 P2。
 
 ## 2. 開發階段
 
@@ -55,7 +55,16 @@ P1.1 執行狀態：
 - 採用乾淨正式 baseline 方案，正式 schema 與 active migration chain 僅包含 P1 技術基線。
 - 舊 ERP 程式、schema 與 migration 原檔移至 `web/legacy/erp-mvp/` 保存，不再由正式建置或 migration 執行。
 - `0001_p1_foundation_baseline` 只在獨立 disposable PostgreSQL 驗證；未套用到現有開發資料庫。
-- P1.1 不代表 P1.2 已開始，也不啟用登入、RBAC 畫面、公司管理或任何業務模組。
+- P1.2 已在 P1.1 基線上加入帳號、Session、RBAC、公司 scope 與最小管理畫面；未啟用任何業務模組。
+
+P1.2 執行狀態：
+
+- 新增 `0002_p1_authentication_and_access`，只在獨立 P1 測試資料庫驗證。
+- 實作 scrypt 密碼雜湊、登入防暴力鎖定、opaque Session token 與 token hash 儲存。
+- 實作 8 小時閒置逾時、活動更新節流、登出／管理員撤銷及停用帳號同 transaction 撤銷。
+- 實作 `ADMIN`／`ORDER_ENTRY` 後端 RBAC、公司 scope、預設公司與授權公司切換。
+- 實作可重跑 bootstrap、登入頁、空白首頁及最小使用者管理。
+- 登入、Session、權限、公司隔離、audit 與 transaction 失敗回滾均納入 unit／DB workflow tests。
 
 工作：
 
@@ -76,7 +85,7 @@ P1.1 執行狀態：
 
 完成條件：乾淨環境能建立資料庫、執行可審查 migration、跑完品質檢查及完成備份還原演練。
 
-### P2：公司、權限與共用主檔
+### P2：公司設定與共用主檔
 
 目標：建立第一階段所有交易依賴的公司與主檔基礎。
 
@@ -84,7 +93,7 @@ P1.1 執行狀態：
 
 - 公司、具有生效日的公司切帳參數。
 - `company_settings` 的 `setting_key` schema registry、未知 key 拒絕及值域測試。
-- 使用者、兩種主要角色、公司授權、預設公司與切換。
+- 延伸公司設定管理；帳號、角色與公司授權基礎沿用 P1.2，不重複建立。
 - 共用客戶、`customer_companies`、全系統唯一統編與境外識別。
 - 客戶聯絡人、送貨地點及公司可用範圍。
 - 共用 `items`、`item_type`、功能旗標、分類與 `item_companies`；第一階段只啟用銷售。
@@ -255,4 +264,4 @@ P1.1 執行狀態：
 
 ## 6. 本輪交付限制
 
-本輪只同步 `AGENTS.md`、`DECISIONS.md`、`OPEN_QUESTIONS.md`、`business-rules.md`、`DATABASE_DESIGN.md`、`TECHNICAL_ARCHITECTURE.md` 與 `IMPLEMENTATION_PLAN.md`。不開始功能開發、不修改應用程式碼、不刪除測試資料，也不建立或執行 migration。
+P1.2 完成後停止。不得開始 P1.3、P2、Ragic 移轉、舊 ERP 模組恢復或現有 `erp` 資料庫重建；任何破壞性資料庫操作仍須使用者另行核准。
