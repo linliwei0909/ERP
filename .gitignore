@@ -1,0 +1,40 @@
+# Next.js
+.next/
+out/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Runtime logs
+*.log
+logs/
+runtime-logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Database backups
+*.sql
+*.dump
+*.backup
+*.bak
+backups/
+database-backups/
+
+# Database volumes and local data
+postgres-data/
+pgdata/
+docker-data/
+volumes/
+test-db-data/
+postgres-test-data/
+
+# Temporary analysis files
+.tmp-ragic-analysis/
+
+# Temporary files
+*.tmp
+*.temp

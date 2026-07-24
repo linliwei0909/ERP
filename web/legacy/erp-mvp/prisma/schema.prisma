@@ -1,0 +1,1138 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ItemType {
+  FINISHED_GOOD
+  RAW_MATERIAL
+  PACKAGING
+  CONSUMABLE
+  OTHER
+}
+
+enum RecordStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum InventoryStatus {
+  AVAILABLE
+  ON_HOLD
+  QUARANTINED
+  EXPIRED
+}
+
+enum MovementType {
+  RECEIPT
+  ISSUE
+  ADJUSTMENT
+  STOCKTAKE
+  SCRAP
+  RETURN_IN
+  RETURN_OUT
+}
+
+enum CustomerTradeType {
+  DISTRIBUTOR
+  RETAIL
+}
+
+enum PriceListType {
+  SHARED
+  CUSTOMER_SPECIFIC
+}
+
+enum PurchaseRequisitionStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  PARTIALLY_ORDERED
+  COMPLETED
+  CANCELLED
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  PENDING_CONFIRMATION
+  CONFIRMED
+  PARTIALLY_RECEIVED
+  COMPLETED
+  CANCELLED
+}
+
+enum GoodsReceiptStatus {
+  DRAFT
+  PENDING_INSPECTION
+  PARTIALLY_ACCEPTED
+  RECEIVED
+  RETURNED
+  CANCELLED
+}
+
+enum ApInvoiceSourceType {
+  PURCHASE
+  MANUAL_EXPENSE
+  FIXED_ASSET
+  LEGACY_IMPORT
+}
+
+enum ApInvoiceStatus {
+  DRAFT
+  PENDING_MATCH
+  POSTED
+  PARTIALLY_PAID
+  PAID
+  VOID
+}
+
+enum PaymentStatus {
+  DRAFT
+  CONFIRMED
+  ALLOCATED
+  VOID
+}
+
+enum SalesOrderStatus {
+  DRAFT
+  CONFIRMED
+  PARTIALLY_DELIVERED
+  COMPLETED
+  CANCELLED
+}
+
+enum SalesDeliveryStatus {
+  DRAFT
+  PENDING_ISSUE
+  ISSUED
+  CANCELLED
+}
+
+enum ArInvoiceStatus {
+  DRAFT
+  POSTED
+  PARTIALLY_RECEIVED
+  PAID
+  VOID
+}
+
+enum ReceiptStatus {
+  DRAFT
+  CONFIRMED
+  ALLOCATED
+  VOID
+}
+
+model Company {
+  id        Int          @id @default(autoincrement())
+  code      String       @unique @db.VarChar(50)
+  skuPrefix String       @unique @db.VarChar(2)
+  name      String       @db.VarChar(200)
+  status    RecordStatus @default(ACTIVE)
+  note      String?
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  customers            Customer[]
+  items                Item[]
+  priceLists           PriceList[]
+  supplierCompanies    SupplierCompany[]
+  purchaseRequisitions PurchaseRequisition[]
+  purchaseOrders       PurchaseOrder[]
+  goodsReceipts        GoodsReceipt[]
+  apInvoices           ApInvoice[]
+  payments             Payment[]
+  salesOrders          SalesOrder[]
+  salesDeliveries      SalesDelivery[]
+  arInvoices           ArInvoice[]
+  receipts             Receipt[]
+  documentSequences    DocumentSequence[]
+
+  @@index([name])
+  @@index([status])
+}
+
+model PriceList {
+  id        Int           @id @default(autoincrement())
+  companyId Int
+  code      String        @db.VarChar(50)
+  name      String        @db.VarChar(200)
+  type      PriceListType @default(SHARED)
+  currency  String        @default("TWD") @db.VarChar(10)
+  status    RecordStatus  @default(ACTIVE)
+  note      String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  company   Company         @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  customers Customer[]
+  items     PriceListItem[]
+
+  @@unique([companyId, code])
+  @@index([companyId, status])
+  @@index([type, status])
+}
+
+model Customer {
+  id             Int               @id @default(autoincrement())
+  companyId      Int
+  priceListId    Int
+  code           String            @unique @db.VarChar(50)
+  name           String            @db.VarChar(200)
+  legalName      String?           @db.VarChar(200)
+  taxId          String?           @unique @db.VarChar(20)
+  type           CustomerTradeType @default(RETAIL)
+  status         RecordStatus      @default(ACTIVE)
+  paymentTerms   String?           @db.VarChar(100)
+  creditLimit    Decimal           @default(0) @db.Decimal(18, 2)
+  salesOwner     String?           @db.VarChar(100)
+  contactName    String?           @db.VarChar(100)
+  contactTitle   String?           @db.VarChar(100)
+  phone          String?           @db.VarChar(50)
+  mobile         String?           @db.VarChar(50)
+  email          String?           @db.VarChar(200)
+  website        String?           @db.VarChar(300)
+  address        String?           @db.VarChar(500)
+  invoiceAddress String?           @db.VarChar(500)
+  source         String?           @db.VarChar(100)
+  note           String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  company           Company                   @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  priceList         PriceList                 @relation(fields: [priceListId], references: [id], onDelete: Restrict)
+  shippingAddresses CustomerShippingAddress[]
+  salesOrders       SalesOrder[]
+  salesDeliveries   SalesDelivery[]
+  arInvoices        ArInvoice[]
+  receipts          Receipt[]
+
+  @@index([companyId, status])
+  @@index([priceListId])
+  @@index([name])
+  @@index([type, status])
+}
+
+model CustomerShippingAddress {
+  id                Int          @id @default(autoincrement())
+  customerId        Int
+  label             String       @db.VarChar(100)
+  recipientName     String?      @db.VarChar(100)
+  recipientPhone    String?      @db.VarChar(50)
+  postalCode        String?      @db.VarChar(20)
+  address           String       @db.VarChar(500)
+  shippingFeeMarkup Decimal      @default(0) @db.Decimal(18, 2)
+  status            RecordStatus @default(ACTIVE)
+  note              String?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  customer    Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  salesOrders SalesOrder[]
+
+  @@index([customerId, status])
+}
+
+model Item {
+  id            Int          @id @default(autoincrement())
+  companyId     Int
+  categoryId    Int?
+  packageTypeId Int
+  sequence      Int
+  sequenceScope String       @db.VarChar(100)
+  code          String       @db.VarChar(50)
+  name          String       @db.VarChar(200)
+  shortName     String?      @db.VarChar(100)
+  type          ItemType
+  spec          String?      @db.VarChar(200)
+  unit          String       @db.VarChar(20)
+  barcode       String?      @unique @db.VarChar(100)
+  trackLot      Boolean      @default(true)
+  trackExpiry   Boolean      @default(false)
+  trackSerial   Boolean      @default(false)
+  safetyStock   Decimal      @default(0) @db.Decimal(18, 3)
+  status        RecordStatus @default(ACTIVE)
+  note          String?
+  legacySystem  String?      @db.VarChar(50)
+  legacyCode    String?      @db.VarChar(100)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  company            Company                   @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  category           ItemCategory?             @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  packageType        PackageType               @relation(fields: [packageTypeId], references: [id], onDelete: Restrict)
+  inventoryLots      InventoryLot[]
+  movements          StockMovement[]
+  priceListItems     PriceListItem[]
+  supplierItems      SupplierItem[]
+  requisitionLines   PurchaseRequisitionLine[]
+  purchaseOrderLines PurchaseOrderLine[]
+  goodsReceiptLines  GoodsReceiptLine[]
+  apInvoiceLines     ApInvoiceLine[]
+  salesOrderLines    SalesOrderLine[]
+  salesDeliveryLines SalesDeliveryLine[]
+  arInvoiceLines     ArInvoiceLine[]
+
+  @@unique([companyId, code])
+  @@unique([sequenceScope, sequence])
+  @@unique([legacySystem, legacyCode])
+  @@index([companyId, status])
+  @@index([categoryId])
+  @@index([packageTypeId])
+  @@index([name])
+  @@index([type, status])
+}
+
+model ItemCategory {
+  id        Int          @id @default(autoincrement())
+  code      String       @unique @db.VarChar(2)
+  name      String       @db.VarChar(100)
+  itemType  ItemType
+  status    RecordStatus @default(ACTIVE)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  items Item[]
+
+  @@index([itemType, status])
+  @@index([name])
+}
+
+model PackageType {
+  id        Int          @id @default(autoincrement())
+  code      String       @unique @db.VarChar(2)
+  name      String       @db.VarChar(50)
+  status    RecordStatus @default(ACTIVE)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  items Item[]
+
+  @@index([status])
+  @@index([name])
+}
+
+model PriceListItem {
+  id          Int      @id @default(autoincrement())
+  priceListId Int
+  itemId      Int
+  unitPrice   Decimal  @db.Decimal(18, 4)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  priceList PriceList @relation(fields: [priceListId], references: [id], onDelete: Cascade)
+  item      Item      @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  @@unique([priceListId, itemId])
+  @@index([itemId])
+}
+
+model Warehouse {
+  id        Int          @id @default(autoincrement())
+  code      String       @unique @db.VarChar(30)
+  name      String       @db.VarChar(100)
+  status    RecordStatus @default(ACTIVE)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  inventoryLots   InventoryLot[]
+  movements       StockMovement[]
+  goodsReceipts   GoodsReceipt[]
+  salesDeliveries SalesDelivery[]
+}
+
+model InventoryLot {
+  id          Int             @id @default(autoincrement())
+  itemId      Int
+  warehouseId Int
+  lotNumber   String?         @db.VarChar(100)
+  expiryDate  DateTime?       @db.Date
+  quantity    Decimal         @default(0) @db.Decimal(18, 3)
+  unitCost    Decimal?        @db.Decimal(18, 4)
+  status      InventoryStatus @default(AVAILABLE)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  item              Item               @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  warehouse         Warehouse          @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  movements         StockMovement[]
+  goodsReceiptLots  GoodsReceiptLot[]
+  salesDeliveryLots SalesDeliveryLot[]
+
+  @@unique([itemId, warehouseId, lotNumber, expiryDate])
+  @@index([itemId, warehouseId])
+  @@index([expiryDate])
+}
+
+model StockMovement {
+  id                 Int          @id @default(autoincrement())
+  itemId             Int
+  warehouseId        Int
+  inventoryLotId     Int
+  movementType       MovementType
+  quantity           Decimal      @db.Decimal(18, 3)
+  unitCost           Decimal?     @db.Decimal(18, 4)
+  occurredAt         DateTime     @default(now())
+  sourceType         String       @db.VarChar(50)
+  sourceNo           String?      @db.VarChar(100)
+  note               String?
+  goodsReceiptLotId  Int?         @unique
+  salesDeliveryLotId Int?         @unique
+  createdAt          DateTime     @default(now())
+
+  item             Item              @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  warehouse        Warehouse         @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  inventoryLot     InventoryLot      @relation(fields: [inventoryLotId], references: [id], onDelete: Restrict)
+  goodsReceiptLot  GoodsReceiptLot?  @relation(fields: [goodsReceiptLotId], references: [id], onDelete: Restrict)
+  salesDeliveryLot SalesDeliveryLot? @relation(fields: [salesDeliveryLotId], references: [id], onDelete: Restrict)
+
+  @@index([itemId, occurredAt])
+  @@index([warehouseId, occurredAt])
+  @@index([inventoryLotId, occurredAt])
+  @@index([sourceType, sourceNo])
+}
+
+model Supplier {
+  id          Int          @id @default(autoincrement())
+  code        String       @unique @db.VarChar(50)
+  name        String       @db.VarChar(200)
+  taxId       String?      @unique @db.VarChar(20)
+  contactName String?      @db.VarChar(100)
+  phone       String?      @db.VarChar(50)
+  email       String?      @db.VarChar(200)
+  address     String?      @db.VarChar(500)
+  status      RecordStatus @default(ACTIVE)
+  note        String?
+  legacyCode  String?      @unique @db.VarChar(100)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  companies                 SupplierCompany[]
+  items                     SupplierItem[]
+  suggestedRequisitionLines PurchaseRequisitionLine[]
+  purchaseOrders            PurchaseOrder[]
+  goodsReceipts             GoodsReceipt[]
+  apInvoices                ApInvoice[]
+  payments                  Payment[]
+
+  @@index([name])
+  @@index([status])
+}
+
+model SupplierCompany {
+  id           Int          @id @default(autoincrement())
+  supplierId   Int
+  companyId    Int
+  paymentTerms String?      @db.VarChar(100)
+  currency     String       @default("TWD") @db.VarChar(10)
+  taxType      String?      @db.VarChar(30)
+  status       RecordStatus @default(ACTIVE)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  company  Company  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@unique([supplierId, companyId])
+  @@index([companyId, status])
+}
+
+model SupplierItem {
+  id                   Int          @id @default(autoincrement())
+  supplierId           Int
+  itemId               Int
+  supplierItemCode     String?      @db.VarChar(100)
+  supplierItemName     String?      @db.VarChar(200)
+  purchaseUnit         String       @db.VarChar(20)
+  conversionRate       Decimal      @default(1) @db.Decimal(18, 6)
+  minimumOrderQuantity Decimal      @default(0) @db.Decimal(18, 3)
+  orderMultiple        Decimal      @default(1) @db.Decimal(18, 3)
+  leadTimeDays         Int?
+  isPrimary            Boolean      @default(false)
+  status               RecordStatus @default(ACTIVE)
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+
+  supplier Supplier            @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  item     Item                @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  prices   SupplierItemPrice[]
+
+  @@unique([supplierId, itemId])
+  @@index([itemId, status])
+}
+
+model SupplierItemPrice {
+  id             Int       @id @default(autoincrement())
+  supplierItemId Int
+  currency       String    @default("TWD") @db.VarChar(10)
+  unitPrice      Decimal   @db.Decimal(18, 4)
+  effectiveFrom  DateTime  @db.Date
+  effectiveTo    DateTime? @db.Date
+  taxIncluded    Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+
+  supplierItem SupplierItem @relation(fields: [supplierItemId], references: [id], onDelete: Cascade)
+
+  @@unique([supplierItemId, currency, effectiveFrom])
+  @@index([supplierItemId, effectiveFrom])
+}
+
+model PurchaseRequisition {
+  id           Int                       @id @default(autoincrement())
+  companyId    Int
+  number       String                    @db.VarChar(50)
+  requestDate  DateTime                  @db.Date
+  requiredDate DateTime?                 @db.Date
+  requester    String?                   @db.VarChar(100)
+  department   String?                   @db.VarChar(100)
+  purpose      String?                   @db.VarChar(300)
+  status       PurchaseRequisitionStatus @default(DRAFT)
+  note         String?
+  approvedBy   String?                   @db.VarChar(100)
+  approvedAt   DateTime?
+  cancelledAt  DateTime?
+  cancelReason String?
+  createdAt    DateTime                  @default(now())
+  updatedAt    DateTime                  @updatedAt
+
+  company Company                   @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  lines   PurchaseRequisitionLine[]
+
+  @@unique([companyId, number])
+  @@index([companyId, status, requestDate])
+}
+
+model PurchaseRequisitionLine {
+  id                       Int       @id @default(autoincrement())
+  requisitionId            Int
+  lineNo                   Int
+  itemId                   Int
+  suggestedSupplierId      Int?
+  itemCodeSnapshot         String    @db.VarChar(50)
+  itemNameSnapshot         String    @db.VarChar(200)
+  itemSpecSnapshot         String?   @db.VarChar(200)
+  unitSnapshot             String    @db.VarChar(20)
+  productCompanyIdSnapshot Int
+  requestedQuantity        Decimal   @db.Decimal(18, 3)
+  orderedQuantity          Decimal   @default(0) @db.Decimal(18, 3)
+  estimatedUnitPrice       Decimal?  @db.Decimal(18, 4)
+  requiredDate             DateTime? @db.Date
+  purpose                  String?   @db.VarChar(300)
+  note                     String?
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+
+  requisition          PurchaseRequisition       @relation(fields: [requisitionId], references: [id], onDelete: Cascade)
+  item                 Item                      @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  suggestedSupplier    Supplier?                 @relation(fields: [suggestedSupplierId], references: [id], onDelete: SetNull)
+  purchaseOrderSources PurchaseOrderLineSource[]
+
+  @@unique([requisitionId, lineNo])
+  @@index([itemId])
+}
+
+model PurchaseOrder {
+  id                      Int                 @id @default(autoincrement())
+  companyId               Int
+  supplierId              Int
+  number                  String              @db.VarChar(50)
+  orderDate               DateTime            @db.Date
+  expectedDeliveryDate    DateTime?           @db.Date
+  currency                String              @default("TWD") @db.VarChar(10)
+  exchangeRate            Decimal             @default(1) @db.Decimal(18, 6)
+  paymentTermsSnapshot    String?             @db.VarChar(100)
+  taxType                 String?             @db.VarChar(30)
+  supplierNameSnapshot    String              @db.VarChar(200)
+  supplierTaxIdSnapshot   String?             @db.VarChar(20)
+  supplierContactSnapshot String?             @db.VarChar(100)
+  supplierAddressSnapshot String?             @db.VarChar(500)
+  status                  PurchaseOrderStatus @default(DRAFT)
+  note                    String?
+  confirmedAt             DateTime?
+  cancelledAt             DateTime?
+  cancelReason            String?
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
+
+  company       Company             @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  supplier      Supplier            @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  lines         PurchaseOrderLine[]
+  goodsReceipts GoodsReceipt[]
+
+  @@unique([companyId, number])
+  @@index([companyId, status, orderDate])
+  @@index([supplierId, orderDate])
+}
+
+model PurchaseOrderLine {
+  id                       Int       @id @default(autoincrement())
+  purchaseOrderId          Int
+  lineNo                   Int
+  itemId                   Int
+  productCompanyIdSnapshot Int
+  itemCodeSnapshot         String    @db.VarChar(50)
+  itemNameSnapshot         String    @db.VarChar(200)
+  itemSpecSnapshot         String?   @db.VarChar(200)
+  supplierItemCodeSnapshot String?   @db.VarChar(100)
+  unitSnapshot             String    @db.VarChar(20)
+  orderedQuantity          Decimal   @db.Decimal(18, 3)
+  receivedQuantity         Decimal   @default(0) @db.Decimal(18, 3)
+  cancelledQuantity        Decimal   @default(0) @db.Decimal(18, 3)
+  unitPrice                Decimal   @db.Decimal(18, 4)
+  discountRate             Decimal   @default(0) @db.Decimal(7, 4)
+  taxRate                  Decimal   @default(0) @db.Decimal(7, 4)
+  netAmount                Decimal   @db.Decimal(18, 2)
+  taxAmount                Decimal   @default(0) @db.Decimal(18, 2)
+  totalAmount              Decimal   @db.Decimal(18, 2)
+  expectedDeliveryDate     DateTime? @db.Date
+  note                     String?
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+
+  purchaseOrder      PurchaseOrder             @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  item               Item                      @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  requisitionSources PurchaseOrderLineSource[]
+  goodsReceiptLines  GoodsReceiptLine[]
+  apInvoiceSources   ApInvoiceLineSource[]
+
+  @@unique([purchaseOrderId, lineNo])
+  @@index([itemId])
+}
+
+model PurchaseOrderLineSource {
+  id                  Int      @id @default(autoincrement())
+  purchaseOrderLineId Int
+  requisitionLineId   Int
+  quantity            Decimal  @db.Decimal(18, 3)
+  createdAt           DateTime @default(now())
+
+  purchaseOrderLine PurchaseOrderLine       @relation(fields: [purchaseOrderLineId], references: [id], onDelete: Cascade)
+  requisitionLine   PurchaseRequisitionLine @relation(fields: [requisitionLineId], references: [id], onDelete: Restrict)
+
+  @@unique([purchaseOrderLineId, requisitionLineId])
+  @@index([requisitionLineId])
+}
+
+model GoodsReceipt {
+  id                   Int                @id @default(autoincrement())
+  companyId            Int
+  supplierId           Int
+  purchaseOrderId      Int
+  warehouseId          Int
+  number               String             @db.VarChar(50)
+  receiptDate          DateTime           @db.Date
+  supplierNameSnapshot String             @db.VarChar(200)
+  status               GoodsReceiptStatus @default(DRAFT)
+  note                 String?
+  postedAt             DateTime?
+  cancelledAt          DateTime?
+  cancelReason         String?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  company       Company            @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  supplier      Supplier           @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  purchaseOrder PurchaseOrder      @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  warehouse     Warehouse          @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  lines         GoodsReceiptLine[]
+
+  @@unique([companyId, number])
+  @@index([companyId, status, receiptDate])
+  @@index([purchaseOrderId])
+}
+
+model GoodsReceiptLine {
+  id                       Int      @id @default(autoincrement())
+  goodsReceiptId           Int
+  purchaseOrderLineId      Int
+  lineNo                   Int
+  itemId                   Int
+  productCompanyIdSnapshot Int
+  itemCodeSnapshot         String   @db.VarChar(50)
+  itemNameSnapshot         String   @db.VarChar(200)
+  itemSpecSnapshot         String?  @db.VarChar(200)
+  unitSnapshot             String   @db.VarChar(20)
+  receivedQuantity         Decimal  @db.Decimal(18, 3)
+  acceptedQuantity         Decimal  @db.Decimal(18, 3)
+  rejectedQuantity         Decimal  @default(0) @db.Decimal(18, 3)
+  returnedQuantity         Decimal  @default(0) @db.Decimal(18, 3)
+  unitCost                 Decimal? @db.Decimal(18, 4)
+  note                     String?
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  goodsReceipt      GoodsReceipt          @relation(fields: [goodsReceiptId], references: [id], onDelete: Cascade)
+  purchaseOrderLine PurchaseOrderLine     @relation(fields: [purchaseOrderLineId], references: [id], onDelete: Restrict)
+  item              Item                  @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  lots              GoodsReceiptLot[]
+  apInvoiceSources  ApInvoiceLineSource[]
+
+  @@unique([goodsReceiptId, lineNo])
+  @@unique([goodsReceiptId, purchaseOrderLineId])
+  @@index([itemId])
+}
+
+model GoodsReceiptLot {
+  id                 Int       @id @default(autoincrement())
+  goodsReceiptLineId Int
+  lotNumber          String?   @db.VarChar(100)
+  expiryDate         DateTime? @db.Date
+  quantity           Decimal   @db.Decimal(18, 3)
+  inventoryLotId     Int?
+  createdAt          DateTime  @default(now())
+
+  goodsReceiptLine GoodsReceiptLine @relation(fields: [goodsReceiptLineId], references: [id], onDelete: Cascade)
+  inventoryLot     InventoryLot?    @relation(fields: [inventoryLotId], references: [id], onDelete: Restrict)
+  stockMovement    StockMovement?
+
+  @@unique([goodsReceiptLineId, lotNumber, expiryDate])
+  @@index([inventoryLotId])
+}
+
+model ApInvoice {
+  id                    Int                 @id @default(autoincrement())
+  companyId             Int
+  supplierId            Int
+  number                String              @db.VarChar(50)
+  supplierInvoiceNumber String?             @db.VarChar(100)
+  sourceType            ApInvoiceSourceType
+  invoiceDate           DateTime            @db.Date
+  billingMonth          String?             @db.VarChar(6)
+  dueDate               DateTime?           @db.Date
+  currency              String              @default("TWD") @db.VarChar(10)
+  exchangeRate          Decimal             @default(1) @db.Decimal(18, 6)
+  supplierNameSnapshot  String              @db.VarChar(200)
+  supplierTaxIdSnapshot String?             @db.VarChar(20)
+  netAmount             Decimal             @db.Decimal(18, 2)
+  taxAmount             Decimal             @default(0) @db.Decimal(18, 2)
+  freightAmount         Decimal             @default(0) @db.Decimal(18, 2)
+  otherAmount           Decimal             @default(0) @db.Decimal(18, 2)
+  totalAmount           Decimal             @db.Decimal(18, 2)
+  remainingBalance      Decimal             @db.Decimal(18, 2)
+  status                ApInvoiceStatus     @default(DRAFT)
+  note                  String?
+  legacySystem          String?             @db.VarChar(50)
+  legacyCode            String?             @db.VarChar(100)
+  postedAt              DateTime?
+  voidedAt              DateTime?
+  voidReason            String?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  company     Company             @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  supplier    Supplier            @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  lines       ApInvoiceLine[]
+  allocations PaymentAllocation[]
+
+  @@unique([companyId, number])
+  @@unique([companyId, supplierId, supplierInvoiceNumber])
+  @@unique([legacySystem, legacyCode])
+  @@index([companyId, status, invoiceDate])
+  @@index([supplierId, dueDate])
+}
+
+model ApInvoiceLine {
+  id                  Int      @id @default(autoincrement())
+  apInvoiceId         Int
+  lineNo              Int
+  itemId              Int?
+  itemCodeSnapshot    String?  @db.VarChar(50)
+  descriptionSnapshot String   @db.VarChar(300)
+  itemSpecSnapshot    String?  @db.VarChar(200)
+  unitSnapshot        String?  @db.VarChar(20)
+  quantity            Decimal  @default(1) @db.Decimal(18, 3)
+  unitPrice           Decimal  @db.Decimal(18, 4)
+  discountRate        Decimal  @default(0) @db.Decimal(7, 4)
+  taxRate             Decimal  @default(0) @db.Decimal(7, 4)
+  netAmount           Decimal  @db.Decimal(18, 2)
+  taxAmount           Decimal  @default(0) @db.Decimal(18, 2)
+  totalAmount         Decimal  @db.Decimal(18, 2)
+  note                String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  apInvoice ApInvoice             @relation(fields: [apInvoiceId], references: [id], onDelete: Cascade)
+  item      Item?                 @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  sources   ApInvoiceLineSource[]
+
+  @@unique([apInvoiceId, lineNo])
+  @@index([itemId])
+}
+
+model ApInvoiceLineSource {
+  id                  Int      @id @default(autoincrement())
+  apInvoiceLineId     Int
+  purchaseOrderLineId Int?
+  goodsReceiptLineId  Int?
+  matchedQuantity     Decimal? @db.Decimal(18, 3)
+  matchedAmount       Decimal? @db.Decimal(18, 2)
+  createdAt           DateTime @default(now())
+
+  apInvoiceLine     ApInvoiceLine      @relation(fields: [apInvoiceLineId], references: [id], onDelete: Cascade)
+  purchaseOrderLine PurchaseOrderLine? @relation(fields: [purchaseOrderLineId], references: [id], onDelete: Restrict)
+  goodsReceiptLine  GoodsReceiptLine?  @relation(fields: [goodsReceiptLineId], references: [id], onDelete: Restrict)
+
+  @@index([purchaseOrderLineId])
+  @@index([goodsReceiptLineId])
+}
+
+model Payment {
+  id            Int           @id @default(autoincrement())
+  companyId     Int
+  supplierId    Int
+  number        String        @db.VarChar(50)
+  paymentDate   DateTime      @db.Date
+  paymentMethod String        @db.VarChar(50)
+  currency      String        @default("TWD") @db.VarChar(10)
+  exchangeRate  Decimal       @default(1) @db.Decimal(18, 6)
+  totalAmount   Decimal       @db.Decimal(18, 2)
+  status        PaymentStatus @default(DRAFT)
+  note          String?
+  confirmedAt   DateTime?
+  voidedAt      DateTime?
+  voidReason    String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  company     Company             @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  supplier    Supplier            @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  allocations PaymentAllocation[]
+
+  @@unique([companyId, number])
+  @@index([companyId, status, paymentDate])
+  @@index([supplierId, paymentDate])
+}
+
+model PaymentAllocation {
+  id          Int      @id @default(autoincrement())
+  paymentId   Int
+  apInvoiceId Int
+  amount      Decimal  @db.Decimal(18, 2)
+  allocatedAt DateTime @default(now())
+
+  payment   Payment   @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  apInvoice ApInvoice @relation(fields: [apInvoiceId], references: [id], onDelete: Restrict)
+
+  @@unique([paymentId, apInvoiceId])
+  @@index([apInvoiceId])
+}
+
+model SalesOrder {
+  id                      Int              @id @default(autoincrement())
+  companyId               Int
+  customerId              Int
+  shippingAddressId       Int?
+  number                  String           @db.VarChar(50)
+  orderDate               DateTime         @db.Date
+  expectedShipDate        DateTime?        @db.Date
+  currency                String           @default("TWD") @db.VarChar(10)
+  exchangeRate            Decimal          @default(1) @db.Decimal(18, 6)
+  priceListCodeSnapshot   String           @db.VarChar(50)
+  priceListNameSnapshot   String           @db.VarChar(200)
+  customerCodeSnapshot    String           @db.VarChar(50)
+  customerNameSnapshot    String           @db.VarChar(200)
+  customerTaxIdSnapshot   String?          @db.VarChar(20)
+  contactNameSnapshot     String?          @db.VarChar(100)
+  phoneSnapshot           String?          @db.VarChar(50)
+  shippingLabelSnapshot   String?          @db.VarChar(100)
+  recipientNameSnapshot   String?          @db.VarChar(100)
+  recipientPhoneSnapshot  String?          @db.VarChar(50)
+  shippingPostalSnapshot  String?          @db.VarChar(20)
+  shippingAddressSnapshot String           @db.VarChar(500)
+  shippingNoteSnapshot    String?
+  paymentTermsSnapshot    String?          @db.VarChar(100)
+  salesOwnerSnapshot      String?          @db.VarChar(100)
+  freightAmount           Decimal          @default(0) @db.Decimal(18, 2)
+  netAmount               Decimal          @db.Decimal(18, 2)
+  taxAmount               Decimal          @default(0) @db.Decimal(18, 2)
+  totalAmount             Decimal          @db.Decimal(18, 2)
+  status                  SalesOrderStatus @default(DRAFT)
+  note                    String?
+  confirmedAt             DateTime?
+  cancelledAt             DateTime?
+  cancelReason            String?
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @updatedAt
+
+  company         Company                  @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  customer        Customer                 @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  shippingAddress CustomerShippingAddress? @relation(fields: [shippingAddressId], references: [id], onDelete: SetNull)
+  lines           SalesOrderLine[]
+  deliveries      SalesDelivery[]
+
+  @@unique([companyId, number])
+  @@index([companyId, status, orderDate])
+  @@index([customerId, orderDate])
+}
+
+model SalesOrderLine {
+  id                       Int      @id @default(autoincrement())
+  salesOrderId             Int
+  lineNo                   Int
+  itemId                   Int
+  productCompanyIdSnapshot Int
+  itemCodeSnapshot         String   @db.VarChar(50)
+  itemNameSnapshot         String   @db.VarChar(200)
+  itemSpecSnapshot         String?  @db.VarChar(200)
+  unitSnapshot             String   @db.VarChar(20)
+  orderedQuantity          Decimal  @db.Decimal(18, 3)
+  deliveredQuantity        Decimal  @default(0) @db.Decimal(18, 3)
+  cancelledQuantity        Decimal  @default(0) @db.Decimal(18, 3)
+  unitPrice                Decimal  @db.Decimal(18, 4)
+  discountRate             Decimal  @default(0) @db.Decimal(7, 4)
+  taxRate                  Decimal  @default(0) @db.Decimal(7, 4)
+  netAmount                Decimal  @db.Decimal(18, 2)
+  taxAmount                Decimal  @default(0) @db.Decimal(18, 2)
+  totalAmount              Decimal  @db.Decimal(18, 2)
+  note                     String?
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  salesOrder      SalesOrder                @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+  item            Item                      @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  deliverySources SalesDeliveryLineSource[]
+
+  @@unique([salesOrderId, lineNo])
+  @@index([itemId])
+}
+
+model SalesDelivery {
+  id                      Int                 @id @default(autoincrement())
+  companyId               Int
+  customerId              Int
+  salesOrderId            Int
+  warehouseId             Int
+  number                  String              @db.VarChar(50)
+  deliveryDate            DateTime            @db.Date
+  expectedShipDate        DateTime?           @db.Date
+  customerCodeSnapshot    String              @db.VarChar(50)
+  customerNameSnapshot    String              @db.VarChar(200)
+  customerTaxIdSnapshot   String?             @db.VarChar(20)
+  recipientNameSnapshot   String?             @db.VarChar(100)
+  recipientPhoneSnapshot  String?             @db.VarChar(50)
+  shippingPostalSnapshot  String?             @db.VarChar(20)
+  shippingAddressSnapshot String              @db.VarChar(500)
+  shippingNoteSnapshot    String?
+  status                  SalesDeliveryStatus @default(DRAFT)
+  note                    String?
+  postedAt                DateTime?
+  cancelledAt             DateTime?
+  cancelReason            String?
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
+
+  company    Company             @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  customer   Customer            @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  salesOrder SalesOrder          @relation(fields: [salesOrderId], references: [id], onDelete: Restrict)
+  warehouse  Warehouse           @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  lines      SalesDeliveryLine[]
+  arInvoice  ArInvoice?
+
+  @@unique([companyId, number])
+  @@index([companyId, status, deliveryDate])
+  @@index([salesOrderId])
+  @@index([customerId, deliveryDate])
+}
+
+model SalesDeliveryLine {
+  id                       Int      @id @default(autoincrement())
+  salesDeliveryId          Int
+  lineNo                   Int
+  itemId                   Int
+  productCompanyIdSnapshot Int
+  itemCodeSnapshot         String   @db.VarChar(50)
+  itemNameSnapshot         String   @db.VarChar(200)
+  itemSpecSnapshot         String?  @db.VarChar(200)
+  unitSnapshot             String   @db.VarChar(20)
+  deliveredQuantity        Decimal  @db.Decimal(18, 3)
+  unitPrice                Decimal  @db.Decimal(18, 4)
+  discountRate             Decimal  @default(0) @db.Decimal(7, 4)
+  taxRate                  Decimal  @default(0) @db.Decimal(7, 4)
+  netAmount                Decimal  @db.Decimal(18, 2)
+  taxAmount                Decimal  @default(0) @db.Decimal(18, 2)
+  totalAmount              Decimal  @db.Decimal(18, 2)
+  note                     String?
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  salesDelivery SalesDelivery             @relation(fields: [salesDeliveryId], references: [id], onDelete: Cascade)
+  item          Item                      @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  orderSources  SalesDeliveryLineSource[]
+  lots          SalesDeliveryLot[]
+  arSources     ArInvoiceLineSource[]
+
+  @@unique([salesDeliveryId, lineNo])
+  @@index([itemId])
+}
+
+model SalesDeliveryLineSource {
+  id                  Int      @id @default(autoincrement())
+  salesDeliveryLineId Int
+  salesOrderLineId    Int
+  quantity            Decimal  @db.Decimal(18, 3)
+  createdAt           DateTime @default(now())
+
+  salesDeliveryLine SalesDeliveryLine @relation(fields: [salesDeliveryLineId], references: [id], onDelete: Cascade)
+  salesOrderLine    SalesOrderLine    @relation(fields: [salesOrderLineId], references: [id], onDelete: Restrict)
+
+  @@unique([salesDeliveryLineId, salesOrderLineId])
+  @@index([salesOrderLineId])
+}
+
+model SalesDeliveryLot {
+  id                  Int      @id @default(autoincrement())
+  salesDeliveryLineId Int
+  inventoryLotId      Int
+  quantity            Decimal  @db.Decimal(18, 3)
+  createdAt           DateTime @default(now())
+
+  salesDeliveryLine SalesDeliveryLine @relation(fields: [salesDeliveryLineId], references: [id], onDelete: Cascade)
+  inventoryLot      InventoryLot      @relation(fields: [inventoryLotId], references: [id], onDelete: Restrict)
+  stockMovement     StockMovement?
+
+  @@unique([salesDeliveryLineId, inventoryLotId])
+  @@index([inventoryLotId])
+}
+
+model ArInvoice {
+  id                      Int             @id @default(autoincrement())
+  companyId               Int
+  customerId              Int
+  salesDeliveryId         Int             @unique
+  number                  String          @db.VarChar(50)
+  invoiceDate             DateTime        @db.Date
+  billingMonth            String?         @db.VarChar(6)
+  dueDate                 DateTime?       @db.Date
+  currency                String          @default("TWD") @db.VarChar(10)
+  exchangeRate            Decimal         @default(1) @db.Decimal(18, 6)
+  customerCodeSnapshot    String          @db.VarChar(50)
+  customerNameSnapshot    String          @db.VarChar(200)
+  customerTaxIdSnapshot   String?         @db.VarChar(20)
+  billingAddressSnapshot  String?         @db.VarChar(500)
+  netAmount               Decimal         @db.Decimal(18, 2)
+  taxAmount               Decimal         @default(0) @db.Decimal(18, 2)
+  freightAmount           Decimal         @default(0) @db.Decimal(18, 2)
+  totalAmount             Decimal         @db.Decimal(18, 2)
+  remainingBalance        Decimal         @db.Decimal(18, 2)
+  governmentInvoiceNumber String?         @db.VarChar(20)
+  governmentInvoiceIssued Boolean         @default(false)
+  status                  ArInvoiceStatus @default(DRAFT)
+  note                    String?
+  postedAt                DateTime?
+  voidedAt                DateTime?
+  voidReason              String?
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
+
+  company       Company             @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  customer      Customer            @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  salesDelivery SalesDelivery       @relation(fields: [salesDeliveryId], references: [id], onDelete: Restrict)
+  lines         ArInvoiceLine[]
+  allocations   ReceiptAllocation[]
+
+  @@unique([companyId, number])
+  @@index([companyId, status, invoiceDate])
+  @@index([customerId, dueDate])
+}
+
+model ArInvoiceLine {
+  id                  Int      @id @default(autoincrement())
+  arInvoiceId         Int
+  lineNo              Int
+  itemId              Int
+  itemCodeSnapshot    String   @db.VarChar(50)
+  descriptionSnapshot String   @db.VarChar(300)
+  itemSpecSnapshot    String?  @db.VarChar(200)
+  unitSnapshot        String   @db.VarChar(20)
+  quantity            Decimal  @db.Decimal(18, 3)
+  unitPrice           Decimal  @db.Decimal(18, 4)
+  discountRate        Decimal  @default(0) @db.Decimal(7, 4)
+  taxRate             Decimal  @default(0) @db.Decimal(7, 4)
+  netAmount           Decimal  @db.Decimal(18, 2)
+  taxAmount           Decimal  @default(0) @db.Decimal(18, 2)
+  totalAmount         Decimal  @db.Decimal(18, 2)
+  note                String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  arInvoice ArInvoice             @relation(fields: [arInvoiceId], references: [id], onDelete: Cascade)
+  item      Item                  @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  sources   ArInvoiceLineSource[]
+
+  @@unique([arInvoiceId, lineNo])
+  @@index([itemId])
+}
+
+model ArInvoiceLineSource {
+  id                  Int      @id @default(autoincrement())
+  arInvoiceLineId     Int
+  salesDeliveryLineId Int
+  matchedQuantity     Decimal  @db.Decimal(18, 3)
+  matchedAmount       Decimal  @db.Decimal(18, 2)
+  createdAt           DateTime @default(now())
+
+  arInvoiceLine     ArInvoiceLine     @relation(fields: [arInvoiceLineId], references: [id], onDelete: Cascade)
+  salesDeliveryLine SalesDeliveryLine @relation(fields: [salesDeliveryLineId], references: [id], onDelete: Restrict)
+
+  @@unique([arInvoiceLineId, salesDeliveryLineId])
+  @@index([salesDeliveryLineId])
+}
+
+model Receipt {
+  id            Int           @id @default(autoincrement())
+  companyId     Int
+  customerId    Int
+  number        String        @db.VarChar(50)
+  receiptDate   DateTime      @db.Date
+  paymentMethod String        @db.VarChar(50)
+  currency      String        @default("TWD") @db.VarChar(10)
+  exchangeRate  Decimal       @default(1) @db.Decimal(18, 6)
+  totalAmount   Decimal       @db.Decimal(18, 2)
+  status        ReceiptStatus @default(DRAFT)
+  note          String?
+  confirmedAt   DateTime?
+  voidedAt      DateTime?
+  voidReason    String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  company     Company             @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  customer    Customer            @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  allocations ReceiptAllocation[]
+
+  @@unique([companyId, number])
+  @@index([companyId, status, receiptDate])
+  @@index([customerId, receiptDate])
+}
+
+model ReceiptAllocation {
+  id          Int      @id @default(autoincrement())
+  receiptId   Int
+  arInvoiceId Int
+  amount      Decimal  @db.Decimal(18, 2)
+  allocatedAt DateTime @default(now())
+
+  receipt   Receipt   @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  arInvoice ArInvoice @relation(fields: [arInvoiceId], references: [id], onDelete: Restrict)
+
+  @@unique([receiptId, arInvoiceId])
+  @@index([arInvoiceId])
+}
+
+model DocumentSequence {
+  id           Int      @id @default(autoincrement())
+  companyId    Int
+  documentType String   @db.VarChar(30)
+  dateKey      String   @db.VarChar(8)
+  lastNumber   Int      @default(0)
+  updatedAt    DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Restrict)
+
+  @@unique([companyId, documentType, dateKey])
+}
