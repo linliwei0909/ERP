@@ -1,7 +1,7 @@
 # Ragic 本地端系統開發階段與任務拆分
 
-文件狀態：P1 已結案；P2.1～P2.4 已完成，P2.5 以後尚未授權
-同步基線：`DECISIONS.md` V0.7
+文件狀態：P1 已結案；P2.1～P2.5 已完成，P2.6 以後尚未授權
+同步基線：`DECISIONS.md` V0.8
 版本日期：2026-07-25
 
 ## 1. 執行原則
@@ -11,7 +11,7 @@
 - 新決議先更新 `DECISIONS.md`，再同步規格、資料庫設計、計畫與程式。
 - 所有跨單據操作使用資料庫 transaction；核心規則必須有測試；重要狀態異動保留 audit log。
 - 每次只實作指定模組，不提前實作後續模組。
-- 本輪只完成 P2.4 價格表、價格明細與客戶價格表指派；不開始 P2.5，不新增運費或交易資料表。
+- 本輪只完成 P2.5 送貨地點運費規則與唯讀試算；不開始 P2.6，不新增交易或匯入資料表。
 
 ## 2. 開發階段
 
@@ -129,6 +129,15 @@ P2.4 完成狀態：
 - 所有寫入使用後端 RBAC、company scope、transaction、audit、idempotency 與 correlation ID。
 - Unit 與 DB workflow tests 已涵蓋 normalization、精度與零價、有效期間邊界／重疊、composite FK、跨公司、RBAC、查價、rollback、audit、idempotency、migration 與禁止資料表。
 
+P2.5 完成狀態：
+
+- `0007_p2_freight_rules` 新增正式 `freight_mode` enum 與 `freight_rules`，未修改既有 migration。
+- 完成三種互斥模式、`numeric(18,0)` 非負運費、半開期間 CHECK、所有歷程 GiST exclusion，以及客戶公司與送貨地點客戶的 composite FK。
+- 完成 ADMIN 運費規則清單、建立、明細、期間／模式／狀態調整；ORDER_ENTRY 只能依目前公司、客戶、送貨地點、明確日期與數量唯讀試算。
+- 按數量試算使用 10,000 倍整數縮放及整數四捨五入至元；找不到規則一致回傳 `FREIGHT_RULE_NOT_FOUND`，不套用免運或零元 fallback。
+- 所有寫入使用後端 RBAC、company scope、transaction、audit、idempotency 與 correlation ID；一般 API/UI 不提供 hard delete。
+- Unit 與 DB workflow tests 已涵蓋模式互斥、零元／負值、期間邊界／重疊、composite FK、decimal-safe 試算、跨公司、RBAC、停用關聯、rollback、audit、idempotency、migration 與禁止資料表。
+
 工作：
 
 - [完成 P2.1] 公司、具有生效日的公司切帳參數。
@@ -142,13 +151,13 @@ P2.4 完成狀態：
 - [完成 P2.4] 價格表、價格版本、半開有效期間與全歷程排除重疊限制。
 - [完成 P2.4] `customer_price_list_assignments` 使用 `[valid_from, valid_to)`，同客戶、同公司期間不得重疊。
 - [完成 P2.4] `price_lists` 移除 `exclusive_customer_id`；客戶價格表關係只由 assignment 管理。
-- `freight_rules` 與 `customer_price_list_assignments` 使用 composite FK 驗證客戶／公司歸屬。
+- [完成 P2.5] `freight_rules` 與 `customer_price_list_assignments` 使用 composite FK 驗證客戶／公司歸屬。
 - 查無有效價格時標示人工價格；有標準價但改價時理由必填。
 - 正式價格表只允許管理員新增／更新；人工價格不回寫正式價表。
-- 三種運費方式、半開有效期間與訂單運費快照。
+- [完成 P2.5 主檔] 三種運費方式、半開有效期間與唯讀試算；交易快照留待交易模組。
 - 主檔合併、停用、改指、legacy mapping 與 audit。
 
-完成條件：P2.2～P2.4 的跨公司負面測試、主檔唯一限制、可用條件、有效期間、缺價、停用、rollback 與稽核已通過；交易價格快照與運費留待後續已授權切片。
+完成條件：P2.2～P2.5 的跨公司負面測試、主檔唯一限制、可用條件、有效期間、缺價／缺規則、停用、decimal-safe 試算、rollback 與稽核已通過；交易價格及運費快照留待後續已授權切片。
 
 ### P3：銷售訂單與銷貨單
 
@@ -304,10 +313,11 @@ P2.4 完成狀態：
 
 ## 6. 本輪交付限制
 
-P2.4 驗證及文件同步完成後停止。未取得使用者下一步授權前，不得開始 P2.5、運費、分類、Ragic 移轉、舊 ERP 模組恢復或任何交易模組；任何破壞性資料庫操作仍須使用者另行核准。
+P2.5 驗證及文件同步完成後停止。未取得使用者下一步授權前，不得開始 P2.6、Ragic 移轉、舊 ERP 模組恢復或任何交易模組；任何破壞性資料庫操作仍須使用者另行核准。
 
 ## 7. 變更紀錄
 
+- V0.8（2026-07-25）：同步 DEC-055，標示 P2.5 運費規則、互斥模式、有效期間、decimal-safe 試算、權限、稽核及驗證完成；P2.6 以後維持未授權。
 - V0.7（2026-07-25）：同步 DEC-054，標示 P2.4 價格表、價格版本、客戶指派、有效期間、查價、權限、稽核及驗證完成；P2.5 以後維持未授權。
 - V0.6（2026-07-25）：同步 DEC-053，標示 P2.3 品項、公司關係、可銷售條件、權限、稽核及驗證完成；P2.4 以後維持未授權。
 - V0.5（2026-07-25）：同步 DEC-052，標示 P2.2 客戶、公司關係、聯絡人、送貨地點、權限、稽核及驗證完成；P2.3 以後維持未授權。

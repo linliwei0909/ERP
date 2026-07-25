@@ -1,16 +1,16 @@
 # Ragic 本地端系統共通業務規則
 
 文件狀態：第一階段正式規則彙整  
-同步基線：`DECISIONS.md` V0.7
+同步基線：`DECISIONS.md` V0.8
 最後更新：2026-07-25
 
 ## 1. 規格效力
 
-- 本文件依 `DECISIONS.md` V0.7 同步整理；內容衝突時一律以 `DECISIONS.md` 為準。
+- 本文件依 `DECISIONS.md` V0.8 同步整理；內容衝突時一律以 `DECISIONS.md` 為準。
 - 已由 `DECISIONS.md` 決議的事項不得重新列為待確認。
 - 第一階段不得自行加入庫存、批號、分批出貨、出庫依賴或正式會計過帳。
 - `OPEN_QUESTIONS.md` 保留 OQ-005、OQ-044 與 OQ-045；三者均不阻塞 P1。
-- P2.4 僅實作價格表、價格明細與客戶價格表指派；不得提前實作運費、訂單、人工交易價格或其他模組。
+- P2.5 僅實作送貨地點運費規則與唯讀試算；不得提前實作訂單、運費快照、匯入或其他模組。
 
 ## 2. 第一階段範圍
 
@@ -85,6 +85,11 @@
 - 運費以客戶與送貨地點取得有效規則。
 - 運費規則與客戶價格表指派都必須透過客戶／公司 composite FK 保證公司歸屬一致。
 - 同一送貨地點在同一有效期間只能有一種方式：不收運費、按數量收費或按地點固定金額。
+- `freight_mode` 正式值域為 `NO_CHARGE`, `QUANTITY_BASED`, `FIXED_PER_LOCATION`；每個送貨地點使用自己的明確規則，不建立客戶層級 fallback。
+- `NO_CHARGE` 不保存任何金額且試算為 0；`QUANTITY_BASED` 只保存每單位運費；`FIXED_PER_LOCATION` 只保存固定運費。
+- 每單位與固定運費使用新臺幣元 `numeric(18,0)`，不得為負數且允許零。試算數量使用非負 `numeric(18,4)`；按數量計價使用 decimal-safe 計算並四捨五入至元，不得使用 JavaScript 浮點數直接相乘。
+- 同一公司、客戶與送貨地點的所有保留規則不論狀態均不得有重疊期間；相鄰期間允許，open-ended 期間會阻擋後續重疊版本。
+- 查詢必須傳入明確 `effectiveDate` 與 quantity，並驗證 company scope、有效客戶公司關係、有效且屬於該客戶的送貨地點與有效 ACTIVE 規則。找不到時回傳 `FREIGHT_RULE_NOT_FOUND`，不得自行免運、套用零或建立新規則。
 - `price_lists` 屬於單一公司；code 採 NFKC、trim、uppercase normalization 並在公司內唯一。價格表不保存 `exclusive_customer_id`，也不建立未經決議的 `list_type`。
 - `item_prices.unit_price` 為未稅單價，使用 `numeric(18,5)`，不得為負數且允許零價。
 - 價格、客戶價格表指派與運費有效期間採半開區間：包含生效日、不包含失效日；`valid_to` 可為空，非空時必須晚於 `valid_from`。相鄰期間允許。
@@ -244,6 +249,7 @@
 
 ## 17. 變更紀錄
 
+- V0.8（2026-07-25）：同步 DEC-055，正式化送貨地點運費模式、金額精度、decimal-safe 試算、半開期間、全歷程排除重疊、composite FK、明確日期查詢、`FREIGHT_RULE_NOT_FOUND`、權限及 audit。
 - V0.7（2026-07-25）：同步 DEC-054，正式化公司價格表、未稅單價精度、半開有效期間、全歷程排除重疊、客戶指派 composite FK、明確日期查價、`PRICE_NOT_FOUND`、權限及 audit。
 - V0.6（2026-07-25）：同步 DEC-053，正式化跨公司品項、兩種品項類型、代碼與條碼 normalization、用途旗標、公司別代碼、可銷售條件、權限及 audit。
 - V0.5（2026-07-25）：同步 DEC-052，加入跨公司客戶、境內外識別、公司別客戶代碼、聯絡方式、主要聯絡人、送貨地點、停用、權限及 audit 規則。

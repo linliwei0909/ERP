@@ -1,7 +1,7 @@
 # Ragic 本地端系統資料庫設計草稿
 
-文件狀態：P1 正式基線及 P2.1～P2.4 主檔已實作；P2.5 以後仍為 ERD 草稿
-同步基線：`DECISIONS.md` V0.7
+文件狀態：P1 正式基線及 P2.1～P2.5 主檔已實作；P2.6 以後仍為 ERD 草稿
+同步基線：`DECISIONS.md` V0.8
 版本日期：2026-07-25
 
 ## 1. 設計基線
@@ -14,7 +14,7 @@
 - 日期使用 `date`；時間使用 `timestamptz` 並保存 UTC。
 - 交易外鍵與交易快照並存；主檔修改不得改變既有交易內容。
 - 交易資料不實體刪除；作廢、撤銷、退款、反向分配、退票及調整均保留稽核。
-- P1 的 0001、0002、0003 已套用正式 `erp` 開發資料庫；P2.1 沿用既有 `company_settings`，未修改 schema。P2.2 由 0004 新增四張客戶主檔；P2.3 由 `0005_p2_item_master` 新增兩張品項主檔；P2.4 由 `0006_p2_pricing_master` 新增三張價格主檔。
+- P1 的 0001、0002、0003 已套用正式 `erp` 開發資料庫；P2.1 沿用既有 `company_settings`，未修改 schema。P2.2 由 0004 新增四張客戶主檔；P2.3 由 `0005_p2_item_master` 新增兩張品項主檔；P2.4 由 `0006_p2_pricing_master` 新增三張價格主檔；P2.5 由 `0007_p2_freight_rules` 新增運費規則。
 
 ## 2. 共通欄位與限制
 
@@ -175,7 +175,7 @@ P2.1 正式登錄 `billing_cutoff_day`，其 `setting_value` 必須解析為 1 �
 | `customer_companies` | `customer_id -> customers.id`, `company_id -> companies.id`, actor FK | `(customer_id, company_id)`；`(company_id, normalized_customer_code)` | `(company_id, status, customer_id)`, `(customer_id, status)` |
 | `customer_contacts` | `customer_id -> customers.id`, actor FK | partial UQ `customer_id WHERE status='ACTIVE' AND is_primary` | `(customer_id, status, is_primary desc)`, `email` |
 | `delivery_locations` | `customer_id -> customers.id`, actor FK | `(customer_id, code)`；支援後續 composite FK 的 `(id, customer_id)`；partial UQ `customer_id WHERE status='ACTIVE' AND is_default` | `(customer_id, status, is_default desc)`, `(city, district)` |
-| `freight_rules` | composite `(customer_id, company_id) -> customer_companies(customer_id, company_id)`；composite `(delivery_location_id, customer_id) -> delivery_locations(id, customer_id)` | exclusion on company + location + effective range | `(company_id, delivery_location_id, valid_from desc)`, partial active |
+| `freight_rules` | composite `(customer_id, company_id) -> customer_companies(customer_id, company_id)`；composite `(delivery_location_id, customer_id) -> delivery_locations(id, customer_id)`；actor FK | exclusion on company + customer + location + `[valid_from, valid_to)` | `(company_id, customer_id, delivery_location_id, status, valid_from, valid_to)`, `(company_id, customer_id, delivery_location_id, valid_from desc)` |
 | `items` | `created_by -> users.id`, `updated_by -> users.id` | `normalized_code`；partial UQ `barcode WHERE barcode IS NOT NULL` | `(status, sales_enabled, item_type, name)`, `(item_type, status, name)` |
 | `item_companies` | `item_id -> items.id`, `company_id -> companies.id`, actor FK | `(item_id, company_id)`；`(company_id, normalized_company_item_code)` | `(company_id, status, sales_enabled, item_id)`, `(item_id, status)` |
 | `price_lists` | `company_id -> companies.id`；`created_by`, `updated_by -> users.id` | `(company_id, normalized_code)`；支援 composite FK 的 `(id, company_id)` | `(company_id, status, name)` |
@@ -193,6 +193,16 @@ P2.4 正式欄位與限制：
 - `customer_price_list_assignments`：`customer_id`, `company_id`, `price_list_id`, `valid_from`, `valid_to`, `status` 及 actor／時間。兩組 composite FK 保證客戶公司與價格表公司一致；GiST exclusion 保證同客戶、同公司的所有保留期間不論 status 均不重疊。
 - 三表 UUID 均由 PostgreSQL 產生，時間為 `timestamptz(3)`，FK 均採 `ON DELETE RESTRICT ON UPDATE RESTRICT`。一般 API/UI 不提供 DELETE。
 - P2.4 有效價格查詢要求明確日期，並在 application service 驗證 company scope、有效客戶公司關係與有效可銷售品項公司關係，再查有效 assignment 與 item price；找不到時回傳 `PRICE_NOT_FOUND`。
+
+P2.5 正式欄位與限制：
+
+- `freight_rules`：`customer_id`, `company_id`, `delivery_location_id`, `mode`, nullable `unit_freight`, nullable `fixed_freight`, `valid_from`, `valid_to`, `status` 及建立／更新 actor 與時間。
+- `freight_mode` 正式 enum 為 `NO_CHARGE`, `QUANTITY_BASED`, `FIXED_PER_LOCATION`。模式／金額 CHECK 保證免運時兩金額皆空、按數量時只有 `unit_freight`、固定計價時只有 `fixed_freight`。
+- 兩種運費金額均為 `numeric(18,0)` 且非負；quantity 為 application 試算輸入，不保存在規則表，使用非負 `numeric(18,4)`。
+- 有效期間採 `[valid_from, valid_to)`；CHECK 保證非空失效日晚於生效日。GiST exclusion 保證同公司、客戶與送貨地點的所有保留期間不論 status 均不重疊。
+- `(customer_id, company_id)` 與 `(delivery_location_id, customer_id)` composite FK 分別保證客戶公司關係及送貨地點歸屬；所有 FK 使用 `ON DELETE RESTRICT ON UPDATE RESTRICT`。
+- 查詢要求明確日期與 quantity，並由 application service 驗證有效客戶、有效客戶公司關係、有效且屬於該客戶的送貨地點及有效 ACTIVE 規則；缺少規則回傳 `FREIGHT_RULE_NOT_FOUND`。
+- 按數量試算使用 10,000 倍整數縮放與整數四捨五入至元，不使用 JavaScript 浮點乘法。P2.5 不建立 fallback、交易快照或任何交易資料表。
 
 P2.2 正式欄位與限制：
 
@@ -340,6 +350,7 @@ P2.3 正式欄位與限制：
 
 ## 8. 變更紀錄
 
+- V0.8（2026-07-25）：同步 DEC-055 與 `0007_p2_freight_rules`，正式化 freight enum、模式／金額 CHECK、`numeric(18,0)`、半開期間、全歷程 GiST exclusion、兩組 composite FK、索引及 decimal-safe 試算。
 - V0.7（2026-07-25）：同步 DEC-054 與 `0006_p2_pricing_master`，正式化三張價格主檔、`numeric(18,5)`、半開期間 CHECK、全歷程 GiST exclusion、兩組 composite FK、索引與查價驗證。
 - V0.6（2026-07-25）：同步 DEC-053 與 `0005_p2_item_master`，正式化 `items`、`item_companies`、item enum、normalized code、條碼 partial unique、用途旗標、公司可銷售條件及禁止範圍。
 - V0.5（2026-07-25）：同步 DEC-052 與 `0004_p2_customer_master`，正式化四張客戶主檔資料表、境內外 CHECK、partial unique、公司別代碼、聯絡方式及預設／主要唯一限制。

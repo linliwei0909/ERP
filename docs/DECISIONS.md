@@ -1,7 +1,7 @@
 # Ragic 本地端系統正式決議
 
 文件性質：本專案最高優先級的業務決議紀錄  
-版本：V0.7
+版本：V0.8
 最後更新：2026-07-25
 
 ## 1. 使用原則
@@ -1035,6 +1035,21 @@
 - 已生效價格不得直接覆寫而失去歷程；價格變更以新的期間版本表示，既有版本僅調整期間或狀態並保留 audit。
 - 一般 UI 與 API 不提供 hard delete。正式價格、期間及客戶指派的重要異動必須與 audit log 位於同一 transaction，並使用後端 RBAC、company scope、idempotency 及 correlation ID。
 
+## DEC-055 送貨地點運費規則與試算
+
+- P2.5 只建立 `freight_rules` 與正式 `freight_mode` enum，不建立訂單、銷貨單、運費快照、客戶層級 fallback、區域／重量／距離計價或承運商管理。
+- 運費規則以 `company_id`, `customer_id`, `delivery_location_id` 與有效期間管理。客戶必須具有該公司的有效 `customer_companies` 關係，送貨地點必須屬於該客戶；每個送貨地點使用自己的明確規則。
+- `freight_mode` 正式值域為 `NO_CHARGE`, `QUANTITY_BASED`, `FIXED_PER_LOCATION`。
+- `NO_CHARGE` 的 `unit_freight` 與 `fixed_freight` 均為 null，試算結果為 0；`QUANTITY_BASED` 只保存 `unit_freight`；`FIXED_PER_LOCATION` 只保存 `fixed_freight`。
+- `unit_freight` 與 `fixed_freight` 使用新臺幣元 `numeric(18,0)`，不得為負數且允許零。試算 quantity 使用 `numeric(18,4)` 且不得為負數。
+- `QUANTITY_BASED` 使用 decimal-safe 計算 `quantity × unit_freight`，依正式金額規則四捨五入至元；不得直接使用 JavaScript 浮點數計算。
+- 有效期間採半開區間 `[valid_from, valid_to)`；`valid_to` 可為 null，否則必須晚於 `valid_from`。相鄰期間允許，open-ended 期間阻擋後續重疊。
+- 同一公司、客戶與送貨地點的所有保留運費規則不論 status 均不得有重疊期間。
+- 只有 `ADMIN` 可以建立、調整、啟用或停用運費規則；`ORDER_ENTRY` 只能依目前授權公司、客戶、送貨地點、明確 effective date 與 quantity 唯讀試算。
+- 查詢依序驗證 permission、company scope、有效客戶、有效客戶公司關係、有效且屬於該客戶的送貨地點，以及指定日期有效且為 ACTIVE 的規則。
+- 找不到有效規則時回傳一致的 `FREIGHT_RULE_NOT_FOUND`；不得自行視為免運、套用 0 或建立新規則。
+- 一般 UI 與 API 不提供 hard delete。模式、金額、期間與狀態的重要異動必須與 audit log 位於同一 transaction，並使用後端 RBAC、company scope、idempotency 及 correlation ID。
+
 
 ## 3. 尚未定案且應保留於 OPEN_QUESTIONS.md 的事項
 
@@ -1046,6 +1061,7 @@
 
 ## 4. 變更紀錄
 
+- V0.8（2026-07-25）：新增 DEC-055，確認送貨地點運費模式、金額精度、decimal-safe 試算、半開期間、全歷程排除重疊、兩組 composite FK、明確日期查詢、FREIGHT_RULE_NOT_FOUND、權限及稽核規則。
 - V0.7（2026-07-25）：新增 DEC-054，確認價格表、未稅價格精度、半開期間、全歷程排除重疊、客戶指派 composite FK、effectiveDate 查價、PRICE_NOT_FOUND、權限及稽核規則。
 - V0.6（2026-07-25）：新增 DEC-053，確認跨公司品項、正式類型、代碼與條碼 normalization、用途旗標、公司別代碼、可銷售條件、權限、停用及稽核規則。
 - V0.5（2026-07-25）：新增 DEC-052，確認跨公司客戶、公司關係、聯絡方式、主要聯絡人、送貨地點、預設地點、權限、停用與稽核規則。

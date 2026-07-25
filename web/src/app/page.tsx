@@ -81,6 +81,12 @@ export default async function Home() {
           >
             正式價格查詢
           </Link>
+          <Link
+            href="/freight/quote"
+            className="rounded-lg border border-teal-700 px-4 py-2 text-teal-800"
+          >
+            運費試算
+          </Link>
           {hasRole(context.roleCodes, "ADMIN") ? (
             <>
               <Link
@@ -112,6 +118,12 @@ export default async function Home() {
                 className="rounded-lg bg-violet-700 px-4 py-2 text-white"
               >
                 正式價格管理
+              </Link>
+              <Link
+                href="/admin/freight-rules"
+                className="rounded-lg bg-emerald-700 px-4 py-2 text-white"
+              >
+                運費規則管理
               </Link>
             </>
           ) : null}

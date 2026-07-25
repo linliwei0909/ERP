@@ -46,6 +46,14 @@ enum ItemType {
   @@map("item_type")
 }
 
+enum FreightMode {
+  NO_CHARGE
+  QUANTITY_BASED
+  FIXED_PER_LOCATION
+
+  @@map("freight_mode")
+}
+
 model Company {
   id        String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   code      String       @unique(map: "companies_code_key") @db.VarChar(32)
@@ -122,6 +130,8 @@ model User {
   itemPricesUpdated ItemPrice[]         @relation("ItemPriceUpdatedBy")
   priceAssignmentsCreated CustomerPriceListAssignment[] @relation("PriceAssignmentCreatedBy")
   priceAssignmentsUpdated CustomerPriceListAssignment[] @relation("PriceAssignmentUpdatedBy")
+  freightRulesCreated FreightRule[] @relation("FreightRuleCreatedBy")
+  freightRulesUpdated FreightRule[] @relation("FreightRuleUpdatedBy")
   defaultCompany  Company?           @relation("UserDefaultCompany", fields: [defaultCompanyId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   @@index([status], map: "users_status_idx")
@@ -353,6 +363,7 @@ model CustomerCompany {
   createdBy User     @relation("CustomerCompanyCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
   updatedBy User     @relation("CustomerCompanyUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
   priceAssignments CustomerPriceListAssignment[]
+  freightRules     FreightRule[]
 
   @@unique([customerId, companyId], map: "customer_companies_customer_company_key")
   @@unique([companyId, normalizedCustomerCode], map: "customer_companies_company_code_key")
@@ -410,6 +421,7 @@ model DeliveryLocation {
   customer  Customer @relation(fields: [customerId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   createdBy User     @relation("DeliveryLocationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
   updatedBy User     @relation("DeliveryLocationUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  freightRules FreightRule[]
 
   @@unique([customerId, code], map: "delivery_locations_customer_code_key")
   @@unique([id, customerId], map: "delivery_locations_id_customer_key")
@@ -542,4 +554,30 @@ model CustomerPriceListAssignment {
   @@index([customerId, companyId, validFrom(sort: Desc)], map: "price_assignments_customer_company_lookup_idx")
   @@index([priceListId, companyId, validFrom, validTo], map: "price_assignments_price_list_period_idx")
   @@map("customer_price_list_assignments")
+}
+
+model FreightRule {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customerId         String       @map("customer_id") @db.Uuid
+  companyId          String       @map("company_id") @db.Uuid
+  deliveryLocationId String       @map("delivery_location_id") @db.Uuid
+  mode               FreightMode
+  unitFreight        Decimal?     @map("unit_freight") @db.Decimal(18, 0)
+  fixedFreight       Decimal?     @map("fixed_freight") @db.Decimal(18, 0)
+  validFrom          DateTime     @map("valid_from") @db.Date
+  validTo            DateTime?    @map("valid_to") @db.Date
+  status             RecordStatus @default(ACTIVE)
+  createdById        String       @map("created_by") @db.Uuid
+  updatedById        String       @map("updated_by") @db.Uuid
+  createdAt          DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  customerCompany CustomerCompany @relation(fields: [customerId, companyId], references: [customerId, companyId], onDelete: Restrict, onUpdate: Restrict)
+  deliveryLocation DeliveryLocation @relation(fields: [deliveryLocationId, customerId], references: [id, customerId], onDelete: Restrict, onUpdate: Restrict)
+  createdBy User @relation("FreightRuleCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  updatedBy User @relation("FreightRuleUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([companyId, customerId, deliveryLocationId, status, validFrom, validTo], map: "freight_rules_lookup_idx")
+  @@index([companyId, customerId, deliveryLocationId, validFrom(sort: Desc)], map: "freight_rules_history_idx")
+  @@map("freight_rules")
 }

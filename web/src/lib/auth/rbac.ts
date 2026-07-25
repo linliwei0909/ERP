@@ -10,7 +10,9 @@ export type Permission =
   | "items.read"
   | "items.manage"
   | "pricing.read"
-  | "pricing.manage";
+  | "pricing.manage"
+  | "freight.read"
+  | "freight.manage";
 
 const rolePermissions: Record<RoleCode, ReadonlySet<Permission>> = {
   [ROLE_CODES.ADMIN]: new Set<Permission>([
@@ -24,12 +26,15 @@ const rolePermissions: Record<RoleCode, ReadonlySet<Permission>> = {
     "items.manage",
     "pricing.read",
     "pricing.manage",
+    "freight.read",
+    "freight.manage",
   ]),
   [ROLE_CODES.ORDER_ENTRY]: new Set<Permission>([
     "company.switch",
     "customers.read",
     "items.read",
     "pricing.read",
+    "freight.read",
   ]),
 };
 
