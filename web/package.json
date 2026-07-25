@@ -17,6 +17,7 @@
     "db:deploy": "prisma migrate deploy",
     "db:status": "prisma migrate status",
     "bootstrap:admin": "tsx scripts/bootstrap-admin.ts",
+    "bootstrap:company-settings": "tsx scripts/bootstrap-company-settings.ts",
     "db:fingerprint": "pwsh -NoProfile -File scripts/db-fingerprint.ps1",
     "db:backup": "pwsh -NoProfile -File scripts/backup-development-db.ps1",
     "db:restore-verify": "pwsh -NoProfile -File scripts/restore-verify-development-db.ps1"

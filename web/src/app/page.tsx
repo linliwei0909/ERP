@@ -64,12 +64,20 @@ export default async function Home() {
 
         <div className="mt-8 flex gap-3">
           {hasRole(context.roleCodes, "ADMIN") ? (
-            <Link
-              href="/admin/users"
-              className="rounded-lg bg-slate-900 px-4 py-2 text-white"
-            >
-              使用者管理
-            </Link>
+            <>
+              <Link
+                href="/admin/users"
+                className="rounded-lg bg-slate-900 px-4 py-2 text-white"
+              >
+                使用者管理
+              </Link>
+              <Link
+                href="/admin/company-settings"
+                className="rounded-lg bg-teal-700 px-4 py-2 text-white"
+              >
+                公司參數管理
+              </Link>
+            </>
           ) : null}
           <form method="post" action="/api/auth/logout">
             <button className="rounded-lg border border-slate-300 px-4 py-2">
