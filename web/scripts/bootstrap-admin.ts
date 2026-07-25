@@ -1,6 +1,9 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client";
-import { bootstrapAdmin } from "../src/lib/auth/bootstrap";
+import {
+  bootstrapAdditionalCompanyScope,
+  bootstrapAdmin,
+} from "../src/lib/auth/bootstrap";
 
 function required(name: string): string {
   const value = process.env[name]?.trim();
@@ -43,6 +46,29 @@ async function main() {
       companyCode: required("BOOTSTRAP_COMPANY_CODE"),
       companyName: required("BOOTSTRAP_COMPANY_NAME"),
     });
+    const additionalCompanyCode =
+      process.env.BOOTSTRAP_ADDITIONAL_COMPANY_CODE?.trim();
+    const additionalCompanyName =
+      process.env.BOOTSTRAP_ADDITIONAL_COMPANY_NAME?.trim();
+
+    if (additionalCompanyCode || additionalCompanyName) {
+      if (!additionalCompanyCode || !additionalCompanyName) {
+        throw new Error(
+          "第二家公司代碼與名稱必須同時設定",
+        );
+      }
+
+      const additional = await bootstrapAdditionalCompanyScope(db, {
+        username: required("BOOTSTRAP_ADMIN_USERNAME"),
+        companyCode: additionalCompanyCode,
+        companyName: additionalCompanyName,
+      });
+      console.log(
+        additional.created
+          ? `已建立額外公司授權，company_id=${additional.companyId}`
+          : `額外公司授權已存在，未重複建立，company_id=${additional.companyId}`,
+      );
+    }
 
     console.log(
       result.created

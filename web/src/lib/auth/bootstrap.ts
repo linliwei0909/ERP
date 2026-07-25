@@ -11,6 +11,12 @@ export type BootstrapAdminInput = {
   companyName: string;
 };
 
+export type BootstrapAdditionalCompanyInput = {
+  username: string;
+  companyCode: string;
+  companyName: string;
+};
+
 export async function bootstrapAdmin(
   db: PrismaClient,
   input: BootstrapAdminInput,
@@ -104,5 +110,70 @@ export async function bootstrapAdmin(
     });
 
     return { created: true, userId: user.id };
+  });
+}
+
+export async function bootstrapAdditionalCompanyScope(
+  db: PrismaClient,
+  input: BootstrapAdditionalCompanyInput,
+): Promise<{ created: boolean; companyId: string; userId: string }> {
+  const normalizedUsername = normalizeUsername(input.username);
+
+  return db.$transaction(async (tx) => {
+    const user = await tx.user.findUniqueOrThrow({
+      where: { normalizedUsername },
+      select: { id: true },
+    });
+    const company = await tx.company.upsert({
+      where: { code: input.companyCode },
+      update: {},
+      create: {
+        code: input.companyCode,
+        name: input.companyName,
+      },
+    });
+    const existingScope = await tx.userCompanyScope.findUnique({
+      where: {
+        userId_companyId: {
+          userId: user.id,
+          companyId: company.id,
+        },
+      },
+      select: { id: true },
+    });
+
+    if (existingScope) {
+      return {
+        created: false,
+        companyId: company.id,
+        userId: user.id,
+      };
+    }
+
+    await tx.userCompanyScope.create({
+      data: {
+        userId: user.id,
+        companyId: company.id,
+      },
+    });
+    await tx.auditLog.create({
+      data: auditData({
+        companyId: company.id,
+        actorUserId: user.id,
+        entityType: "company",
+        entityId: company.id,
+        action: "bootstrap.company_scope_added",
+        afterValue: {
+          companyCode: company.code,
+          userId: user.id,
+        },
+      }),
+    });
+
+    return {
+      created: true,
+      companyId: company.id,
+      userId: user.id,
+    };
   });
 }

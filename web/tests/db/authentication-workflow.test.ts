@@ -10,7 +10,10 @@ import {
 } from "../../src/lib/auth/admin-users";
 import { authenticateCredentials } from "../../src/lib/auth/authentication";
 import { requireAdmin } from "../../src/lib/auth/authorization";
-import { bootstrapAdmin } from "../../src/lib/auth/bootstrap";
+import {
+  bootstrapAdditionalCompanyScope,
+  bootstrapAdmin,
+} from "../../src/lib/auth/bootstrap";
 import { hashSessionToken } from "../../src/lib/auth/session-token";
 import {
   getSessionContext,
@@ -48,14 +51,12 @@ describeDatabase("P1.2 authentication and access workflows", () => {
         where: { code: `A-${suffix}` },
       })
     ).id;
-    companyBId = (
-      await db.company.create({
-        data: {
-          code: `B-${suffix}`,
-          name: `測試公司 B ${suffix}`,
-        },
-      })
-    ).id;
+    const additionalCompany = await bootstrapAdditionalCompanyScope(db, {
+      username: adminUsername,
+      companyCode: `B-${suffix}`,
+      companyName: `測試公司 B ${suffix}`,
+    });
+    companyBId = additionalCompany.companyId;
 
     const login = await authenticateCredentials(
       db,
@@ -112,6 +113,34 @@ describeDatabase("P1.2 authentication and access workflows", () => {
     expect(JSON.stringify(audits)).not.toContain(adminPassword);
   });
 
+  it("bootstraps an additional company scope idempotently with audit", async () => {
+    const repeated = await bootstrapAdditionalCompanyScope(db, {
+      username: adminUsername,
+      companyCode: `B-${suffix}`,
+      companyName: `測試公司 B ${suffix}`,
+    });
+    const scopes = await db.userCompanyScope.count({
+      where: {
+        userId: adminUserId,
+        companyId: companyBId,
+      },
+    });
+    const audits = await db.auditLog.count({
+      where: {
+        entityId: companyBId,
+        action: "bootstrap.company_scope_added",
+      },
+    });
+
+    expect(repeated).toEqual({
+      created: false,
+      companyId: companyBId,
+      userId: adminUserId,
+    });
+    expect(scopes).toBe(1);
+    expect(audits).toBe(1);
+  });
+
   it("logs in with correct credentials and stores only the token hash", async () => {
     const result = await authenticateCredentials(
       db,
@@ -126,6 +155,16 @@ describeDatabase("P1.2 authentication and access workflows", () => {
     });
     expect(session.tokenHash).not.toBe(result.token);
     expect(JSON.stringify(session)).not.toContain(result.token);
+
+    const audit = await db.auditLog.findFirstOrThrow({
+      where: {
+        actorUserId: adminUserId,
+        action: "auth.login.succeeded",
+        metadata: { path: ["sessionId"], equals: session.id },
+      },
+    });
+    expect(JSON.stringify(audit)).not.toContain(result.token);
+    expect(JSON.stringify(audit)).not.toContain(adminPassword);
   });
 
   it("returns the same failure for a wrong password and an unknown user", async () => {

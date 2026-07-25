@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import type { PrismaClient } from "@/generated/prisma/client";
+import { auditData } from "@/lib/audit";
 import { chooseSelectedCompany } from "@/lib/auth/company-scope";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { sessionIdleExpiresAt } from "@/lib/auth/session-policy";
@@ -120,7 +121,7 @@ export async function authenticateCredentials(
       },
     });
 
-    return tx.userSession.create({
+    const createdSession = await tx.userSession.create({
       data: {
         userId: user.id,
         tokenHash,
@@ -130,6 +131,20 @@ export async function authenticateCredentials(
         clientMetadata: input.clientMetadata,
       },
     });
+    await tx.auditLog.create({
+      data: auditData({
+        companyId: selectedCompanyId,
+        actorUserId: user.id,
+        entityType: "user",
+        entityId: user.id,
+        action: "auth.login.succeeded",
+        metadata: {
+          sessionId: createdSession.id,
+        },
+      }),
+    });
+
+    return createdSession;
   });
 
   logger.info("Authentication succeeded", {
