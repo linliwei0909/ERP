@@ -10,6 +10,14 @@
 - 舊資料升級驗證資料庫：`erp_p1_3_upgrade`
 - 未執行：P2 業務功能、database reset、drop database、drop schema、Docker volume 清除
 
+## 結案狀態摘要
+
+- P1 工程範圍：已完成。
+- Hosted CI：待本次提交及 push 後驗證，不屬於未完成的 P1 功能。
+- Backup／restore 實機演練：production release gate。
+- Npm vulnerabilities 的升級處理或書面風險接受：production release gate。
+- P2：未開始，仍須另行授權。
+
 ## 實作範圍
 
 本次完成：
@@ -192,11 +200,12 @@ CI 使用 PostgreSQL 17 service，依序涵蓋：
 
 ## 未完成與後續
 
-- 實際 backup＋temporary restore smoke 需在安裝 PostgreSQL 17 client tools 後執行。
-- GitHub CI 需在提交／push 後取得 hosted run結果。
-- Production release 前需處理或正式接受目前 audit 風險。
+- P1 工程範圍已完成；以下項目不屬於未完成的 P1 功能。
+- Hosted CI 待提交及 push 後取得實際驗證結果。
+- Backup／restore 實機演練是 production release gate，需在安裝 PostgreSQL 17 client tools 後執行。
+- Npm vulnerabilities 的升級處理或書面風險接受是 production release gate。
 - P2 尚未開始。
 
 ## P1 結論
 
-P1.1、P1.2、P1.3 的技術基線與必要測試均已完成，工程範圍具備 P1 結案條件。Production release仍以相依漏洞處理／風險接受及備份還原實機演練為營運 gate；這兩項不會改變 P1 schema 或要求開始 P2。
+P1.1、P1.2、P1.3 的技術基線與必要測試均已完成，P1 工程範圍正式完成。Hosted CI 待 push 後驗證；相依漏洞處理／風險接受及備份還原實機演練明確列為 production release gates。上述項目不會改變 P1 schema，也不代表已開始 P2。

@@ -1,8 +1,8 @@
 # Ragic 本地端系統開發階段與任務拆分
 
-文件狀態：P1.2 已執行，待本輪驗收；P2 以後尚未授權
+文件狀態：P1 已完成並通過最終結案檢查；P2 以後尚未授權
 同步基線：`DECISIONS.md` V0.3  
-版本日期：2026-07-24
+版本日期：2026-07-25
 
 ## 1. 執行原則
 
@@ -11,7 +11,7 @@
 - 新決議先更新 `DECISIONS.md`，再同步規格、資料庫設計、計畫與程式。
 - 所有跨單據操作使用資料庫 transaction；核心規則必須有測試；重要狀態異動保留 audit log。
 - 每次只實作指定模組，不提前實作後續模組。
-- 本輪只執行 P1.2，不刪除現有資料、不重建現有 `erp` 資料庫，也不開始 P1.3 或 P2。
+- 本輪完成 P1 最終結案檢查與文件同步；不開始 P2，不新增任何主檔或業務資料表。
 
 ## 2. 開發階段
 
@@ -54,17 +54,26 @@ P1.1 執行狀態：
 
 - 採用乾淨正式 baseline 方案，正式 schema 與 active migration chain 僅包含 P1 技術基線。
 - 舊 ERP 程式、schema 與 migration 原檔移至 `web/legacy/erp-mvp/` 保存，不再由正式建置或 migration 執行。
-- `0001_p1_foundation_baseline` 只在獨立 disposable PostgreSQL 驗證；未套用到現有開發資料庫。
+- `0001_p1_foundation_baseline` 已先在獨立 disposable PostgreSQL 驗證，並於受控備份與重建程序後成為 `erp` 正式 baseline。
 - P1.2 已在 P1.1 基線上加入帳號、Session、RBAC、公司 scope 與最小管理畫面；未啟用任何業務模組。
 
 P1.2 執行狀態：
 
-- 新增 `0002_p1_authentication_and_access`，只在獨立 P1 測試資料庫驗證。
+- 新增 `0002_p1_authentication_and_access`，已先在獨立 P1 測試資料庫驗證，並套用至正式 `erp` 開發資料庫。
 - 實作 scrypt 密碼雜湊、登入防暴力鎖定、opaque Session token 與 token hash 儲存。
 - 實作 8 小時閒置逾時、活動更新節流、登出／管理員撤銷及停用帳號同 transaction 撤銷。
 - 實作 `ADMIN`／`ORDER_ENTRY` 後端 RBAC、公司 scope、預設公司與授權公司切換。
 - 實作可重跑 bootstrap、登入頁、空白首頁及最小使用者管理。
 - 登入、Session、權限、公司隔離、audit 與 transaction 失敗回滾均納入 unit／DB workflow tests。
+
+P1.3 執行狀態：
+
+- 新增 `0003_p1_operational_foundation`，已驗證全新資料庫及含既有 P1.2 audit 資料的 forward migration。
+- 建立統一 audit、idempotency、PostgreSQL-backed job queue、worker、heartbeat、structured logging、redaction 與 correlation ID。
+- 建立 live、ready、worker health、開發資料庫 fingerprint／backup／restore verification scripts、Docker Compose worker 及 CI schema diff。
+- `erp` migration status 為 up to date，Prisma schema diff 為 `No difference detected`；失敗的 0003 嘗試已標示 rolled back，成功的 0003 已完成。
+- 正式 schema 僅包含 12 張 P1 application tables，不包含 legacy ERP 或 P2 業務資料表。
+- Lint、typecheck、unit、DB integration、production build、worker smoke 與三項 health checks 均已通過。
 
 工作：
 
@@ -77,13 +86,13 @@ P1.2 執行狀態：
 - CI：lint、type check、unit test、database integration test、production build。
 - 每日備份與 RPO 24 小時／RTO 8 小時的還原演練。
 
-資料庫重建前置：
+資料庫 baseline 重建結果：
 
-- 現有資料均為測試資料，未來可在使用者另行授權後移除既有資料庫或 schema。
-- 執行前必須提供影響範圍、備份、forward、rollback／forward-fix 及驗證方案。
-- 本輪不執行此工作。
+- `erp` 已依核准程序完成備份、回復方案保存、正式 baseline 重建、初始資料建立與 P1 migration 套用。
+- PostgreSQL named volume 未刪除；legacy ERP 原檔仍封存於 `web/legacy/erp-mvp/`。
+- 後續 migration 仍須提供影響範圍、forward、rollback／forward-fix 及驗證方案。
 
-完成條件：乾淨環境能建立資料庫、執行可審查 migration、跑完品質檢查及完成備份還原演練。
+完成條件：P1 工程條件已完成。Hosted CI 待提交及 push 後驗證；backup／restore 實機演練與 npm vulnerabilities 處理或風險接受為 production release gates，不影響 P1 結案。
 
 ### P2：公司設定與共用主檔
 
@@ -264,4 +273,4 @@ P1.2 執行狀態：
 
 ## 6. 本輪交付限制
 
-P1.2 完成後停止。不得開始 P1.3、P2、Ragic 移轉、舊 ERP 模組恢復或現有 `erp` 資料庫重建；任何破壞性資料庫操作仍須使用者另行核准。
+P1 最終結案檢查與文件同步完成後停止。未取得使用者下一步授權前，不得開始 P2、Ragic 移轉、舊 ERP 模組恢復或任何業務資料表開發；任何破壞性資料庫操作仍須使用者另行核准。
