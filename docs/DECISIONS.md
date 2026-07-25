@@ -1,7 +1,7 @@
 # Ragic 本地端系統正式決議
 
 文件性質：本專案最高優先級的業務決議紀錄  
-版本：V0.5
+版本：V0.6
 最後更新：2026-07-25
 
 ## 1. 使用原則
@@ -1003,6 +1003,22 @@
 - `ADMIN` 可以在其公司 scope 內建立、修改、停用及維護公司授權；`ORDER_ENTRY` 只能查詢目前公司已授權的客戶資料。
 - 所有寫入重新驗證後端 RBAC 與 company scope，使用 idempotency 與 transaction，並使主要異動及 audit log 位於同一 transaction。
 
+## DEC-053 跨公司品項主檔與公司關係
+
+- `items` 是跨公司共用主檔；`item_companies` 控制品項可由哪些公司查詢及使用。品項沒有有效公司關係時，不得供該公司查詢或使用。
+- P2.3 不建立 `item_categories`、包裝換算表或庫存單位換算；`items` 不保存 `category_id`。
+- `items` 至少保存 `code`, `name`, `description`, `specification`, `base_unit`, `barcode`, `item_type`, `sales_enabled`, `purchase_enabled`, `inventory_enabled`, `production_enabled`, `status` 及建立／更新 actor 與時間。
+- `item_type` 的正式值域為 `PRODUCT` 與 `RAW_MATERIAL`。
+- DEC-053 是 P2.3 及第一階段實作的較新明確決議；OQ-042 原列的包材、服務及其他類型保留為歷史紀錄，但不屬於本階段正式 `item_type` 值域。
+- `items.code`、`name` 與 `base_unit` 必填。品項代碼採 NFKC、trim、uppercase normalization，normalized 值全系統唯一。
+- `items.barcode` 選填；有值時採 trim normalization 並全系統唯一，空值允許多筆。
+- `purchase_enabled`, `inventory_enabled`, `production_enabled` 僅為能力旗標，不得因此引入採購、庫存、批號、生產或會計流程；第一階段實際使用以 `sales_enabled` 為主。
+- `item_companies` 至少保存 `item_id`, `company_id`, `company_item_code`, `sales_enabled`, `status` 及建立／更新 actor 與時間。
+- `company_item_code` 必填，採 NFKC、trim、uppercase normalization；同公司內唯一，不同公司可重複。同一品項可以授權多家公司，但同一品項與公司只能存在一筆關係。
+- 品項在公司可供銷售必須同時滿足：`items.status = ACTIVE`、`items.sales_enabled = true`、`item_companies.status = ACTIVE`、`item_companies.sales_enabled = true`。
+- `ADMIN` 可以在其公司 scope 內建立、修改、停用、重新啟用品項及維護公司關係；`ORDER_ENTRY` 只能查詢目前公司已授權且可銷售的品項。
+- 一般 UI 與 API 不提供 hard delete。重要異動、停用、重新啟用及公司關係異動必須與 audit log 位於同一 transaction，並使用後端 RBAC、company scope、idempotency 及 correlation ID。
+
 
 ## 3. 尚未定案且應保留於 OPEN_QUESTIONS.md 的事項
 
@@ -1014,5 +1030,6 @@
 
 ## 4. 變更紀錄
 
+- V0.6（2026-07-25）：新增 DEC-053，確認跨公司品項、正式類型、代碼與條碼 normalization、用途旗標、公司別代碼、可銷售條件、權限、停用及稽核規則。
 - V0.5（2026-07-25）：新增 DEC-052，確認跨公司客戶、公司關係、聯絡方式、主要聯絡人、送貨地點、預設地點、權限、停用與稽核規則。
 - V0.4（2026-07-25）：新增 DEC-051，確認 `billing_cutoff_day`、短月份、有效版本、權限、audit、idempotency 與初始公司設定。

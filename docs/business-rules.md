@@ -1,16 +1,16 @@
 # Ragic 本地端系統共通業務規則
 
 文件狀態：第一階段正式規則彙整  
-同步基線：`DECISIONS.md` V0.5
+同步基線：`DECISIONS.md` V0.6
 最後更新：2026-07-25
 
 ## 1. 規格效力
 
-- 本文件依 `DECISIONS.md` V0.5 同步整理；內容衝突時一律以 `DECISIONS.md` 為準。
+- 本文件依 `DECISIONS.md` V0.6 同步整理；內容衝突時一律以 `DECISIONS.md` 為準。
 - 已由 `DECISIONS.md` 決議的事項不得重新列為待確認。
 - 第一階段不得自行加入庫存、批號、分批出貨、出庫依賴或正式會計過帳。
 - `OPEN_QUESTIONS.md` 保留 OQ-005、OQ-044 與 OQ-045；三者均不阻塞 P1。
-- P2.2 僅實作客戶、客戶公司關係、聯絡人與送貨地點；不得提前實作品項、價格、運費或交易模組。
+- P2.3 僅實作品項與公司關係；不得提前實作分類、價格、運費、訂單或其他模組。
 
 ## 2. 第一階段範圍
 
@@ -48,10 +48,16 @@
 
 ### 正式規則
 
-- 產品與原物料共用 `items` 主檔，以 `item_type` 區分成品、原物料、包材、服務及其他。
-- `items` 以 `sales_enabled`、`purchase_enabled`、`inventory_enabled`、`production_enabled` 等欄位控制用途；第一階段只啟用銷售所需功能。
-- `items.barcode` 有值時全系統唯一，空值允許多筆。
-- 第一階段不另建重複的產品主檔；既有 `items` 若耦合庫存過深，使用相容層或銷售視圖，不複製主檔資料。
+- 產品與原物料共用跨公司 `items` 主檔，正式 `item_type` 只有 `PRODUCT` 與 `RAW_MATERIAL`。
+- `item_companies` 控制品項可由哪些公司查詢及使用；沒有有效關係時該公司不得查詢或使用。
+- P2.3 不建立 `item_categories`、包裝換算或庫存單位換算，`items` 不保存 `category_id`。
+- `items.code`、`name`、`base_unit` 必填。code 採 NFKC、trim、uppercase normalization，normalized 值全系統唯一。
+- `items.barcode` 選填，採 trim normalization；有值時全系統唯一，空值允許多筆。
+- `items` 保存 `sales_enabled`, `purchase_enabled`, `inventory_enabled`, `production_enabled` 能力旗標；第一階段實際使用以銷售旗標為主，其餘旗標不得引入相關流程。
+- `item_companies.company_item_code` 必填，採 NFKC、trim、uppercase normalization；同公司內唯一、不同公司可重複。同一品項可授權多家公司，同一品項與公司只能一筆關係。
+- 公司可銷售品項必須同時滿足品項有效、品項允許銷售、公司關係有效、公司關係允許銷售。
+- `ADMIN` 可在其公司 scope 內建立、修改、停用、重新啟用品項及維護公司關係；`ORDER_ENTRY` 只能查詢目前公司已授權且可銷售的品項。
+- 一般 UI 與 API 不提供品項 hard delete；重要異動、停用、重新啟用及公司關係異動均須與 audit log 位於同一 transaction。
 - `customers` 為跨公司共用主檔；只有存在 `ACTIVE customer_companies` 關係的公司可以查詢或使用該客戶。
 - 客戶類型分為 `DOMESTIC` 與 `FOREIGN`。境內客戶可不填統編，統編有值時以 normalized 值做全系統唯一限制，且不得填境外識別碼；境外客戶必填兩碼國別與境外識別碼，兩者組合全系統唯一，且不使用台灣統編。
 - `customer_companies.customer_code` 必填並以 normalized code 比對，同公司內唯一、不同公司可重複；同一客戶可授權多家公司，但同一客戶與公司只能有一筆關係。
@@ -234,5 +240,6 @@
 
 ## 17. 變更紀錄
 
+- V0.6（2026-07-25）：同步 DEC-053，正式化跨公司品項、兩種品項類型、代碼與條碼 normalization、用途旗標、公司別代碼、可銷售條件、權限及 audit。
 - V0.5（2026-07-25）：同步 DEC-052，加入跨公司客戶、境內外識別、公司別客戶代碼、聯絡方式、主要聯絡人、送貨地點、停用、權限及 audit 規則。
 - V0.4（2026-07-25）：同步 DEC-051，新增 `billing_cutoff_day` 值域、短月份、有效版本、權限、audit 與 idempotency 規則。

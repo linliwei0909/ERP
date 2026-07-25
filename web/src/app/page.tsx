@@ -69,6 +69,12 @@ export default async function Home() {
           >
             客戶查詢
           </Link>
+          <Link
+            href="/items"
+            className="rounded-lg border border-teal-700 px-4 py-2 text-teal-800"
+          >
+            品項查詢
+          </Link>
           {hasRole(context.roleCodes, "ADMIN") ? (
             <>
               <Link
@@ -88,6 +94,12 @@ export default async function Home() {
                 className="rounded-lg bg-blue-700 px-4 py-2 text-white"
               >
                 客戶主檔管理
+              </Link>
+              <Link
+                href="/admin/items"
+                className="rounded-lg bg-indigo-700 px-4 py-2 text-white"
+              >
+                品項主檔管理
               </Link>
             </>
           ) : null}

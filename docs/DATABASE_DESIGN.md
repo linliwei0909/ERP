@@ -1,7 +1,7 @@
 # Ragic 本地端系統資料庫設計草稿
 
-文件狀態：P1 正式基線、P2.1 公司參數及 P2.2 客戶主檔已實作；P2.3 以後仍為 ERD 草稿
-同步基線：`DECISIONS.md` V0.5
+文件狀態：P1 正式基線、P2.1 公司參數、P2.2 客戶及 P2.3 品項主檔已實作；P2.4 以後仍為 ERD 草稿
+同步基線：`DECISIONS.md` V0.6
 版本日期：2026-07-25
 
 ## 1. 設計基線
@@ -14,7 +14,7 @@
 - 日期使用 `date`；時間使用 `timestamptz` 並保存 UTC。
 - 交易外鍵與交易快照並存；主檔修改不得改變既有交易內容。
 - 交易資料不實體刪除；作廢、撤銷、退款、反向分配、退票及調整均保留稽核。
-- P1 的 0001、0002、0003 已套用正式 `erp` 開發資料庫；P2.1 沿用既有 `company_settings`，未修改 schema。P2.2 由 `0004_p2_customer_master` 新增四張客戶主檔資料表。
+- P1 的 0001、0002、0003 已套用正式 `erp` 開發資料庫；P2.1 沿用既有 `company_settings`，未修改 schema。P2.2 由 0004 新增四張客戶主檔；P2.3 由 `0005_p2_item_master` 新增兩張品項主檔資料表。
 
 ## 2. 共通欄位與限制
 
@@ -176,9 +176,8 @@ P2.1 正式登錄 `billing_cutoff_day`，其 `setting_value` 必須解析為 1 �
 | `customer_contacts` | `customer_id -> customers.id`, actor FK | partial UQ `customer_id WHERE status='ACTIVE' AND is_primary` | `(customer_id, status, is_primary desc)`, `email` |
 | `delivery_locations` | `customer_id -> customers.id`, actor FK | `(customer_id, code)`；支援後續 composite FK 的 `(id, customer_id)`；partial UQ `customer_id WHERE status='ACTIVE' AND is_default` | `(customer_id, status, is_default desc)`, `(city, district)` |
 | `freight_rules` | composite `(customer_id, company_id) -> customer_companies(customer_id, company_id)`；composite `(delivery_location_id, customer_id) -> delivery_locations(id, customer_id)` | exclusion on company + location + effective range | `(company_id, delivery_location_id, valid_from desc)`, partial active |
-| `item_categories` | `parent_id -> item_categories.id` nullable | `(item_type, code)` | `(item_type, status, name)` |
-| `items` | `category_id -> item_categories.id` nullable | `code`；partial UQ `barcode` where not null | `(item_type, status, name)`, `(sales_enabled, status)` |
-| `item_companies` | `item_id -> items.id`, `company_id -> companies.id` | `(item_id, company_id)`；optional `(company_id, company_item_code)` | `(company_id, sales_enabled, item_id)` |
+| `items` | `created_by -> users.id`, `updated_by -> users.id` | `normalized_code`；partial UQ `barcode WHERE barcode IS NOT NULL` | `(status, sales_enabled, item_type, name)`, `(item_type, status, name)` |
+| `item_companies` | `item_id -> items.id`, `company_id -> companies.id`, actor FK | `(item_id, company_id)`；`(company_id, normalized_company_item_code)` | `(company_id, status, sales_enabled, item_id)`, `(item_id, status)` |
 | `price_lists` | `company_id -> companies.id` | `(company_id, code)`；支援 FK 的 `(id, company_id)` | `(company_id, status, list_type)` |
 | `customer_price_list_assignments` | composite `(customer_id, company_id) -> customer_companies(customer_id, company_id)`；composite `(price_list_id, company_id) -> price_lists(id, company_id)`；`valid_from date`；`valid_to date` nullable | exclusion on customer + company + `[valid_from, valid_to)` | `(customer_id, company_id, valid_from desc)`, `(price_list_id, company_id, valid_from, valid_to)` |
 | `item_prices` | `price_list_id -> price_lists.id`, `item_id -> items.id` | exclusion on price list + item + effective range | `(price_list_id, item_id, valid_from desc)` |
@@ -194,6 +193,15 @@ P2.2 正式欄位與限制：
 - `customer_contacts`：`name`, `department`, `job_title`, `phone`, `mobile`, `email`, `notes`, `is_primary`, `status` 及 actor／時間。CHECK 保證姓名非空且至少有 phone、mobile、email 之一。
 - `delivery_locations`：`code`, `name`, `recipient_name`, `phone`, `postal_code`, `city`, `district`, `address_line`, `full_address`, `notes`, `is_default`, `status` 及 actor／時間。必填文字以 CHECK 防止空白；同客戶代碼由 `(customer_id, code)` 唯一限制保護。
 - 四張表皆使用 PostgreSQL `gen_random_uuid()` 與 `timestamptz(3)`；所有 FK 均為 `ON DELETE RESTRICT ON UPDATE RESTRICT`。一般 API/UI 不提供 DELETE，停用與重要異動透過 transactional service 與 audit 保存。
+
+P2.3 正式欄位與限制：
+
+- `items`：`code`, `normalized_code`, `name`, `description`, `specification`, `base_unit`, `barcode`, `item_type`, 四個用途旗標、`status` 及建立／更新 actor 與時間。`item_type` 使用 PostgreSQL enum，正式值只有 `PRODUCT`, `RAW_MATERIAL`。
+- `item_companies`：`item_id`, `company_id`, `company_item_code`, `normalized_company_item_code`, `sales_enabled`, `status` 及建立／更新 actor 與時間。
+- `items_required_text_not_blank_check` 保證 code、normalized code、name、base unit 不可為空白；`items_barcode_not_blank_check` 保證條碼為 null 或非空白；公司代碼另有 non-blank CHECK。
+- `items_normalized_code_key` 保證 normalized code 全系統唯一；`items_barcode_present_key` 為非 null 條碼 partial unique；公司別代碼與品項／公司關係分別由 composite unique 保護。
+- 四個品項用途旗標及公司銷售旗標均為 NOT NULL。公司可銷售條件由 application query 同時驗證兩層 status 與 sales flag。
+- P2.3 不建立 `item_categories`，`items` 不含 `category_id`；不建立包裝、換算、庫存、倉庫、批號、採購或生產關聯。所有 FK 均為 `ON DELETE RESTRICT ON UPDATE RESTRICT`，API/UI 不提供 DELETE。
 
 ### 4.4 銷售與銷貨
 
@@ -324,5 +332,6 @@ P2.2 正式欄位與限制：
 
 ## 8. 變更紀錄
 
+- V0.6（2026-07-25）：同步 DEC-053 與 `0005_p2_item_master`，正式化 `items`、`item_companies`、item enum、normalized code、條碼 partial unique、用途旗標、公司可銷售條件及禁止範圍。
 - V0.5（2026-07-25）：同步 DEC-052 與 `0004_p2_customer_master`，正式化四張客戶主檔資料表、境內外 CHECK、partial unique、公司別代碼、聯絡方式及預設／主要唯一限制。
 - V0.4（2026-07-25）：同步 DEC-051；記錄 P2.1 沿用 `company_settings`、有效版本查詢、未來版本取消 audit、短月份及無 0004 migration。

@@ -16,7 +16,7 @@ describeDatabase("formal schema baseline", () => {
     await client.end();
   });
 
-  it("contains only the approved P1 and P2.2 tables", async () => {
+  it("contains only the approved P1 through P2.3 tables", async () => {
     const result = await client.query<{ tablename: string }>(
       `SELECT tablename
          FROM pg_catalog.pg_tables
@@ -36,6 +36,8 @@ describeDatabase("formal schema baseline", () => {
       "delivery_locations",
       "document_sequences",
       "idempotency_keys",
+      "item_companies",
+      "items",
       "roles",
       "user_company_scopes",
       "user_roles",
@@ -45,7 +47,7 @@ describeDatabase("formal schema baseline", () => {
     ]);
   });
 
-  it("executes only the formal migration chain through P2.2", async () => {
+  it("executes only the formal migration chain through P2.3", async () => {
     const result = await client.query<{ migration_name: string }>(
       `SELECT migration_name
          FROM _prisma_migrations
@@ -59,6 +61,7 @@ describeDatabase("formal schema baseline", () => {
       "0002_p1_authentication_and_access",
       "0003_p1_operational_foundation",
       "0004_p2_customer_master",
+      "0005_p2_item_master",
     ]);
   });
 

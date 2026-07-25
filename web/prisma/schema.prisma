@@ -39,6 +39,13 @@ enum CustomerType {
   @@map("customer_type")
 }
 
+enum ItemType {
+  PRODUCT
+  RAW_MATERIAL
+
+  @@map("item_type")
+}
+
 model Company {
   id        String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   code      String       @unique(map: "companies_code_key") @db.VarChar(32)
@@ -56,6 +63,7 @@ model Company {
   defaultForUsers   User[]             @relation("UserDefaultCompany")
   selectedSessions  UserSession[]      @relation("SessionSelectedCompany")
   customerRelations CustomerCompany[]
+  itemRelations     ItemCompany[]
 
   @@index([status, name], map: "companies_status_name_idx")
   @@map("companies")
@@ -103,6 +111,10 @@ model User {
   customerContactsUpdated CustomerContact[] @relation("CustomerContactUpdatedBy")
   deliveryLocationsCreated DeliveryLocation[] @relation("DeliveryLocationCreatedBy")
   deliveryLocationsUpdated DeliveryLocation[] @relation("DeliveryLocationUpdatedBy")
+  itemsCreated      Item[]             @relation("ItemCreatedBy")
+  itemsUpdated      Item[]             @relation("ItemUpdatedBy")
+  itemCompaniesCreated ItemCompany[]   @relation("ItemCompanyCreatedBy")
+  itemCompaniesUpdated ItemCompany[]   @relation("ItemCompanyUpdatedBy")
   defaultCompany  Company?           @relation("UserDefaultCompany", fields: [defaultCompanyId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   @@index([status], map: "users_status_idx")
@@ -395,4 +407,58 @@ model DeliveryLocation {
   @@index([customerId, status, isDefault(sort: Desc)], map: "delivery_locations_customer_status_default_idx")
   @@index([city, district], map: "delivery_locations_city_district_idx")
   @@map("delivery_locations")
+}
+
+model Item {
+  id                String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code              String       @db.VarChar(100)
+  normalizedCode    String       @unique(map: "items_normalized_code_key") @map("normalized_code") @db.VarChar(100)
+  name              String       @db.VarChar(200)
+  description       String?
+  specification     String?
+  baseUnit          String       @map("base_unit") @db.VarChar(50)
+  barcode           String?      @db.VarChar(100)
+  itemType          ItemType     @map("item_type")
+  salesEnabled      Boolean      @default(false) @map("sales_enabled")
+  purchaseEnabled   Boolean      @default(false) @map("purchase_enabled")
+  inventoryEnabled  Boolean      @default(false) @map("inventory_enabled")
+  productionEnabled Boolean      @default(false) @map("production_enabled")
+  status            RecordStatus @default(ACTIVE)
+  createdById       String       @map("created_by") @db.Uuid
+  updatedById       String       @map("updated_by") @db.Uuid
+  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  createdBy        User          @relation("ItemCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  updatedBy        User          @relation("ItemUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  companyRelations ItemCompany[]
+
+  @@index([status, salesEnabled, itemType, name], map: "items_status_sales_type_name_idx")
+  @@index([itemType, status, name], map: "items_type_status_name_idx")
+  @@map("items")
+}
+
+model ItemCompany {
+  id                        String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  itemId                    String       @map("item_id") @db.Uuid
+  companyId                 String       @map("company_id") @db.Uuid
+  companyItemCode           String       @map("company_item_code") @db.VarChar(100)
+  normalizedCompanyItemCode String       @map("normalized_company_item_code") @db.VarChar(100)
+  salesEnabled              Boolean      @default(false) @map("sales_enabled")
+  status                    RecordStatus @default(ACTIVE)
+  createdById               String       @map("created_by") @db.Uuid
+  updatedById               String       @map("updated_by") @db.Uuid
+  createdAt                 DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                 DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  item      Item    @relation(fields: [itemId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  createdBy User    @relation("ItemCompanyCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  updatedBy User    @relation("ItemCompanyUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([itemId, companyId], map: "item_companies_item_company_key")
+  @@unique([companyId, normalizedCompanyItemCode], map: "item_companies_company_code_key")
+  @@index([companyId, status, salesEnabled, itemId], map: "item_companies_company_status_sales_item_idx")
+  @@index([itemId, status], map: "item_companies_item_status_idx")
+  @@map("item_companies")
 }
