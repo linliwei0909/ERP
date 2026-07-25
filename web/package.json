@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "worker": "tsx src/worker.ts",
     "lint": "eslint",
     "typecheck": "next typegen && tsc --project tsconfig.typecheck.json",
     "test": "vitest run tests/unit",
@@ -15,7 +16,10 @@
     "db:create-only": "prisma migrate dev --create-only",
     "db:deploy": "prisma migrate deploy",
     "db:status": "prisma migrate status",
-    "bootstrap:admin": "tsx scripts/bootstrap-admin.ts"
+    "bootstrap:admin": "tsx scripts/bootstrap-admin.ts",
+    "db:fingerprint": "pwsh -NoProfile -File scripts/db-fingerprint.ps1",
+    "db:backup": "pwsh -NoProfile -File scripts/backup-development-db.ps1",
+    "db:restore-verify": "pwsh -NoProfile -File scripts/restore-verify-development-db.ps1"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",

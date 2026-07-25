@@ -1,5 +1,5 @@
 import type { PrismaClient } from "@/generated/prisma/client";
-import { auditData } from "@/lib/audit";
+import { systemAuditContext, writeAudit } from "@/lib/audit";
 import { ROLE_CODES } from "@/lib/auth/constants";
 import { hashPassword } from "@/lib/auth/password";
 import { normalizeUsername } from "@/lib/auth/username";
@@ -93,20 +93,20 @@ export async function bootstrapAdmin(
       where: { id: user.id },
       data: { defaultCompanyId: company.id },
     });
-    await tx.auditLog.create({
-      data: auditData({
+    await writeAudit(tx, {
+      ...systemAuditContext({
         companyId: company.id,
         actorUserId: user.id,
-        entityType: "user",
-        entityId: user.id,
-        action: "bootstrap.created",
-        afterValue: {
-          username: user.username,
-          roles: [ROLE_CODES.ADMIN],
-          companyIds: [company.id],
-          defaultCompanyId: company.id,
-        },
       }),
+      entityType: "user",
+      entityId: user.id,
+      operation: "bootstrap.created",
+      afterJson: {
+        username: user.username,
+        roles: [ROLE_CODES.ADMIN],
+        companyIds: [company.id],
+        defaultCompanyId: company.id,
+      },
     });
 
     return { created: true, userId: user.id };
@@ -156,18 +156,18 @@ export async function bootstrapAdditionalCompanyScope(
         companyId: company.id,
       },
     });
-    await tx.auditLog.create({
-      data: auditData({
+    await writeAudit(tx, {
+      ...systemAuditContext({
         companyId: company.id,
         actorUserId: user.id,
-        entityType: "company",
-        entityId: company.id,
-        action: "bootstrap.company_scope_added",
-        afterValue: {
-          companyCode: company.code,
-          userId: user.id,
-        },
       }),
+      entityType: "company",
+      entityId: company.id,
+      operation: "bootstrap.company_scope_added",
+      afterJson: {
+        companyCode: company.code,
+        userId: user.id,
+      },
     });
 
     return {

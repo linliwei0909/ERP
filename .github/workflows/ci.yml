@@ -44,4 +44,5 @@ jobs:
       - run: npm run typecheck
       - run: npm run test
       - run: npm run test:db
+      - run: npx prisma migrate diff --from-config-datasource --to-schema ./prisma/schema.prisma --exit-code
       - run: npm run build

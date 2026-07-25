@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createManagedUser } from "@/lib/auth/admin-users";
-import { requireAdmin } from "@/lib/auth/authorization";
+import { requireAdminWithAudit } from "@/lib/auth/authorization";
 import { ROLE_CODES, type RoleCode } from "@/lib/auth/constants";
 import { getApiRequestContext } from "@/lib/auth/request-context";
 import {
@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
   try {
     assertSameOrigin(request);
     const context = await getApiRequestContext(request);
-    requireAdmin(context);
+    await requireAdminWithAudit(prisma, context);
     const formData = await request.formData();
     const roleCodes = formStrings(formData, "roleCodes").filter((role) =>
       validRoleCodes.has(role),
@@ -31,6 +31,11 @@ export async function POST(request: NextRequest) {
       roleCodes,
       companyIds: formStrings(formData, "companyIds"),
       defaultCompanyId,
+      auditContext: {
+        companyId: context.selectedCompany.id,
+        sessionId: context.session.sessionId,
+        requestId: context.requestId,
+      },
     });
 
     return NextResponse.redirect(new URL("/admin/users", request.url), 303);

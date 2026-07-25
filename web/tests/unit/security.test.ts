@@ -19,9 +19,9 @@ describe("security boundaries", () => {
   });
 
   it("redacts password and token values from logs", () => {
-    const output = vi.spyOn(console, "log").mockImplementation(() => {});
+    const output = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    logger.info("security test", {
+    logger.error("security test", {
       password: "plain-password-must-not-appear",
       sessionToken: "raw-session-token-must-not-appear",
     });

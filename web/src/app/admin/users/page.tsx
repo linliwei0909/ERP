@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { requireAdmin } from "@/lib/auth/authorization";
+import { requireAdminWithAudit } from "@/lib/auth/authorization";
 import { getPageRequestContext } from "@/lib/auth/request-context";
 import { prisma } from "@/lib/prisma";
 
@@ -9,7 +9,7 @@ export default async function UsersPage() {
 
   try {
     context = await getPageRequestContext();
-    requireAdmin(context);
+  await requireAdminWithAudit(prisma, context);
   } catch {
     redirect("/");
   }

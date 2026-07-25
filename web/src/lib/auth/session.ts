@@ -1,11 +1,18 @@
 import type { PrismaClient } from "@/generated/prisma/client";
-import { assertCompanyAccess, chooseSelectedCompany } from "@/lib/auth/company-scope";
+import { systemAuditContext, writeAudit } from "@/lib/audit";
+import {
+  assertCompanyAccess,
+  chooseSelectedCompany,
+  hasCompanyAccess,
+} from "@/lib/auth/company-scope";
 import {
   isSessionExpired,
   sessionIdleExpiresAt,
   shouldRefreshSessionActivity,
 } from "@/lib/auth/session-policy";
 import { hashSessionToken } from "@/lib/auth/session-token";
+import { createRequestId } from "@/lib/correlation";
+import { logger } from "@/lib/logger";
 
 export class SessionAuthenticationError extends Error {
   readonly code = "AUTHENTICATION_REQUIRED";
@@ -23,6 +30,7 @@ export type RequestContext = {
   session: {
     sessionId: string;
   };
+  requestId: string;
   roleCodes: string[];
   authorizedCompanies: Array<{
     id: string;
@@ -42,6 +50,7 @@ export async function getSessionContext(
   options: {
     activityThrottleMinutes: number;
     now?: Date;
+    requestId?: string;
   },
 ): Promise<RequestContext> {
   if (!token) {
@@ -49,6 +58,7 @@ export async function getSessionContext(
   }
 
   const now = options.now ?? new Date();
+  const requestId = createRequestId(options.requestId);
   const session = await db.userSession.findUnique({
     where: { tokenHash: hashSessionToken(token) },
     include: {
@@ -73,18 +83,35 @@ export async function getSessionContext(
     session.user.status !== "ACTIVE"
   ) {
     if (session && !session.revokedAt) {
-      await db.userSession.updateMany({
-        where: {
-          id: session.id,
-          revokedAt: null,
-        },
-        data: {
-          revokedAt: now,
-          revokedReason:
-            session.user.status === "ACTIVE"
-              ? "idle_timeout"
-              : "account_inactive",
-        },
+      const revokedReason =
+        session.user.status === "ACTIVE"
+          ? "idle_timeout"
+          : "account_inactive";
+      await db.$transaction(async (tx) => {
+        const result = await tx.userSession.updateMany({
+          where: {
+            id: session.id,
+            revokedAt: null,
+          },
+          data: {
+            revokedAt: now,
+            revokedReason,
+          },
+        });
+        if (result.count > 0) {
+          await writeAudit(tx, {
+            ...systemAuditContext({
+              actorUserId: session.user.id,
+              sessionId: session.id,
+              companyId: session.selectedCompanyId,
+              requestId,
+            }),
+            entityType: "user_session",
+            entityId: session.id,
+            operation: "auth.session.revoked",
+            reason: revokedReason,
+          });
+        }
       });
     }
 
@@ -135,6 +162,7 @@ export async function getSessionContext(
     session: {
       sessionId: session.id,
     },
+    requestId,
     roleCodes: session.user.roleAssignments
       .filter((assignment) => assignment.role.status === "ACTIVE")
       .map((assignment) => assignment.role.code),
@@ -151,14 +179,50 @@ export async function switchSessionCompany(
   context: RequestContext,
   companyId: string,
 ): Promise<void> {
+  if (
+    !hasCompanyAccess(
+      context.authorizedCompanies.map((company) => company.id),
+      companyId,
+    )
+  ) {
+    await db.$transaction((tx) =>
+      writeAudit(tx, {
+        ...systemAuditContext({
+          companyId: context.selectedCompany?.id,
+          actorUserId: context.actor.userId,
+          sessionId: context.session.sessionId,
+          requestId: context.requestId,
+        }),
+        entityType: "user_session",
+        entityId: context.session.sessionId,
+        operation: "auth.company.denied",
+        metadata: { requestedCompanyId: companyId },
+      }),
+    );
+  }
   assertCompanyAccess(
     context.authorizedCompanies.map((company) => company.id),
     companyId,
   );
 
-  await db.userSession.update({
-    where: { id: context.session.sessionId },
-    data: { selectedCompanyId: companyId },
+  await db.$transaction(async (tx) => {
+    await tx.userSession.update({
+      where: { id: context.session.sessionId },
+      data: { selectedCompanyId: companyId },
+    });
+    await writeAudit(tx, {
+      ...systemAuditContext({
+        companyId,
+        actorUserId: context.actor.userId,
+        sessionId: context.session.sessionId,
+        requestId: context.requestId,
+      }),
+      entityType: "user_session",
+      entityId: context.session.sessionId,
+      operation: "auth.company.switched",
+      beforeJson: { companyId: context.selectedCompany?.id ?? null },
+      afterJson: { companyId },
+    });
   });
 }
 
@@ -167,19 +231,44 @@ export async function revokeCurrentSession(
   token: string | undefined,
   reason = "logout",
   now = new Date(),
+  requestId = createRequestId(),
 ): Promise<void> {
   if (!token) {
     return;
   }
 
-  await db.userSession.updateMany({
-    where: {
-      tokenHash: hashSessionToken(token),
-      revokedAt: null,
-    },
-    data: {
-      revokedAt: now,
-      revokedReason: reason,
-    },
+  await db.$transaction(async (tx) => {
+    const session = await tx.userSession.findUnique({
+      where: { tokenHash: hashSessionToken(token) },
+      select: { id: true, userId: true, selectedCompanyId: true, revokedAt: true },
+    });
+    if (!session || session.revokedAt) {
+      return;
+    }
+    await tx.userSession.update({
+      where: { id: session.id },
+      data: {
+        revokedAt: now,
+        revokedReason: reason,
+      },
+    });
+    await writeAudit(tx, {
+      ...systemAuditContext({
+        companyId: session.selectedCompanyId,
+        actorUserId: session.userId,
+        sessionId: session.id,
+        requestId,
+      }),
+      entityType: "user_session",
+      entityId: session.id,
+      operation: "auth.session.revoked",
+      reason,
+    });
+    logger.info("Session revoked", {
+      event: "auth.session.revoked",
+      actorUserId: session.userId,
+      requestId,
+      reason,
+    });
   });
 }

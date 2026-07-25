@@ -18,6 +18,10 @@ export function assertCompanyAccess(
   companyId: string,
 ): void {
   if (!hasCompanyAccess(authorizedCompanyIds, companyId)) {
+    logger.warn("Company authorization denied", {
+      event: "auth.company.denied",
+      requestedCompanyId: companyId,
+    });
     throw new CompanyAccessError();
   }
 }
@@ -51,3 +55,4 @@ export function assertSelectedCompany<T>(
     throw new CompanyAccessError();
   }
 }
+import { logger } from "@/lib/logger";

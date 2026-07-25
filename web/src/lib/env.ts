@@ -13,6 +13,18 @@ export const serverEnvSchema = z.object({
     .min(1)
     .max(60)
     .default(5),
+  WORKER_ID: z.string().min(1).max(100).optional(),
+  JOB_POLL_INTERVAL_MS: z.coerce.number().int().min(100).max(60000).default(1000),
+  JOB_HEARTBEAT_SECONDS: z.coerce.number().int().min(1).max(300).default(15),
+  JOB_STALE_LOCK_SECONDS: z.coerce.number().int().min(5).max(3600).default(60),
+  JOB_RETRY_BASE_SECONDS: z.coerce.number().int().min(1).max(3600).default(5),
+  JOB_RETRY_MAX_SECONDS: z.coerce.number().int().min(1).max(86400).default(300),
+  WORKER_READY_MAX_AGE_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(5)
+    .max(3600)
+    .default(60),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;

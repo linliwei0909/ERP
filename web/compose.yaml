@@ -17,5 +17,18 @@ services:
       timeout: 5s
       retries: 10
 
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://erp:erp_local_dev@postgres:5432/erp?schema=public
+      LOG_LEVEL: info
+      WORKER_ID: worker-compose-1
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   erp_postgres_data:

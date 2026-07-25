@@ -9,7 +9,10 @@ import {
   setUserStatus,
 } from "../../src/lib/auth/admin-users";
 import { authenticateCredentials } from "../../src/lib/auth/authentication";
-import { requireAdmin } from "../../src/lib/auth/authorization";
+import {
+  requireAdmin,
+  requireAdminWithAudit,
+} from "../../src/lib/auth/authorization";
 import {
   bootstrapAdditionalCompanyScope,
   bootstrapAdmin,
@@ -103,7 +106,7 @@ describeDatabase("P1.2 authentication and access workflows", () => {
     const audits = await db.auditLog.findMany({
       where: {
         entityId: adminUserId,
-        action: "bootstrap.created",
+        operation: "bootstrap.created",
       },
     });
 
@@ -128,7 +131,7 @@ describeDatabase("P1.2 authentication and access workflows", () => {
     const audits = await db.auditLog.count({
       where: {
         entityId: companyBId,
-        action: "bootstrap.company_scope_added",
+        operation: "bootstrap.company_scope_added",
       },
     });
 
@@ -159,8 +162,8 @@ describeDatabase("P1.2 authentication and access workflows", () => {
     const audit = await db.auditLog.findFirstOrThrow({
       where: {
         actorUserId: adminUserId,
-        action: "auth.login.succeeded",
-        metadata: { path: ["sessionId"], equals: session.id },
+        operation: "auth.login.succeeded",
+        sessionId: session.id,
       },
     });
     expect(JSON.stringify(audit)).not.toContain(result.token);
@@ -279,7 +282,7 @@ describeDatabase("P1.2 authentication and access workflows", () => {
     ).resolves.toEqual({ ok: false, code: "INVALID_CREDENTIALS" });
 
     const audit = await db.auditLog.findFirst({
-      where: { entityId: user.id, action: "user.disabled" },
+      where: { entityId: user.id, operation: "user.disabled" },
     });
     const activeSessions = await db.userSession.count({
       where: { userId: user.id, revokedAt: null },
@@ -368,6 +371,17 @@ describeDatabase("P1.2 authentication and access workflows", () => {
       activityThrottleMinutes: 5,
     });
     expect(() => requireAdmin(orderContext)).toThrow("沒有執行此操作的權限");
+    await expect(
+      requireAdminWithAudit(db, orderContext),
+    ).rejects.toThrow("沒有執行此操作的權限");
+    expect(
+      await db.auditLog.count({
+        where: {
+          actorUserId: orderUserId,
+          operation: "auth.role.forbidden",
+        },
+      }),
+    ).toBeGreaterThan(0);
   });
 
   it("switches between authorized companies and rejects a forged company", async () => {
@@ -382,9 +396,22 @@ describeDatabase("P1.2 authentication and access workflows", () => {
     });
     expect(context.selectedCompany?.id).toBe(companyBId);
 
+    const forgedCompanyId = randomUUID();
     await expect(
-      switchSessionCompany(db, context, randomUUID()),
+      switchSessionCompany(db, context, forgedCompanyId),
     ).rejects.toMatchObject({ code: "COMPANY_ACCESS_DENIED" });
+    expect(
+      await db.auditLog.count({
+        where: {
+          sessionId: context.session.sessionId,
+          operation: "auth.company.denied",
+          metadata: {
+            path: ["requestedCompanyId"],
+            equals: forgedCompanyId,
+          },
+        },
+      }),
+    ).toBe(1);
   });
 
   it("audits role and company assignment and revokes prior sessions", async () => {
@@ -399,7 +426,7 @@ describeDatabase("P1.2 authentication and access workflows", () => {
     const audit = await db.auditLog.findFirst({
       where: {
         entityId: orderUserId,
-        action: "user.access_assigned",
+        operation: "user.access_assigned",
       },
       orderBy: { occurredAt: "desc" },
     });
@@ -431,8 +458,8 @@ describeDatabase("P1.2 authentication and access workflows", () => {
     expect(
       await db.auditLog.count({
         where: {
-          action: "user.created",
-          afterValue: { path: ["username"], equals: username },
+          operation: "user.created",
+          afterJson: { path: ["username"], equals: username },
         },
       }),
     ).toBe(0);

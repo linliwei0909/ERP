@@ -232,10 +232,10 @@ async function main() {
       "user.disabled",
     ];
     const auditActions = await db.auditLog.findMany({
-      where: { action: { in: requiredAudits } },
-      select: { action: true },
+      where: { operation: { in: requiredAudits } },
+      select: { operation: true },
     });
-    const present = new Set(auditActions.map((audit) => audit.action));
+    const present = new Set(auditActions.map((audit) => audit.operation));
     assert(
       requiredAudits.every((action) => present.has(action)),
       "缺少必要 audit action",

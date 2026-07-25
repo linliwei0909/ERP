@@ -151,8 +151,9 @@ model UserSession {
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  user            User     @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  selectedCompany Company? @relation("SessionSelectedCompany", fields: [selectedCompanyId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  user            User       @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  selectedCompany Company?   @relation("SessionSelectedCompany", fields: [selectedCompanyId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  auditLogs       AuditLog[]
 
   @@index([userId, revokedAt], map: "user_sessions_user_revoked_idx")
   @@index([idleExpiresAt], map: "user_sessions_idle_expires_idx")
@@ -177,24 +178,29 @@ model DocumentSequence {
 }
 
 model IdempotencyKey {
-  id             String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  companyId      String            @map("company_id") @db.Uuid
-  userId         String?           @map("user_id") @db.Uuid
-  operation      String            @db.VarChar(100)
-  idempotencyKey String            @map("idempotency_key") @db.VarChar(255)
-  requestHash    String            @map("request_hash") @db.VarChar(255)
-  status         IdempotencyStatus @default(PROCESSING)
-  responseStatus Int?              @map("response_status")
-  responseBody   Json?             @map("response_body")
-  expiresAt      DateTime          @map("expires_at") @db.Timestamptz(3)
-  createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt      DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id               String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId        String            @map("company_id") @db.Uuid
+  userId           String?           @map("user_id") @db.Uuid
+  operation        String            @db.VarChar(100)
+  idempotencyKey   String            @map("idempotency_key") @db.VarChar(255)
+  requestHash      String            @map("request_hash") @db.VarChar(255)
+  status           IdempotencyStatus @default(PROCESSING)
+  responseStatus   Int?              @map("response_status")
+  responseMetadata Json?             @map("response_metadata")
+  resultReference  String?           @map("result_reference") @db.VarChar(255)
+  expiresAt        DateTime          @map("expires_at") @db.Timestamptz(3)
+  startedAt        DateTime          @default(now()) @map("started_at") @db.Timestamptz(3)
+  completedAt      DateTime?         @map("completed_at") @db.Timestamptz(3)
+  failedAt         DateTime?         @map("failed_at") @db.Timestamptz(3)
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   user    User?   @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   @@unique([companyId, operation, idempotencyKey], map: "idempotency_keys_company_operation_key")
   @@index([expiresAt], map: "idempotency_keys_expires_at_idx")
+  @@index([status, startedAt], map: "idempotency_keys_status_started_idx")
   @@index([userId, createdAt(sort: Desc)], map: "idempotency_keys_user_created_idx")
   @@map("idempotency_keys")
 }
@@ -207,16 +213,22 @@ model BackgroundJob {
   status           BackgroundJobStatus @default(PENDING)
   availableAt      DateTime            @default(now()) @map("available_at") @db.Timestamptz(3)
   attemptCount     Int                 @default(0) @map("attempt_count")
+  maxAttempts      Int                 @default(5) @map("max_attempts")
   lockedAt         DateTime?           @map("locked_at") @db.Timestamptz(3)
   lockedBy         String?             @map("locked_by") @db.VarChar(100)
   deduplicationKey String?             @map("deduplication_key") @db.VarChar(255)
+  correlationId    String?             @map("correlation_id") @db.VarChar(100)
   lastError        String?             @map("last_error")
+  completedAt      DateTime?           @map("completed_at") @db.Timestamptz(3)
+  failedAt         DateTime?           @map("failed_at") @db.Timestamptz(3)
+  deadLetteredAt   DateTime?           @map("dead_lettered_at") @db.Timestamptz(3)
   createdAt        DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt        DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   company Company? @relation(fields: [companyId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   @@index([status, availableAt], map: "background_jobs_status_available_idx")
+  @@index([status, lockedAt], map: "background_jobs_status_locked_idx")
   @@index([jobType, createdAt(sort: Desc)], map: "background_jobs_type_created_idx")
   @@map("background_jobs")
 }
@@ -225,21 +237,39 @@ model AuditLog {
   id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   companyId   String?  @map("company_id") @db.Uuid
   actorUserId String?  @map("actor_user_id") @db.Uuid
+  sessionId   String?  @map("session_id") @db.Uuid
   entityType  String   @map("entity_type") @db.VarChar(100)
   entityId    String   @map("entity_id") @db.Uuid
-  action      String   @db.VarChar(100)
+  operation   String   @db.VarChar(100)
   reason      String?
-  beforeValue Json?    @map("before_value")
-  afterValue  Json?    @map("after_value")
+  beforeJson  Json?    @map("before_json")
+  afterJson   Json?    @map("after_json")
   metadata    Json?
-  requestId   String?  @map("request_id") @db.VarChar(100)
+  requestId   String   @map("request_id") @db.VarChar(100)
   occurredAt  DateTime @default(now()) @map("occurred_at") @db.Timestamptz(3)
 
-  company   Company? @relation(fields: [companyId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  actorUser User?    @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  company   Company?     @relation(fields: [companyId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  actorUser User?        @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  session   UserSession? @relation(fields: [sessionId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   @@index([entityType, entityId, occurredAt(sort: Desc)], map: "audit_logs_entity_occurred_idx")
   @@index([actorUserId, occurredAt(sort: Desc)], map: "audit_logs_actor_occurred_idx")
+  @@index([sessionId, occurredAt(sort: Desc)], map: "audit_logs_session_occurred_idx")
+  @@index([requestId, occurredAt(sort: Desc)], map: "audit_logs_request_occurred_idx")
   @@index([companyId, occurredAt(sort: Desc)], map: "audit_logs_company_occurred_idx")
   @@map("audit_logs")
+}
+
+model WorkerHeartbeat {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workerId        String   @unique(map: "worker_heartbeats_worker_id_key") @map("worker_id") @db.VarChar(100)
+  status          String   @db.VarChar(32)
+  startedAt       DateTime @map("started_at") @db.Timestamptz(3)
+  lastHeartbeatAt DateTime @map("last_heartbeat_at") @db.Timestamptz(3)
+  metadata        Json?
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([status, lastHeartbeatAt], map: "worker_heartbeats_status_last_idx")
+  @@map("worker_heartbeats")
 }

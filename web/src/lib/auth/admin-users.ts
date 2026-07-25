@@ -1,5 +1,9 @@
 import type { PrismaClient } from "@/generated/prisma/client";
-import { auditData } from "@/lib/audit";
+import {
+  systemAuditContext,
+  writeAudit,
+  type AuditContext,
+} from "@/lib/audit";
 import { ROLE_CODES, type RoleCode } from "@/lib/auth/constants";
 import { hashPassword } from "@/lib/auth/password";
 import { normalizeUsername } from "@/lib/auth/username";
@@ -28,6 +32,7 @@ export async function createManagedUser(
     roleCodes: RoleCode[];
     companyIds: string[];
     defaultCompanyId: string | null;
+    auditContext?: Partial<AuditContext>;
   },
 ) {
   const roleCodes = unique(input.roleCodes);
@@ -91,20 +96,21 @@ export async function createManagedUser(
       where: { id: user.id },
       data: { defaultCompanyId: input.defaultCompanyId },
     });
-    await tx.auditLog.create({
-      data: auditData({
+    await writeAudit(tx, {
+      ...systemAuditContext({
+        ...input.auditContext,
         companyId: input.defaultCompanyId,
         actorUserId,
-        entityType: "user",
-        entityId: user.id,
-        action: "user.created",
-        afterValue: {
-          username: user.username,
-          roleCodes,
-          companyIds,
-          defaultCompanyId: input.defaultCompanyId,
-        },
       }),
+      entityType: "user",
+      entityId: user.id,
+      operation: "user.created",
+      afterJson: {
+        username: user.username,
+        roleCodes,
+        companyIds,
+        defaultCompanyId: input.defaultCompanyId,
+      },
     });
 
     return user;
@@ -119,6 +125,7 @@ export async function setUserStatus(
     status: "ACTIVE" | "INACTIVE";
     reason: string;
     now?: Date;
+    auditContext?: Partial<AuditContext>;
   },
 ) {
   const now = input.now ?? new Date();
@@ -145,19 +152,20 @@ export async function setUserStatus(
       });
     }
 
-    await tx.auditLog.create({
-      data: auditData({
+    await writeAudit(tx, {
+      ...systemAuditContext({
+        ...input.auditContext,
         actorUserId,
-        entityType: "user",
-        entityId: input.userId,
-        action:
-          input.status === "INACTIVE"
-            ? "user.disabled"
-            : "user.reactivated",
-        reason: input.reason,
-        beforeValue: { status: user.status },
-        afterValue: { status: updated.status },
       }),
+      entityType: "user",
+      entityId: input.userId,
+      operation:
+        input.status === "INACTIVE"
+          ? "user.disabled"
+          : "user.reactivated",
+      reason: input.reason,
+      beforeJson: { status: user.status },
+      afterJson: { status: updated.status },
     });
 
     return updated;
@@ -174,6 +182,7 @@ export async function assignUserAccess(
     defaultCompanyId: string | null;
     reason: string;
     now?: Date;
+    auditContext?: Partial<AuditContext>;
   },
 ) {
   const roleCodes = unique(input.roleCodes);
@@ -241,27 +250,28 @@ export async function assignUserAccess(
       where: { id: input.userId },
       data: { defaultCompanyId: input.defaultCompanyId },
     });
-    await tx.auditLog.create({
-      data: auditData({
+    await writeAudit(tx, {
+      ...systemAuditContext({
+        ...input.auditContext,
         companyId: input.defaultCompanyId,
         actorUserId,
-        entityType: "user",
-        entityId: input.userId,
-        action: "user.access_assigned",
-        reason: input.reason,
-        beforeValue: {
-          roleCodes: user.roleAssignments.map(
-            (assignment) => assignment.role.code,
-          ),
-          companyIds: user.companyScopes.map((scope) => scope.companyId),
-          defaultCompanyId: user.defaultCompanyId,
-        },
-        afterValue: {
-          roleCodes,
-          companyIds,
-          defaultCompanyId: input.defaultCompanyId,
-        },
       }),
+      entityType: "user",
+      entityId: input.userId,
+      operation: "user.access_assigned",
+      reason: input.reason,
+      beforeJson: {
+        roleCodes: user.roleAssignments.map(
+          (assignment) => assignment.role.code,
+        ),
+        companyIds: user.companyScopes.map((scope) => scope.companyId),
+        defaultCompanyId: user.defaultCompanyId,
+      },
+      afterJson: {
+        roleCodes,
+        companyIds,
+        defaultCompanyId: input.defaultCompanyId,
+      },
     });
   });
 }
@@ -273,6 +283,7 @@ export async function revokeAllUserSessions(
     userId: string;
     reason: string;
     now?: Date;
+    auditContext?: Partial<AuditContext>;
   },
 ) {
   const now = input.now ?? new Date();
@@ -288,15 +299,16 @@ export async function revokeAllUserSessions(
         revokedReason: "admin_revoked",
       },
     });
-    await tx.auditLog.create({
-      data: auditData({
+    await writeAudit(tx, {
+      ...systemAuditContext({
+        ...input.auditContext,
         actorUserId,
-        entityType: "user",
-        entityId: input.userId,
-        action: "user.sessions_revoked",
-        reason: input.reason,
-        afterValue: { revokedSessionCount: result.count },
       }),
+      entityType: "user",
+      entityId: input.userId,
+      operation: "user.sessions_revoked",
+      reason: input.reason,
+      afterJson: { revokedSessionCount: result.count },
     });
 
     return result.count;

@@ -8,6 +8,7 @@ import {
 } from "@/lib/auth/route-security";
 import { getServerEnv } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
+import { REQUEST_ID_HEADER } from "@/lib/correlation";
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,6 +23,7 @@ export async function POST(request: NextRequest) {
         clientMetadata: {
           userAgent: request.headers.get("user-agent") ?? "unknown",
         },
+        requestId: request.headers.get(REQUEST_ID_HEADER) ?? undefined,
       },
       {
         maxFailedAttempts: env.AUTH_MAX_FAILED_ATTEMPTS,

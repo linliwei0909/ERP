@@ -37,6 +37,7 @@ describeDatabase("P1 foundation baseline", () => {
       "user_roles",
       "user_sessions",
       "users",
+      "worker_heartbeats",
     ]);
   });
 
@@ -52,6 +53,7 @@ describeDatabase("P1 foundation baseline", () => {
     expect(result.rows.map((row) => row.migration_name)).toEqual([
       "0001_p1_foundation_baseline",
       "0002_p1_authentication_and_access",
+      "0003_p1_operational_foundation",
     ]);
   });
 
@@ -90,6 +92,11 @@ describeDatabase("P1 foundation baseline", () => {
           'idempotency_keys_expiry_check',
           'background_jobs_attempt_count_check'
           ,'users_failed_login_attempts_check'
+          ,'audit_logs_request_id_check'
+          ,'idempotency_keys_lifecycle_check'
+          ,'background_jobs_max_attempts_check'
+          ,'background_jobs_lock_pair_check'
+          ,'worker_heartbeats_status_check'
         )
        UNION ALL
        SELECT indexname AS object_name
@@ -103,15 +110,20 @@ describeDatabase("P1 foundation baseline", () => {
     );
 
     expect(result.rows.map((row) => row.object_name)).toEqual([
+      "audit_logs_request_id_check",
       "background_jobs_active_deduplication_key",
       "background_jobs_attempt_count_check",
+      "background_jobs_lock_pair_check",
+      "background_jobs_max_attempts_check",
       "document_sequences_fiscal_year_check",
       "document_sequences_last_value_check",
       "idempotency_keys_expiry_check",
+      "idempotency_keys_lifecycle_check",
       "user_sessions_active_idx",
       "user_sessions_idle_window_check",
       "user_sessions_revocation_reason_check",
       "users_failed_login_attempts_check",
+      "worker_heartbeats_status_check",
     ]);
   });
 
@@ -126,6 +138,7 @@ describeDatabase("P1 foundation baseline", () => {
             'idempotency_keys_company_id_fkey',
             'background_jobs_company_id_fkey',
             'audit_logs_actor_user_id_fkey'
+            ,'audit_logs_session_id_fkey'
           )
         ORDER BY conname`,
     );
@@ -144,6 +157,7 @@ describeDatabase("P1 foundation baseline", () => {
 
     expect(foreignKeys.rows.map((row) => row.constraint_name)).toEqual([
       "audit_logs_actor_user_id_fkey",
+      "audit_logs_session_id_fkey",
       "background_jobs_company_id_fkey",
       "company_settings_company_id_fkey",
       "idempotency_keys_company_id_fkey",
@@ -222,15 +236,15 @@ describeDatabase("P1 foundation baseline", () => {
 
   it("prevents audit log updates and deletes", async () => {
     const audit = await client.query<{ id: string }>(
-      `INSERT INTO audit_logs (entity_type, entity_id, action)
-       VALUES ('baseline_test', $1, 'created')
+      `INSERT INTO audit_logs (entity_type, entity_id, operation, request_id)
+       VALUES ('baseline_test', $1, 'created', $2)
        RETURNING id`,
-      [randomUUID()],
+      [randomUUID(), randomUUID()],
     );
     const auditId = audit.rows[0]!.id;
 
     await expect(
-      client.query(`UPDATE audit_logs SET action = 'changed' WHERE id = $1`, [
+      client.query(`UPDATE audit_logs SET operation = 'changed' WHERE id = $1`, [
         auditId,
       ]),
     ).rejects.toThrow("audit_logs is append-only");
