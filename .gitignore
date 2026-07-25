@@ -25,6 +25,7 @@ pnpm-debug.log*
 *.bak
 backups/
 database-backups/
+web/backups/
 
 # Database volumes and local data
 postgres-data/
