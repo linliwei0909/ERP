@@ -1,7 +1,7 @@
 # Ragic 本地端系統開發階段與任務拆分
 
-文件狀態：P1 已結案；P2.1 公司參數管理已完成，P2.2 以後尚未授權
-同步基線：`DECISIONS.md` V0.4
+文件狀態：P1 已結案；P2.1 公司參數與 P2.2 客戶主檔已完成，P2.3 以後尚未授權
+同步基線：`DECISIONS.md` V0.5
 版本日期：2026-07-25
 
 ## 1. 執行原則
@@ -11,7 +11,7 @@
 - 新決議先更新 `DECISIONS.md`，再同步規格、資料庫設計、計畫與程式。
 - 所有跨單據操作使用資料庫 transaction；核心規則必須有測試；重要狀態異動保留 audit log。
 - 每次只實作指定模組，不提前實作後續模組。
-- 本輪只完成 P2.1 公司參數管理；不開始 P2.2，不新增客戶、品項、價格、運費或交易資料表。
+- 本輪只完成 P2.2 客戶主檔；不開始 P2.3，不新增品項、價格、運費或交易資料表。
 
 ## 2. 開發階段
 
@@ -106,13 +106,20 @@ P2.1 完成狀態：
 - 完成公司參數 ADMIN API、管理頁及 INDUSTRIAL=25、BIOTECH=20 的可重跑 audited bootstrap。
 - Unit 與 DB workflow tests 已涵蓋值域、短月份、閏年、版本選擇、設定缺失、權限、隔離、唯一限制、不可變版本、rollback、audit、idempotency 與 bootstrap。
 
+P2.2 完成狀態：
+
+- `0004_p2_customer_master` 新增 `customers`、`customer_companies`、`customer_contacts`、`delivery_locations`，並以 PostgreSQL CHECK、partial unique 與 supporting unique 落實正式限制。
+- 完成境內／境外客戶、跨公司授權、normalized 公司客戶代碼、主要聯絡人與預設送貨地點的 transactional service。
+- 完成 ADMIN 維護 API/UI、ORDER_ENTRY 公司範圍查詢、搜尋、分頁、狀態篩選、audit、correlation ID 與 idempotency。
+- Unit 與 DB workflow tests 已涵蓋識別唯一性、欄位組合、公司隔離、角色權限、聯絡方式、主要／預設切換、停用、rollback、audit、idempotency、migration 與 catalog。
+
 工作：
 
 - [完成 P2.1] 公司、具有生效日的公司切帳參數。
 - [完成 P2.1] `company_settings` 的 `setting_key` schema registry、未知 key 拒絕及值域測試。
 - [完成 P2.1] 延伸公司設定管理；帳號、角色與公司授權基礎沿用 P1.2，不重複建立。
-- 共用客戶、`customer_companies`、全系統唯一統編與境外識別。
-- 客戶聯絡人、送貨地點及公司可用範圍。
+- [完成 P2.2] 共用客戶、`customer_companies`、全系統唯一 normalized 統編與境外識別。
+- [完成 P2.2] 客戶聯絡人、送貨地點、主要／預設切換及公司可用範圍。
 - 共用 `items`、`item_type`、功能旗標、分類與 `item_companies`；第一階段只啟用銷售。
 - `items.barcode` 非空全系統唯一；所有交易數量使用 `numeric(18,4)`。
 - 共用廠商與 `vendor_companies`，保存公司別代碼及付款條件。
@@ -125,7 +132,7 @@ P2.1 完成狀態：
 - 三種運費方式、半開有效期間與訂單運費快照。
 - 主檔合併、停用、改指、legacy mapping 與 audit。
 
-完成條件：跨公司負面測試、統編唯一、有效期間排除、缺價流程、價格快照及主檔合併稽核均通過。
+完成條件：P2.2 的跨公司負面測試、統編與境外識別唯一、聯絡方式、主要／預設唯一、停用、rollback 與稽核已通過；其餘有效期間、缺價、價格快照與主檔合併稽核留待已授權的後續切片。
 
 ### P3：銷售訂單與銷貨單
 
@@ -281,8 +288,9 @@ P2.1 完成狀態：
 
 ## 6. 本輪交付限制
 
-P2.1 驗證及文件同步完成後停止。未取得使用者下一步授權前，不得開始 P2.2、Ragic 移轉、舊 ERP 模組恢復、主檔 schema migration 或任何交易模組；任何破壞性資料庫操作仍須使用者另行核准。
+P2.2 驗證及文件同步完成後停止。未取得使用者下一步授權前，不得開始 P2.3、品項、價格、運費、Ragic 移轉、舊 ERP 模組恢復或任何交易模組；任何破壞性資料庫操作仍須使用者另行核准。
 
 ## 7. 變更紀錄
 
+- V0.5（2026-07-25）：同步 DEC-052，標示 P2.2 客戶、公司關係、聯絡人、送貨地點、權限、稽核及驗證完成；P2.3 以後維持未授權。
 - V0.4（2026-07-25）：同步 DEC-051 並標示 P2.1 公司參數管理完成；P2.2 以後維持未授權。

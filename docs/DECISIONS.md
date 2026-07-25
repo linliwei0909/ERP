@@ -1,7 +1,7 @@
 # Ragic 本地端系統正式決議
 
 文件性質：本專案最高優先級的業務決議紀錄  
-版本：V0.4
+版本：V0.5
 最後更新：2026-07-25
 
 ## 1. 使用原則
@@ -986,6 +986,23 @@
 - 公司參數管理只允許具有公司權限的 `ADMIN` 操作；後端不得信任 client 傳入的 `company_id`。
 - 公司參數寫入使用 transaction，並使設定異動、audit log 與 idempotency 完成狀態位於同一 transaction。
 
+## DEC-052 跨公司客戶主檔、聯絡人與送貨地點
+
+- `customers` 是跨公司共用主檔；`customer_companies` 控制客戶可由哪些公司查詢及使用。客戶沒有有效公司關係時，不得供該公司查詢或使用。
+- 客戶類型為 `DOMESTIC` 或 `FOREIGN`。
+- 境內客戶可以不填 `tax_id`；有值時使用 normalized 值做全系統唯一限制，且不使用 `foreign_identifier`。
+- 境外客戶必須填寫 `country_code` 與 `foreign_identifier`，兩者組合全系統唯一，原則上不使用台灣 `tax_id`。
+- `customer_companies.customer_code` 必填，以 normalized code 比對；同公司內唯一，不同公司可重複。
+- 同一客戶可以授權多家公司；同一客戶與公司只能存在一筆關係。
+- 客戶聯絡人保存姓名、部門、職稱、電話、手機、電子郵件、備註、主要聯絡人旗標及狀態。姓名必填，電話、手機及電子郵件至少一項必填。
+- 同一客戶最多一位 `ACTIVE` 主要聯絡人；設定新主要聯絡人時，必須在同一 transaction 取消原主要聯絡人。
+- 送貨地點保存代碼、名稱、收件人、電話、郵遞區號、城市、行政區、地址、完整地址、備註、預設旗標及狀態。
+- 送貨地點代碼在同一客戶內唯一；同一客戶最多一個 `ACTIVE` 預設送貨地點。設定新預設地點時，必須在同一 transaction 取消原預設地點。
+- 送貨地點屬於共用客戶，不直接關聯公司。
+- 客戶、公司關係、聯絡人及送貨地點使用 `ACTIVE`／`INACTIVE`；一般 UI 與 API 不提供 hard delete。
+- `ADMIN` 可以在其公司 scope 內建立、修改、停用及維護公司授權；`ORDER_ENTRY` 只能查詢目前公司已授權的客戶資料。
+- 所有寫入重新驗證後端 RBAC 與 company scope，使用 idempotency 與 transaction，並使主要異動及 audit log 位於同一 transaction。
+
 
 ## 3. 尚未定案且應保留於 OPEN_QUESTIONS.md 的事項
 
@@ -997,4 +1014,5 @@
 
 ## 4. 變更紀錄
 
+- V0.5（2026-07-25）：新增 DEC-052，確認跨公司客戶、公司關係、聯絡方式、主要聯絡人、送貨地點、預設地點、權限、停用與稽核規則。
 - V0.4（2026-07-25）：新增 DEC-051，確認 `billing_cutoff_day`、短月份、有效版本、權限、audit、idempotency 與初始公司設定。

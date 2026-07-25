@@ -1,7 +1,7 @@
 # Ragic 本地端系統資料庫設計草稿
 
-文件狀態：P1 正式基線與 P2.1 公司參數已實作；P2.2 以後仍為 ERD 草稿
-同步基線：`DECISIONS.md` V0.4
+文件狀態：P1 正式基線、P2.1 公司參數及 P2.2 客戶主檔已實作；P2.3 以後仍為 ERD 草稿
+同步基線：`DECISIONS.md` V0.5
 版本日期：2026-07-25
 
 ## 1. 設計基線
@@ -14,7 +14,7 @@
 - 日期使用 `date`；時間使用 `timestamptz` 並保存 UTC。
 - 交易外鍵與交易快照並存；主檔修改不得改變既有交易內容。
 - 交易資料不實體刪除；作廢、撤銷、退款、反向分配、退票及調整均保留稽核。
-- P1 的 0001、0002、0003 已套用正式 `erp` 開發資料庫；P2.1 沿用既有 `company_settings`，未修改 schema 或新增 migration。
+- P1 的 0001、0002、0003 已套用正式 `erp` 開發資料庫；P2.1 沿用既有 `company_settings`，未修改 schema。P2.2 由 `0004_p2_customer_master` 新增四張客戶主檔資料表。
 
 ## 2. 共通欄位與限制
 
@@ -171,10 +171,10 @@ P2.1 正式登錄 `billing_cutoff_day`，其 `setting_value` 必須解析為 1 �
 
 | 資料表 | 主要 FK | 唯一限制 | 重要索引 |
 | --- | --- | --- | --- |
-| `customers` | — | partial UQ normalized `tax_id` when not null；境外 `(country_code, foreign_identifier)` | `(status, name)`, normalized `name` |
-| `customer_companies` | `customer_id -> customers.id`, `company_id -> companies.id` | `(customer_id, company_id)`；optional `(company_id, customer_code)` | `(company_id, status, customer_id)` |
-| `customer_contacts` | `customer_id -> customers.id` | optional `(customer_id, normalized_email)` | `(customer_id, status, is_primary desc)` |
-| `delivery_locations` | `customer_id -> customers.id` | `(customer_id, code)`；支援 FK 的 `(id, customer_id)` | `(customer_id, status)` |
+| `customers` | `created_by -> users.id`, `updated_by -> users.id` | partial UQ `normalized_tax_id` when not null；境外 `(country_code, foreign_identifier)` | `(status, name)`, `(customer_type, status)` |
+| `customer_companies` | `customer_id -> customers.id`, `company_id -> companies.id`, actor FK | `(customer_id, company_id)`；`(company_id, normalized_customer_code)` | `(company_id, status, customer_id)`, `(customer_id, status)` |
+| `customer_contacts` | `customer_id -> customers.id`, actor FK | partial UQ `customer_id WHERE status='ACTIVE' AND is_primary` | `(customer_id, status, is_primary desc)`, `email` |
+| `delivery_locations` | `customer_id -> customers.id`, actor FK | `(customer_id, code)`；支援後續 composite FK 的 `(id, customer_id)`；partial UQ `customer_id WHERE status='ACTIVE' AND is_default` | `(customer_id, status, is_default desc)`, `(city, district)` |
 | `freight_rules` | composite `(customer_id, company_id) -> customer_companies(customer_id, company_id)`；composite `(delivery_location_id, customer_id) -> delivery_locations(id, customer_id)` | exclusion on company + location + effective range | `(company_id, delivery_location_id, valid_from desc)`, partial active |
 | `item_categories` | `parent_id -> item_categories.id` nullable | `(item_type, code)` | `(item_type, status, name)` |
 | `items` | `category_id -> item_categories.id` nullable | `code`；partial UQ `barcode` where not null | `(item_type, status, name)`, `(sales_enabled, status)` |
@@ -186,6 +186,14 @@ P2.1 正式登錄 `billing_cutoff_day`，其 `setting_value` 必須解析為 1 �
 | `vendor_companies` | `vendor_id -> vendors.id`, `company_id -> companies.id` | `(vendor_id, company_id)`；optional `(company_id, vendor_code)` | `(company_id, status, vendor_id)` |
 
 `customer_price_list_assignments` 使用 PostgreSQL `daterange(valid_from, valid_to, '[)')` 或等價 generated range，並以 GiST exclusion constraint 禁止同一 `customer_id`、`company_id` 的有效期間重疊；`valid_to` 為空表示無限期，非空時必須滿足 `valid_to > valid_from`。`price_lists` 不保存 `exclusive_customer_id`，所有客戶關係只由 assignment 管理。`items` 包含 `item_type`, `sales_enabled`, `purchase_enabled`, `inventory_enabled`, `production_enabled`，且 `barcode` 有值時全系統唯一。第一階段不建立任何庫存關聯；正式價格的新增／更新只允許管理員，人工成交價只保存在訂單明細，不回寫 `item_prices`。
+
+P2.2 正式欄位與限制：
+
+- `customers`：`customer_type`, `name`, `tax_id`, `normalized_tax_id`, `country_code`, `foreign_identifier`, `status` 及建立／更新 actor 與時間。CHECK 保證境內客戶不使用境外欄位；境外客戶必須有大寫兩碼國別與非空境外識別，且不得有台灣統編。
+- `customer_companies`：`customer_id`, `company_id`, `customer_code`, `normalized_customer_code`, `status` 及建立／更新 actor 與時間。客戶代碼不得為空，正規化由應用層 NFKC、trim、uppercase 後寫入。
+- `customer_contacts`：`name`, `department`, `job_title`, `phone`, `mobile`, `email`, `notes`, `is_primary`, `status` 及 actor／時間。CHECK 保證姓名非空且至少有 phone、mobile、email 之一。
+- `delivery_locations`：`code`, `name`, `recipient_name`, `phone`, `postal_code`, `city`, `district`, `address_line`, `full_address`, `notes`, `is_default`, `status` 及 actor／時間。必填文字以 CHECK 防止空白；同客戶代碼由 `(customer_id, code)` 唯一限制保護。
+- 四張表皆使用 PostgreSQL `gen_random_uuid()` 與 `timestamptz(3)`；所有 FK 均為 `ON DELETE RESTRICT ON UPDATE RESTRICT`。一般 API/UI 不提供 DELETE，停用與重要異動透過 transactional service 與 audit 保存。
 
 ### 4.4 銷售與銷貨
 
@@ -316,4 +324,5 @@ P2.1 正式登錄 `billing_cutoff_day`，其 `setting_value` 必須解析為 1 �
 
 ## 8. 變更紀錄
 
+- V0.5（2026-07-25）：同步 DEC-052 與 `0004_p2_customer_master`，正式化四張客戶主檔資料表、境內外 CHECK、partial unique、公司別代碼、聯絡方式及預設／主要唯一限制。
 - V0.4（2026-07-25）：同步 DEC-051；記錄 P2.1 沿用 `company_settings`、有效版本查詢、未來版本取消 audit、短月份及無 0004 migration。
