@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 const databaseUrl = process.env.P1_TEST_DATABASE_URL;
 const describeDatabase = databaseUrl ? describe : describe.skip;
 
-describeDatabase("P1 foundation baseline", () => {
+describeDatabase("formal schema baseline", () => {
   const client = new Client({ connectionString: databaseUrl });
 
   beforeAll(async () => {
@@ -16,7 +16,7 @@ describeDatabase("P1 foundation baseline", () => {
     await client.end();
   });
 
-  it("contains only the approved P1 tables", async () => {
+  it("contains only the approved P1 and P2.2 tables", async () => {
     const result = await client.query<{ tablename: string }>(
       `SELECT tablename
          FROM pg_catalog.pg_tables
@@ -30,6 +30,10 @@ describeDatabase("P1 foundation baseline", () => {
       "background_jobs",
       "companies",
       "company_settings",
+      "customer_companies",
+      "customer_contacts",
+      "customers",
+      "delivery_locations",
       "document_sequences",
       "idempotency_keys",
       "roles",
@@ -41,7 +45,7 @@ describeDatabase("P1 foundation baseline", () => {
     ]);
   });
 
-  it("executes only the formal P1 migration chain", async () => {
+  it("executes only the formal migration chain through P2.2", async () => {
     const result = await client.query<{ migration_name: string }>(
       `SELECT migration_name
          FROM _prisma_migrations
@@ -54,6 +58,7 @@ describeDatabase("P1 foundation baseline", () => {
       "0001_p1_foundation_baseline",
       "0002_p1_authentication_and_access",
       "0003_p1_operational_foundation",
+      "0004_p2_customer_master",
     ]);
   });
 

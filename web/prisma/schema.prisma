@@ -32,6 +32,13 @@ enum BackgroundJobStatus {
   @@map("background_job_status")
 }
 
+enum CustomerType {
+  DOMESTIC
+  FOREIGN
+
+  @@map("customer_type")
+}
+
 model Company {
   id        String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   code      String       @unique(map: "companies_code_key") @db.VarChar(32)
@@ -48,6 +55,7 @@ model Company {
   auditLogs         AuditLog[]
   defaultForUsers   User[]             @relation("UserDefaultCompany")
   selectedSessions  UserSession[]      @relation("SessionSelectedCompany")
+  customerRelations CustomerCompany[]
 
   @@index([status, name], map: "companies_status_name_idx")
   @@map("companies")
@@ -87,6 +95,14 @@ model User {
   sessions        UserSession[]
   idempotencyKeys IdempotencyKey[]
   auditLogs       AuditLog[]         @relation("AuditActor")
+  customersCreated Customer[]        @relation("CustomerCreatedBy")
+  customersUpdated Customer[]        @relation("CustomerUpdatedBy")
+  customerCompaniesCreated CustomerCompany[] @relation("CustomerCompanyCreatedBy")
+  customerCompaniesUpdated CustomerCompany[] @relation("CustomerCompanyUpdatedBy")
+  customerContactsCreated CustomerContact[] @relation("CustomerContactCreatedBy")
+  customerContactsUpdated CustomerContact[] @relation("CustomerContactUpdatedBy")
+  deliveryLocationsCreated DeliveryLocation[] @relation("DeliveryLocationCreatedBy")
+  deliveryLocationsUpdated DeliveryLocation[] @relation("DeliveryLocationUpdatedBy")
   defaultCompany  Company?           @relation("UserDefaultCompany", fields: [defaultCompanyId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   @@index([status], map: "users_status_idx")
@@ -272,4 +288,111 @@ model WorkerHeartbeat {
 
   @@index([status, lastHeartbeatAt], map: "worker_heartbeats_status_last_idx")
   @@map("worker_heartbeats")
+}
+
+model Customer {
+  id                    String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customerType          CustomerType @map("customer_type")
+  name                  String       @db.VarChar(200)
+  taxId                 String?      @map("tax_id") @db.VarChar(32)
+  normalizedTaxId       String?      @map("normalized_tax_id") @db.VarChar(32)
+  countryCode           String?      @map("country_code") @db.VarChar(2)
+  foreignIdentifier     String?      @map("foreign_identifier") @db.VarChar(100)
+  status                RecordStatus @default(ACTIVE)
+  createdById           String       @map("created_by") @db.Uuid
+  updatedById           String       @map("updated_by") @db.Uuid
+  createdAt             DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  createdBy         User               @relation("CustomerCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  updatedBy         User               @relation("CustomerUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  companyRelations  CustomerCompany[]
+  contacts          CustomerContact[]
+  deliveryLocations DeliveryLocation[]
+
+  @@index([status, name], map: "customers_status_name_idx")
+  @@index([customerType, status], map: "customers_type_status_idx")
+  @@unique([countryCode, foreignIdentifier], map: "customers_country_foreign_identifier_key")
+  @@map("customers")
+}
+
+model CustomerCompany {
+  id                     String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customerId             String       @map("customer_id") @db.Uuid
+  companyId              String       @map("company_id") @db.Uuid
+  customerCode           String       @map("customer_code") @db.VarChar(50)
+  normalizedCustomerCode String       @map("normalized_customer_code") @db.VarChar(50)
+  status                 RecordStatus @default(ACTIVE)
+  createdById            String       @map("created_by") @db.Uuid
+  updatedById            String       @map("updated_by") @db.Uuid
+  createdAt              DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  customer  Customer @relation(fields: [customerId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  createdBy User     @relation("CustomerCompanyCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  updatedBy User     @relation("CustomerCompanyUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([customerId, companyId], map: "customer_companies_customer_company_key")
+  @@unique([companyId, normalizedCustomerCode], map: "customer_companies_company_code_key")
+  @@index([companyId, status, customerId], map: "customer_companies_company_status_customer_idx")
+  @@index([customerId, status], map: "customer_companies_customer_status_idx")
+  @@map("customer_companies")
+}
+
+model CustomerContact {
+  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customerId  String       @map("customer_id") @db.Uuid
+  name        String       @db.VarChar(200)
+  department  String?      @db.VarChar(100)
+  jobTitle    String?      @map("job_title") @db.VarChar(100)
+  phone       String?      @db.VarChar(50)
+  mobile      String?      @db.VarChar(50)
+  email       String?      @db.VarChar(320)
+  notes       String?
+  isPrimary   Boolean      @default(false) @map("is_primary")
+  status      RecordStatus @default(ACTIVE)
+  createdById String       @map("created_by") @db.Uuid
+  updatedById String       @map("updated_by") @db.Uuid
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  customer  Customer @relation(fields: [customerId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  createdBy User     @relation("CustomerContactCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  updatedBy User     @relation("CustomerContactUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([customerId, status, isPrimary(sort: Desc)], map: "customer_contacts_customer_status_primary_idx")
+  @@index([email], map: "customer_contacts_email_idx")
+  @@map("customer_contacts")
+}
+
+model DeliveryLocation {
+  id            String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  customerId    String       @map("customer_id") @db.Uuid
+  code          String       @db.VarChar(50)
+  name          String       @db.VarChar(200)
+  recipientName String       @map("recipient_name") @db.VarChar(200)
+  phone         String       @db.VarChar(50)
+  postalCode    String?      @map("postal_code") @db.VarChar(20)
+  city          String?      @db.VarChar(100)
+  district      String?      @db.VarChar(100)
+  addressLine   String       @map("address_line") @db.VarChar(300)
+  fullAddress   String       @map("full_address") @db.VarChar(500)
+  notes         String?
+  isDefault     Boolean      @default(false) @map("is_default")
+  status        RecordStatus @default(ACTIVE)
+  createdById   String       @map("created_by") @db.Uuid
+  updatedById   String       @map("updated_by") @db.Uuid
+  createdAt     DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  customer  Customer @relation(fields: [customerId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  createdBy User     @relation("DeliveryLocationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  updatedBy User     @relation("DeliveryLocationUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([customerId, code], map: "delivery_locations_customer_code_key")
+  @@unique([id, customerId], map: "delivery_locations_id_customer_key")
+  @@index([customerId, status, isDefault(sort: Desc)], map: "delivery_locations_customer_status_default_idx")
+  @@index([city, district], map: "delivery_locations_city_district_idx")
+  @@map("delivery_locations")
 }

@@ -63,6 +63,12 @@ export default async function Home() {
         ) : null}
 
         <div className="mt-8 flex gap-3">
+          <Link
+            href="/customers"
+            className="rounded-lg border border-teal-700 px-4 py-2 text-teal-800"
+          >
+            客戶查詢
+          </Link>
           {hasRole(context.roleCodes, "ADMIN") ? (
             <>
               <Link
@@ -76,6 +82,12 @@ export default async function Home() {
                 className="rounded-lg bg-teal-700 px-4 py-2 text-white"
               >
                 公司參數管理
+              </Link>
+              <Link
+                href="/admin/customers"
+                className="rounded-lg bg-blue-700 px-4 py-2 text-white"
+              >
+                客戶主檔管理
               </Link>
             </>
           ) : null}

@@ -4,7 +4,9 @@ export type Permission =
   | "admin.users.read"
   | "admin.users.manage"
   | "admin.sessions.revoke"
-  | "company.switch";
+  | "company.switch"
+  | "customers.read"
+  | "customers.manage";
 
 const rolePermissions: Record<RoleCode, ReadonlySet<Permission>> = {
   [ROLE_CODES.ADMIN]: new Set<Permission>([
@@ -12,8 +14,13 @@ const rolePermissions: Record<RoleCode, ReadonlySet<Permission>> = {
     "admin.users.manage",
     "admin.sessions.revoke",
     "company.switch",
+    "customers.read",
+    "customers.manage",
   ]),
-  [ROLE_CODES.ORDER_ENTRY]: new Set<Permission>(["company.switch"]),
+  [ROLE_CODES.ORDER_ENTRY]: new Set<Permission>([
+    "company.switch",
+    "customers.read",
+  ]),
 };
 
 export function hasRole(roleCodes: readonly string[], role: RoleCode): boolean {
