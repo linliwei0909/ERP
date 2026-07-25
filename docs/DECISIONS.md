@@ -1,7 +1,7 @@
 # Ragic 本地端系統正式決議
 
 文件性質：本專案最高優先級的業務決議紀錄  
-版本：V0.6
+版本：V0.7
 最後更新：2026-07-25
 
 ## 1. 使用原則
@@ -1019,6 +1019,22 @@
 - `ADMIN` 可以在其公司 scope 內建立、修改、停用、重新啟用品項及維護公司關係；`ORDER_ENTRY` 只能查詢目前公司已授權且可銷售的品項。
 - 一般 UI 與 API 不提供 hard delete。重要異動、停用、重新啟用及公司關係異動必須與 audit log 位於同一 transaction，並使用後端 RBAC、company scope、idempotency 及 correlation ID。
 
+## DEC-054 正式價格版本與客戶價格表指派
+
+- 正式價格明細資料表名稱為 `item_prices`。P2.4 只建立 `price_lists`、`item_prices`、`customer_price_list_assignments`。
+- `price_lists` 屬於單一公司，不保存 `exclusive_customer_id`，也不建立尚無正式需求的 `list_type`。code 採 NFKC、trim、uppercase normalization 並在公司內唯一；name 必填，status 使用 `ACTIVE`／`INACTIVE`。
+- `item_prices.unit_price` 表示未稅單價，使用 `numeric(18,5)`，不得為負數且允許零價。
+- 價格及客戶指派期間均採半開區間 `[valid_from, valid_to)`；`valid_to` 可為 null，否則必須晚於 `valid_from`。相鄰期間允許。
+- 同一 `price_list_id`, `item_id` 的所有保留價格期間不論 status 均不得重疊；同一 `customer_id`, `company_id` 的所有保留指派期間不論 status 均不得重疊。
+- 客戶價格表關係只由 `customer_price_list_assignments` 管理，不建立第二套專屬客戶價格關聯。
+- 客戶指派使用 composite FK 保證客戶具有該公司的 `customer_companies` 關係，且 price list 屬於相同公司；應用層另要求客戶公司關係為 `ACTIVE`。
+- 只有 `ADMIN` 可以維護價格表、價格版本與客戶指派；`ORDER_ENTRY` 只能查詢目前授權公司、可銷售品項及明確 effective date 的有效正式價格。
+- 正式查價必須接受明確 `effectiveDate`，未來交易以其 `order_date` 傳入；P2.4 不得固定使用系統今日。
+- 查價依序驗證 company scope、有效客戶公司關係、有效且可銷售品項公司關係、指定日期有效客戶價格表指派，以及指定日期有效品項價格。
+- 找不到有效價格時回傳一致的 `PRICE_NOT_FOUND`，不得套用零、建立正式價格、建立人工交易價或寫入交易快照。
+- 已生效價格不得直接覆寫而失去歷程；價格變更以新的期間版本表示，既有版本僅調整期間或狀態並保留 audit。
+- 一般 UI 與 API 不提供 hard delete。正式價格、期間及客戶指派的重要異動必須與 audit log 位於同一 transaction，並使用後端 RBAC、company scope、idempotency 及 correlation ID。
+
 
 ## 3. 尚未定案且應保留於 OPEN_QUESTIONS.md 的事項
 
@@ -1030,6 +1046,7 @@
 
 ## 4. 變更紀錄
 
+- V0.7（2026-07-25）：新增 DEC-054，確認價格表、未稅價格精度、半開期間、全歷程排除重疊、客戶指派 composite FK、effectiveDate 查價、PRICE_NOT_FOUND、權限及稽核規則。
 - V0.6（2026-07-25）：新增 DEC-053，確認跨公司品項、正式類型、代碼與條碼 normalization、用途旗標、公司別代碼、可銷售條件、權限、停用及稽核規則。
 - V0.5（2026-07-25）：新增 DEC-052，確認跨公司客戶、公司關係、聯絡方式、主要聯絡人、送貨地點、預設地點、權限、停用與稽核規則。
 - V0.4（2026-07-25）：新增 DEC-051，確認 `billing_cutoff_day`、短月份、有效版本、權限、audit、idempotency 與初始公司設定。

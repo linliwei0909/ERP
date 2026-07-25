@@ -1,7 +1,7 @@
 # Ragic 本地端系統開發階段與任務拆分
 
-文件狀態：P1 已結案；P2.1～P2.3 已完成，P2.4 以後尚未授權
-同步基線：`DECISIONS.md` V0.6
+文件狀態：P1 已結案；P2.1～P2.4 已完成，P2.5 以後尚未授權
+同步基線：`DECISIONS.md` V0.7
 版本日期：2026-07-25
 
 ## 1. 執行原則
@@ -11,7 +11,7 @@
 - 新決議先更新 `DECISIONS.md`，再同步規格、資料庫設計、計畫與程式。
 - 所有跨單據操作使用資料庫 transaction；核心規則必須有測試；重要狀態異動保留 audit log。
 - 每次只實作指定模組，不提前實作後續模組。
-- 本輪只完成 P2.3 品項與公司關係；不開始 P2.4，不新增價格、運費或交易資料表。
+- 本輪只完成 P2.4 價格表、價格明細與客戶價格表指派；不開始 P2.5，不新增運費或交易資料表。
 
 ## 2. 開發階段
 
@@ -120,6 +120,15 @@ P2.3 完成狀態：
 - 完成 ADMIN 維護 API/UI、ORDER_ENTRY 公司可銷售品項查詢、搜尋、分頁、狀態／類型篩選、audit、correlation ID 與 idempotency。
 - Unit 與 DB workflow tests 已涵蓋 normalization、唯一限制、空白 CHECK、跨公司關係、四項可銷售條件、角色／公司隔離、停用／啟用、rollback、audit、idempotency、migration 與 catalog。
 
+P2.4 完成狀態：
+
+- `0006_p2_pricing_master` 新增 `price_lists`、`item_prices`、`customer_price_list_assignments`，未修改既有 migration。
+- 完成公司內 normalized 價格表代碼唯一、`numeric(18,5)` 未稅單價、半開期間 CHECK、全歷程 GiST exclusion，以及客戶公司與價格表公司的 composite FK。
+- 完成 ADMIN 價格表、價格版本與客戶指派管理；ORDER_ENTRY 只讀查價；一般 API/UI 不提供 hard delete。
+- 查價必須傳入明確 `effectiveDate`，並驗證公司 scope、客戶公司關係、品項公司關係及可銷售條件；缺價一致回傳 `PRICE_NOT_FOUND`，不建立人工交易價或預設價。
+- 所有寫入使用後端 RBAC、company scope、transaction、audit、idempotency 與 correlation ID。
+- Unit 與 DB workflow tests 已涵蓋 normalization、精度與零價、有效期間邊界／重疊、composite FK、跨公司、RBAC、查價、rollback、audit、idempotency、migration 與禁止資料表。
+
 工作：
 
 - [完成 P2.1] 公司、具有生效日的公司切帳參數。
@@ -130,16 +139,16 @@ P2.3 完成狀態：
 - [完成 P2.3] 共用 `items`、正式 `item_type`、用途旗標與 `item_companies`；P2.3 不建立分類。
 - [完成 P2.3] normalized 品項代碼、非空條碼、公司別品項代碼唯一及公司可銷售條件。
 - 共用廠商與 `vendor_companies`，保存公司別代碼及付款條件。
-- 價格表、價格版本、半開有效期間與排除重疊限制。
-- `customer_price_list_assignments` 使用 `[valid_from, valid_to)`，同客戶、同公司期間不得重疊。
-- `price_lists` 移除 `exclusive_customer_id`；客戶價格表關係只由 assignment 管理。
+- [完成 P2.4] 價格表、價格版本、半開有效期間與全歷程排除重疊限制。
+- [完成 P2.4] `customer_price_list_assignments` 使用 `[valid_from, valid_to)`，同客戶、同公司期間不得重疊。
+- [完成 P2.4] `price_lists` 移除 `exclusive_customer_id`；客戶價格表關係只由 assignment 管理。
 - `freight_rules` 與 `customer_price_list_assignments` 使用 composite FK 驗證客戶／公司歸屬。
 - 查無有效價格時標示人工價格；有標準價但改價時理由必填。
 - 正式價格表只允許管理員新增／更新；人工價格不回寫正式價表。
 - 三種運費方式、半開有效期間與訂單運費快照。
 - 主檔合併、停用、改指、legacy mapping 與 audit。
 
-完成條件：P2.2 與 P2.3 的跨公司負面測試、主檔唯一限制、可用條件、停用、rollback 與稽核已通過；有效期間、缺價、價格快照及其他後續規則留待已授權切片。
+完成條件：P2.2～P2.4 的跨公司負面測試、主檔唯一限制、可用條件、有效期間、缺價、停用、rollback 與稽核已通過；交易價格快照與運費留待後續已授權切片。
 
 ### P3：銷售訂單與銷貨單
 
@@ -268,7 +277,7 @@ P2.3 完成狀態：
 
 | 工作流 | 每階段要求 |
 | --- | --- |
-| 規格 | 先核對 `DECISIONS.md` V0.3；不得重新打開已決議問題 |
+| 規格 | 先核對 repository 中最新正式 `DECISIONS.md`；不得重新打開已決議問題 |
 | 公司別 | 正向與跨公司負面測試涵蓋清單、選單、命令、匯出及背景工作 |
 | 快照 | 主檔修改後既有交易內容不變 |
 | Transaction | 跨單據與 audit 同交易；錯誤不得留下部分資料 |
@@ -295,10 +304,11 @@ P2.3 完成狀態：
 
 ## 6. 本輪交付限制
 
-P2.3 驗證及文件同步完成後停止。未取得使用者下一步授權前，不得開始 P2.4、價格、運費、分類、Ragic 移轉、舊 ERP 模組恢復或任何交易模組；任何破壞性資料庫操作仍須使用者另行核准。
+P2.4 驗證及文件同步完成後停止。未取得使用者下一步授權前，不得開始 P2.5、運費、分類、Ragic 移轉、舊 ERP 模組恢復或任何交易模組；任何破壞性資料庫操作仍須使用者另行核准。
 
 ## 7. 變更紀錄
 
+- V0.7（2026-07-25）：同步 DEC-054，標示 P2.4 價格表、價格版本、客戶指派、有效期間、查價、權限、稽核及驗證完成；P2.5 以後維持未授權。
 - V0.6（2026-07-25）：同步 DEC-053，標示 P2.3 品項、公司關係、可銷售條件、權限、稽核及驗證完成；P2.4 以後維持未授權。
 - V0.5（2026-07-25）：同步 DEC-052，標示 P2.2 客戶、公司關係、聯絡人、送貨地點、權限、稽核及驗證完成；P2.3 以後維持未授權。
 - V0.4（2026-07-25）：同步 DEC-051 並標示 P2.1 公司參數管理完成；P2.2 以後維持未授權。
