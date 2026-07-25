@@ -1,8 +1,8 @@
 # Ragic 本地端系統資料庫設計草稿
 
-文件狀態：P1.2 authentication／access schema 已實作；P2 以後仍為 ERD 草稿
-同步基線：`DECISIONS.md` V0.3  
-版本日期：2026-07-24
+文件狀態：P1 正式基線與 P2.1 公司參數已實作；P2.2 以後仍為 ERD 草稿
+同步基線：`DECISIONS.md` V0.4
+版本日期：2026-07-25
 
 ## 1. 設計基線
 
@@ -14,7 +14,7 @@
 - 日期使用 `date`；時間使用 `timestamptz` 並保存 UTC。
 - 交易外鍵與交易快照並存；主檔修改不得改變既有交易內容。
 - 交易資料不實體刪除；作廢、撤銷、退款、反向分配、退票及調整均保留稽核。
-- P1 migration 只在獨立測試資料庫驗證；既有 `erp` schema／資料的重建或移除仍須另案核准。
+- P1 的 0001、0002、0003 已套用正式 `erp` 開發資料庫；P2.1 沿用既有 `company_settings`，未修改 schema 或新增 migration。
 
 ## 2. 共通欄位與限制
 
@@ -151,6 +151,10 @@ erDiagram
 `user_sessions` 為 server-side revocable session，只保存不可逆的 `token_hash`，並保存 `last_activity_at`、`idle_expires_at`、`selected_company_id`、`revoked_at`、`revoked_reason`、建立及裝置 metadata。每次使用都驗證未撤銷、未過期且帳號仍啟用；活動時間採節流更新並延長 8 小時閒置期限。停用帳號必須在同一 transaction 停用使用者、撤銷全部有效 Session 並寫入 audit log。
 
 `company_settings` 保留泛用 key/value 表，但應用程式必須維護 `setting_key -> validation schema` registry；未登錄 key、型別不符或值域不合法時拒絕寫入。`audit_logs` 可使用 `entity_type + entity_id`，由應用層驗證；核心交易來源與 allocation 不得使用 generic reference 取代真實 FK。
+
+P2.1 正式登錄 `billing_cutoff_day`，其 `setting_value` 必須解析為 1 至 31 的 JSON number integer。查詢指定日期時，依 `(company_id, setting_key, effective_from desc)` 取得 `effective_from <= effective_date` 的第一筆；不存在時回報設定缺失，不使用預設值。當設定日大於指定月份最後一天時，實際切帳日取月底。
+
+已生效版本不可更新或刪除；變更以新的未來 `effective_from` 版本表示。未生效版本可以更新。取消未生效版本時，在同一 transaction 保存完整 before-image audit 後刪除該未生效列；設定歷程由現存版本及 `company_setting.future_cancelled` audit 合併呈現，因此不需要新增狀態欄位。所有維護操作均重新驗證 ADMIN、公司 scope 及 idempotency。
 
 ### 4.2 附件
 
@@ -301,10 +305,15 @@ erDiagram
 
 - P1.1 已建立新的正式 active migration chain：`web/prisma/migrations/`；首筆為 immutable 的 `0001_p1_foundation_baseline`。
 - P1.2 新增 immutable 的 `0002_p1_authentication_and_access`，只加入登入鎖定、預設公司、Session 目前公司及相關 FK、CHECK、index；不建立 P2 業務資料表。
+- P1.3 新增 immutable 的 `0003_p1_operational_foundation`，加入 operational constraint、audit append-only 與 worker heartbeat。
 - P1.1 前的舊 ERP migration 原檔封存於 `web/legacy/erp-mvp/prisma/migrations/`，不再由正式 Prisma 設定執行，且不得修改。
-- 正式 baseline 目前只允許套用到全新 disposable test database；未經另行核准，不得套用到現有開發 database、schema 或資料。
+- 正式 P1 migration chain 已依核准程序套用至 `erp`；後續 DB integration test 仍只能使用獨立測試資料庫，不得 reset 或重建 `erp`。
 - `DECISIONS.md` 已確認現有資料為測試資料，但任何移除、reset、drop 或 volume 清除仍需另案授權。
 - 任一後續 migration 必須以 `migrate dev --create-only` 產生草稿，完成 SQL 審查後即視為 immutable；已套用 migration 不得回頭修改。
 - PostgreSQL exclusion constraint、partial unique index、composite FK 與複雜 CHECK 由 custom SQL 補入尚未定稿的 create-only 草稿，constraint／index 必須明確命名。
 - SQL 審查必須確認既有資料前置檢核、執行順序、鎖定影響、重跑策略及 rollback／forward-fix。
 - DB integration test 必須在乾淨測試資料庫由零套用完整正式 migration 鏈，並覆蓋允許案例、違規案例、跨公司關聯、migration 與 constraint 存在性。
+
+## 8. 變更紀錄
+
+- V0.4（2026-07-25）：同步 DEC-051；記錄 P2.1 沿用 `company_settings`、有效版本查詢、未來版本取消 audit、短月份及無 0004 migration。
