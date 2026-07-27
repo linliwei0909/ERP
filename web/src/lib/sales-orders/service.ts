@@ -26,8 +26,10 @@ import {
 } from "@/lib/sales-orders/money";
 import {
   assertP31SalesOrderTransition,
+  assertSalesOrderVoidTransition,
   canEditSalesOrderDraft,
 } from "@/lib/sales-orders/state-machine";
+import { voidDeliveryNoteForOrderVoid } from "@/lib/delivery-notes/service";
 import {
   formatDateOnly,
   parseDateOnly,
@@ -1175,7 +1177,7 @@ export async function voidSalesOrder(
       {
         companyId: input.companyId,
         userId: input.context.actor.userId,
-        operation: "sales_order.void",
+        operation: "sales_order.void_with_delivery_note",
         key: input.idempotencyKey,
         payload: { orderId: input.orderId, reason },
         expiresAt: new Date(now.getTime() + IDEMPOTENCY_TTL_MS),
@@ -1190,7 +1192,13 @@ export async function voidSalesOrder(
         if (before.status === "VOIDED") {
           throw new SalesOrderAlreadyVoidedError();
         }
-        assertP31SalesOrderTransition(before.status, "VOIDED");
+        assertSalesOrderVoidTransition(before.status);
+        const voidedDeliveryNoteId = await voidDeliveryNoteForOrderVoid(tx, {
+          context: input.context,
+          companyId: input.companyId,
+          salesOrderId: before.id,
+          now,
+        });
         const updated = await tx.salesOrder.update({
           where: { id: before.id },
           data: {
@@ -1209,6 +1217,7 @@ export async function voidSalesOrder(
           reason,
           beforeJson: orderSnapshot(before, before.lines),
           afterJson: orderSnapshot(updated, before.lines),
+          metadata: { voidedDeliveryNoteId },
         });
         return {
           value: { id: updated.id },

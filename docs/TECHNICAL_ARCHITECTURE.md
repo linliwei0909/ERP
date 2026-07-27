@@ -1,6 +1,6 @@
 # Ragic 本地端系統技術架構
 
-文件狀態：P1、P2、P3.1 已完成；P3.2 規格決議完成、尚未開始實作
+文件狀態：P1、P2、P3.1 已完成；P3.2a schema 與 P3.2b 核心 service 已完成，P3.2c 以後未開始
 同步基線：`DECISIONS.md` V0.10
 版本日期：2026-07-27
 
@@ -228,7 +228,7 @@ P2.1～P2.6 已完成公司參數、客戶、品項、價格、運費的主檔�
 
 ## 18. P3.2 銷貨單架構決議
 
-P3.2a 已完成 Prisma schema、`0010_p3_delivery_notes`、custom SQL、fresh DB 驗證及本機 `erp` 受控部署。Delivery-note service、API 與 UI 均尚未建立。
+P3.2a 已完成 Prisma schema、`0010_p3_delivery_notes`、custom SQL、fresh DB 驗證及本機 `erp` 受控部署。P3.2b 已完成建立／查詢 service、RBAC、row lock、snapshot copy、取號、audit、idempotency、order `DELIVERY_CREATED` 與 order-void 內部整合；API、UI、rebuild 與 ADMIN direct void 尚未建立。
 
 - 公開 command 為 `createDeliveryNoteFromOrder`、`rebuildDeliveryNoteForOrder`、`adminVoidDeliveryNote`；查詢為 `getDeliveryNote`、`listDeliveryNotes`、`getCurrentDeliveryNoteForOrder`。Order 作廢使用內部 `voidDeliveryNoteForOrderVoid` helper，revision start 不操作 delivery note。
 - 初次建立由使用者明確觸發。Server 驗證 order=`CONFIRMED`、permission、company scope 及不存在非 `VOIDED` 銷貨單，才在 transaction 內配置 `DELIVERY_NOTE` 號碼並建立完整快照。
@@ -240,9 +240,11 @@ P3.2a 已完成 Prisma schema、`0010_p3_delivery_notes`、custom SQL、fresh DB
 - 權限分為 `delivery_notes.read`、`delivery_notes.manage`、`delivery_notes.admin_void`。ADMIN 與 ORDER_ENTRY 可在授權公司 read／manage；只有 ADMIN 有 direct void。內部 order workflow 的自動作廢不要求 admin void。
 - Audit 使用 `delivery_note.created`、`delivery_note.voided`、`delivery_note.rebuilt`、`sales_order.delivery_created`、`sales_order.delivery_rebuilt`，並以 `ADMIN_DIRECT`、`ORDER_REVISION_REBUILD`、`ORDER_VOID` 表達 void source。
 - Idempotency operations 為 `delivery_note.create`、`delivery_note.rebuild`、`delivery_note.admin_void`、`sales_order.void_with_delivery_note`。P3.2 全部保持同步 transaction，不使用 background job。
+- P3.2b 建立流程先在 transaction 內建立 header，再依 line number 逐筆建立含明確 `delivery_note_id`／`company_id` 的 lines；line failure 會 rollback header、sequence、order status、audit 與 idempotency completion。
 - `0010_p3_delivery_notes` 已建立兩表及 enum，custom SQL 實作 `WHERE status <> 'VOIDED'` partial unique、composite FK、複雜 CHECK、replacement chain 與 ADDITION graph trigger；0001～0009 未修改。兩個 fresh DB 均由零套用 0001～0010 且 schema diff=0，本機 `erp` 亦已套用 0010，production live／ready／worker health 均通過。
 
 ## 19. 變更紀錄
 
+- V0.10（2026-07-27，P3.2b 工程同步）：完成 delivery-note 核心建立／查詢 service、company scope／RBAC、order／current-note row lock、Asia/Taipei 月流水、confirmed snapshot copy、Decimal invariant、audit、idempotency 與 ORDER_VOID 整合；API／UI／rebuild／ADMIN direct void 未開始。
 - V0.10（2026-07-27，P3.2a 工程同步）：完成 Prisma model、`0010_p3_delivery_notes`、partial unique、composite FK、replacement／ADDITION constraint trigger、兩個 fresh DB、本機部署及 health 驗證；service／API／UI 未開始。
 - V0.10（2026-07-27）：同步 DEC-057，完成 P3.2 銷貨單手動建立、revision 原子重建、追加 root 關聯、ADMIN direct void、`delivery_note_date` 取號、snapshot、權限、transaction、audit、idempotency 與 0010 架構規劃；尚未開始實作。

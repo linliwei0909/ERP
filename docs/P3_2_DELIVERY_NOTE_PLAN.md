@@ -514,13 +514,16 @@ P3.2 實作取得另案授權後，建議拆成：
 4. **P3.2d API／UI**：order linkage、delivery list/detail、permission-gated actions。
 5. **P3.2e 整合驗收**：concurrency、rollback、idempotency、company isolation、fresh chain、health、smoke、validation 文件。
 
-## 21. 是否具備開始 P3.2b 實作的條件
+## 21. P3.2b 工程狀態
 
-**P3.2a DB contract 已具備進入 P3.2b 的工程條件，但仍須另案授權。**
+**P3.2b 核心建立與查詢 service 已完成工程驗證。**
 
-OQ-046～OQ-050 已寫入 DEC-057；0010 已在兩個 fresh DB 由零套用、catalog 與 schema diff=0，完整 DB suite 與品質 Gate 通過。下一步仍須由使用者另案明確核准，才可部署 0010 至 `erp` 或開始 P3.2b service；不得直接開始 API／UI。
+已完成 `createDeliveryNoteFromOrder`、`getDeliveryNote`、`listDeliveryNotes`、`getCurrentDeliveryNoteForOrder`、RBAC／company scope、row lock、Asia/Taipei 取號、confirmed snapshot copy、Decimal invariant、audit、idempotency、order `DELIVERY_CREATED` 與 order void 的 `ORDER_VOID` 內部 helper。`erp_p3_2b_test_run_20260727_03` 完成 0001～0010、diff 0、單獨 9 項及完整 114 項 DB tests；unit、lint、typecheck、build 與 health 均通過。
+
+P3.2c 的 revision rebuild、replacement 與 ADMIN direct void，以及 P3.2d API／UI，仍須另案授權。
 
 ## 22. 變更紀錄
 
+- V0.10（2026-07-27，P3.2b 工程同步）：完成初次建立與三個 query service、row lock、RBAC、月流水、snapshot、Decimal、audit、idempotency、ORDER_VOID 內部整合及 atomic rollback；API／UI／rebuild／ADMIN direct void 未開始。
 - V0.10（2026-07-27，P3.2a 工程同步）：完成 Prisma schema、`0010_p3_delivery_notes`、partial unique、composite FK、CHECK、replacement／ADDITION trigger、兩個 fresh DB、本機部署、health 與測試驗證；service／API／UI 未開始。
 - V0.10（2026-07-27）：同步 DEC-057 與 OQ-046～OQ-050 resolution，將 P3.2 狀態改為規格決議完成、實作未開始，並統一狀態、日期取號、revision rebuild、追加、ADMIN direct void、schema、service、audit、idempotency、migration 與 test plan。

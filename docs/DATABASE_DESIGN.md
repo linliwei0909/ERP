@@ -1,6 +1,6 @@
 # Ragic 本地端系統資料庫設計草稿
 
-文件狀態：P1、P2、P3.1 已完成；P3.2a schema／migration 已完成 fresh DB 驗證並部署本機 `erp`，P3.2 service／API／UI 未開始
+文件狀態：P1、P2、P3.1 已完成；P3.2a schema／migration 與 P3.2b 核心 service 已完成，API／UI／rebuild／ADMIN direct void 未開始
 同步基線：`DECISIONS.md` V0.10
 版本日期：2026-07-27
 
@@ -237,7 +237,7 @@ P3.1 的 `sales_orders` 保存客戶、客戶公司、聯絡人、送貨地點�
 
 訂單號由既有 `document_sequences` 產生。`fiscal_month = 0` 保留給既有年度 scope；P3.1 `SALES_ORDER` 使用 1～12 月 scope。格式為 `SO-{兩碼公司縮寫}-{YYYYMM}-{六碼流水}`，取號、草稿、audit 與 idempotency completion 位於安全 transaction 邊界。
 
-P3.2a 已建立 `DeliveryNoteStatus`、`DeliveryNoteVoidSource`、`DeliveryNote`、`DeliveryNoteLine` 與 create-only `0010_p3_delivery_notes`，並在兩個獨立 fresh DB 完成 0001～0010、catalog 與 schema diff=0 驗證。0010 已受控部署本機 `erp` 並通過 migration、catalog 與 health Gate；仍未建立任何 delivery-note service、API 或 UI。
+P3.2a 已建立 `DeliveryNoteStatus`、`DeliveryNoteVoidSource`、`DeliveryNote`、`DeliveryNoteLine` 與 create-only `0010_p3_delivery_notes`，並在兩個獨立 fresh DB 完成 0001～0010、catalog 與 schema diff=0 驗證。0010 已受控部署本機 `erp` 並通過 migration、catalog 與 health Gate。P3.2b 已完成建立／查詢 service；API、UI、rebuild 與 ADMIN direct void 未開始。
 
 P3.2a `delivery_notes` 正式 schema：
 
@@ -254,6 +254,8 @@ P3.2a `delivery_note_lines` 正式 schema：
 - `id`, `delivery_note_id`, `company_id`, `line_number`, `sales_order_line_id`, `item_id`。
 - `item_snapshot`, `price_snapshot`, `quantity numeric(18,4)`, `unit_price numeric(18,5)`, `line_amount numeric(18,0)`。
 - `created_at`, `created_by`。明細不保留 `updated_at`／`updated_by`，因 P3.2 不提供獨立修改、刪除或部分出貨；重建時建立新 header 與 lines。
+
+P3.2b service 在同一 transaction 先建立 header，再依 `line_number` 逐筆建立 lines，明確寫入 `delivery_note_id` 與 `company_id` 以符合 composite FK。任何 line constraint failure 會使 header、lines、document sequence、order status 與 audit 全部 rollback；idempotency 依既有 lifecycle 標示 `FAILED`。
 - `(delivery_note_id, company_id)` 與 `(sales_order_line_id, company_id)` composite FK 保證公司一致；不增加冗餘 `sales_order_id` 欄位。來源 order 一致性仍須由未來 service transaction 驗證。
 
 `DeliveryNoteStatus` 正式值為 `ACTIVE`, `SHIPPED`, `RECEIVABLE_CREATED`, `VOIDED`；P3.2 只實作 `ACTIVE` 與 `VOIDED`。`DeliveryNoteVoidSource` 正式值為 `ADMIN_DIRECT`, `ORDER_REVISION_REBUILD`, `ORDER_VOID`。
@@ -386,6 +388,7 @@ P3.2a `delivery_note_lines` 正式 schema：
 
 ## 8. 變更紀錄
 
+- V0.10（2026-07-27，P3.2b 工程同步）：完成 header／lines 原子建立、row lock、confirmed snapshot copy、Decimal invariant、月流水、idempotency、audit、ORDER_VOID 與 scoped query service；`_03` fresh DB 0001～0010、diff 0、13 files／114 DB tests 通過。
 - V0.10（2026-07-27，P3.2a 工程同步）：建立並驗證 `0010_p3_delivery_notes`、Prisma model、partial unique、composite FK、CHECK、replacement chain 與 ADDITION graph trigger；0010 已部署本機 `erp` 並通過 health Gate，service／API／UI 未開始。
 - V0.10（2026-07-27）：同步 DEC-057，完成 P3.2 兩張銷貨單表、狀態、日期月流水、replacement、composite FK、非 `VOIDED` partial unique、CHECK 與 transaction plan；Prisma schema 與 0010 尚未建立。
 - V0.8（2026-07-25，P2.6 同步）：不新增業務決議；將既有移轉概念對齊 `0008_p2_master_import_foundation` 的正式批次、mapping、issue、reconciliation 欄位、限制及公司隔離。

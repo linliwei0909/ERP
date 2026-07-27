@@ -15,6 +15,9 @@ export type Permission =
   | "freight.manage"
   | "sales_orders.read"
   | "sales_orders.manage"
+  | "delivery_notes.read"
+  | "delivery_notes.manage"
+  | "delivery_notes.admin_void"
   | "master_import.read"
   | "master_import.manage";
 
@@ -34,6 +37,9 @@ const rolePermissions: Record<RoleCode, ReadonlySet<Permission>> = {
     "freight.manage",
     "sales_orders.read",
     "sales_orders.manage",
+    "delivery_notes.read",
+    "delivery_notes.manage",
+    "delivery_notes.admin_void",
     "master_import.read",
     "master_import.manage",
   ]),
@@ -45,6 +51,8 @@ const rolePermissions: Record<RoleCode, ReadonlySet<Permission>> = {
     "freight.read",
     "sales_orders.read",
     "sales_orders.manage",
+    "delivery_notes.read",
+    "delivery_notes.manage",
   ]),
 };
 

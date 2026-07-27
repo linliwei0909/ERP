@@ -19,6 +19,12 @@ describe("RBAC", () => {
     expect(hasPermission(["ORDER_ENTRY"], "master_import.read")).toBe(false);
     expect(hasPermission(["ORDER_ENTRY"], "sales_orders.read")).toBe(true);
     expect(hasPermission(["ORDER_ENTRY"], "sales_orders.manage")).toBe(true);
+    expect(hasPermission(["ORDER_ENTRY"], "delivery_notes.read")).toBe(true);
+    expect(hasPermission(["ORDER_ENTRY"], "delivery_notes.manage")).toBe(true);
+    expect(
+      hasPermission(["ORDER_ENTRY"], "delivery_notes.admin_void"),
+    ).toBe(false);
+    expect(hasPermission(["ADMIN"], "delivery_notes.admin_void")).toBe(true);
   });
 });
 

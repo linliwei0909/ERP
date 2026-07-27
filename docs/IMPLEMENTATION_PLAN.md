@@ -1,6 +1,6 @@
 # Ragic 本地端系統開發階段與任務拆分
 
-文件狀態：P1、P2、P3.1 已完成工程驗收；P3.2a schema／migration fresh DB 驗證及本機部署完成；P3.2b 以後未開始
+文件狀態：P1、P2、P3.1 已完成工程驗收；P3.2a schema／migration 與 P3.2b 核心 service 已完成；P3.2c 以後未開始
 同步基線：`DECISIONS.md` V0.10
 版本日期：2026-07-27
 
@@ -182,13 +182,13 @@ P2.6 完成狀態：
 - [P3.1 完成] 客戶、客戶公司、聯絡人、送貨地點、品項、價格、運費、付款條件與公司法定資訊 typed snapshot。
 - [P3.1 完成] `revision_no`、已確認訂單回草稿、重新確認時才刷新正式快照、作廢理由及終止狀態。
 - [P3.1 完成] ADMIN／ORDER_ENTRY 後端權限、selected company、audit、idempotency、correlation ID、unit、DB/workflow、fresh migration 與完整 smoke 驗證。
-- [P3.2b 待授權] 使用者從 `CONFIRMED` order 明確建立 `ACTIVE` 銷貨單；成功後 order=`DELIVERY_CREATED`，失敗時 order 維持 `CONFIRMED`。
+- [P3.2b 完成] 使用者從 `CONFIRMED` order 明確建立 `ACTIVE` 銷貨單；成功後 order=`DELIVERY_CREATED`，失敗時 order 維持 `CONFIRMED`。建立、明細、取號、audit 與 idempotency completion 位於同一 transaction。
 - [P3.2a 完成] 同一 `sales_order_id` 以 partial unique `status <> 'VOIDED'` 保證最多一張非作廢銷貨單，不得只限制 `ACTIVE`。
 - [P3.2 規格完成／實作待授權] Revision start 保留上一版 `ACTIVE` 銷貨單；新 revision 重新確認後，由單一 rebuild transaction 建立 replacement、以 `ORDER_REVISION_REBUILD` 作廢舊單並將 order 改回 `DELIVERY_CREATED`。失敗時舊單仍 `ACTIVE`、order 仍 `CONFIRMED`。
-- [P3.2 規格完成／實作待授權] Order 作廢以 `ORDER_VOID` 原子連動目前非作廢銷貨單；ADMIN direct void 以 `ADMIN_DIRECT` 作廢 `ACTIVE` 單並將 order 回 `CONFIRMED`，不自動重建。
+- [P3.2b 部分完成] Order 作廢已以內部 helper 對 `ACTIVE` 銷貨單執行 `ORDER_VOID` 原子連動；ADMIN direct void 及 rebuild 留待 P3.2c。
 - [P3.2 規格完成／實作待授權] 追加訂單各自有單號、revision、snapshot、金額及銷貨單，全部直接關聯 root original order；不形成 chain、不 aggregate、不重複原單數量。
 - [P3.2 規格完成／實作待授權] `DN-{document_company_code}-{YYYYMM}-{sequence6}` 使用 `DELIVERY_NOTE` 與 server `Asia/Taipei` `delivery_note_date` 月 scope；重建取新號，作廢不回收。
-- [P3.2a 完成／P3.2b 待授權] `0010_p3_delivery_notes`、兩個 enum、兩張表、composite FK、CHECK、replacement 與 ADDITION graph trigger 已完成兩個 fresh DB 驗證；銷貨單複製已確認 order typed snapshots 與凍結金額的 service 尚未建立。
+- [P3.2a／P3.2b 完成] `0010_p3_delivery_notes`、兩個 enum、兩張表、composite FK、CHECK、replacement 與 ADDITION graph trigger 已完成；建立與查詢 service 已驗證只複製 confirmed order typed snapshots 與凍結金額，不重查主檔、價格或運費。
 - [P3.3 待授權] 首次列印、PDF、版型與重印控制。
 - [P3.4 待授權] 實際出貨日、`returned_confirmed` 人工回收確認、鎖定與整合驗收。
 - 銷貨單只能由訂單建立；partial unique index 保證同一 `sales_order_id` 在 `status <> 'VOIDED'` 時最多一張。
@@ -331,10 +331,11 @@ P3.1 完成條件已達成：訂單取號、草稿、確認、修訂、作廢、
 
 ## 6. 本輪交付限制
 
-P3.2a schema／migration 驗證及本機 0010 受控部署完成後停止。未取得使用者下一步授權前，不得開始 delivery-note service／API／UI、列印、PDF、應收、Ragic 正式全量移轉、舊 ERP 模組恢復或其他後續模組；任何後續對 `erp` 的資料庫 mutation 或破壞性操作仍須使用者另行核准。
+P3.2b 核心 service 完成後停止。未取得使用者下一步授權前，不得開始 P3.2c rebuild／ADMIN direct void、delivery-note API／UI、列印、PDF、應收、Ragic 正式全量移轉、舊 ERP 模組恢復或其他後續模組；任何後續對 `erp` 的資料庫 mutation 或破壞性操作仍須使用者另行核准。
 
 ## 7. 變更紀錄
 
+- V0.10（2026-07-27，P3.2b 工程同步）：完成 delivery-note 建立／查詢 service、RBAC、row lock、Asia/Taipei 月流水、confirmed snapshot copy、Decimal invariant、audit、idempotency、order `DELIVERY_CREATED` 與 `ORDER_VOID` 內部整合；`_03` DB 13 files／114 tests 與完整品質 Gate 通過。API／UI／rebuild／ADMIN direct void 未開始。
 - V0.10（2026-07-27，P3.2a 工程同步）：標示 Prisma schema、`0010_p3_delivery_notes`、partial unique、composite FK、CHECK、replacement／ADDITION trigger、兩個 fresh DB、catalog、unit／DB／build、本機部署及 health 驗證完成；P3.2b service／API／UI 未開始。
 - V0.10（2026-07-27）：同步 DEC-057，標示 P3.2 手動建立、revision 原子重建、追加 root 關聯、ADMIN direct void、`delivery_note_date` 月流水、狀態、快照、權限、audit、idempotency、0010 與測試計畫均已決議但尚未開始實作。
 - V0.9（2026-07-27，P3.1 結案同步）：記錄 N+1 sequence assertion、缺運費正式訊息、所有保留 Marker、完整 smoke 與最終 migration/schema/company setting/audit/idempotency gate 通過；P3.1 完成工程驗收，P3.2 以後維持未授權。

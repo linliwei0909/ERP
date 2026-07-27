@@ -139,6 +139,7 @@
 - 尚未建立應收前可修改銷貨單的 DEC-016 原則維持；P3.2 的訂單／價格／運費快照不得直接 PATCH，只能透過 order revision 與原子 rebuild 形成 replacement。實際出貨日等可修改欄位由 P3.4 實作。
 - 銷貨單號為 `DN-{document_company_code}-{YYYYMM}-{六碼流水}`，document type 為 `DELIVERY_NOTE`。`YYYYMM` 與公司縮寫版本依 server 產生的 `Asia/Taipei` `delivery_note_date` 判斷，不得使用 `order_date`、`actual_delivery_date` 或 client 日期。重建使用重建當日並取得新號；作廢號碼不回收。
 - 銷貨單複製已確認 order 的 typed 快照與凍結金額，不重新讀取目前主檔、查價或重算運費。
+- P3.2b 建立服務已依上述規則實作：鎖定 order 與目前非作廢銷貨單，在單一 transaction 內完成月流水取號、header、lines、order `DELIVERY_CREATED`、audit 與 idempotency completion；任一明細失敗全部 rollback。
 - 銷貨單狀態為 `ACTIVE`、`SHIPPED`、`RECEIVABLE_CREATED`、`VOIDED`。P3.2 只實作建立為 `ACTIVE` 及三種 `ACTIVE -> VOIDED`；實際出貨與應收狀態由後續階段處理，紙本回收確認不是 status。
 - 實際出貨日預設為首次列印銷貨單的日期；只在欄位尚未填寫時帶入，後續重印不得覆蓋。使用者可修改，第一階段不要求修改原因，另記首次列印時間。
 - 填入實際出貨日後，訂單與銷貨單更新為已出貨。
@@ -278,6 +279,7 @@
 
 ## 17. 變更紀錄
 
+- V0.10（2026-07-27，P3.2b 工程同步）：完成銷貨單初次建立、查詢、confirmed snapshot copy、月流水、RBAC／company scope、idempotency、audit、order 狀態與 ORDER_VOID 內部連動；不包含 API／UI／rebuild／ADMIN direct void。
 - V0.10（2026-07-27）：同步 DEC-057，正式化銷貨單手動建立、revision 原子重建、追加訂單 root 關聯且不聚合、ADMIN 直接作廢、`delivery_note_date` 月流水、非作廢唯一、快照、audit 與 idempotency；P3.2 尚未開始實作。
 - V0.9（2026-07-27）：同步 DEC-056，新增 P3.1 公司縮寫與法定資訊、月流水訂單號、未稅金額、價格來源、正式修訂、作廢、聯絡人、付款條件及 typed snapshot 規則。
 - V0.8（2026-07-25，P2.6 同步）：不新增業務決議；記錄主檔匯入框架的安全、transaction、mapping、reconciliation 與已完成 importer 邊界。
