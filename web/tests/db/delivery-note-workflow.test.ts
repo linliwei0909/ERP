@@ -59,6 +59,7 @@ describeDatabase("P3.2b/P3.2c delivery-note workflows", () => {
   let companyA: { id: string; code: string; name: string };
   let companyB: { id: string; code: string; name: string };
   let contextA: RequestContext;
+  let orderEntryContext: RequestContext;
   let contextBoth: RequestContext;
   let adminContext: RequestContext;
   let noScopeAdminContext: RequestContext;
@@ -128,7 +129,7 @@ describeDatabase("P3.2b/P3.2c delivery-note workflows", () => {
       },
     });
     orderEntrySessionToken = `delivery-note-order-entry-${randomUUID()}`;
-    await Promise.all([
+    const [, , orderEntrySession] = await Promise.all([
       db.userRole.create({
         data: { userId: orderEntryUser.id, roleId: role.id },
       }),
@@ -143,6 +144,17 @@ describeDatabase("P3.2b/P3.2c delivery-note workflows", () => {
         },
       }),
     ]);
+    orderEntryContext = {
+      actor: {
+        userId: orderEntryUser.id,
+        username: orderEntryUser.username,
+      },
+      session: { sessionId: orderEntrySession.id },
+      requestId: `delivery-note-order-entry-${suffix}`,
+      roleCodes: ["ORDER_ENTRY"],
+      authorizedCompanies: [companyA],
+      selectedCompany: companyA,
+    };
     const baseContext = {
       actor: { userId, username: user.username },
       session: { sessionId: session.id },
@@ -532,6 +544,11 @@ describeDatabase("P3.2b/P3.2c delivery-note workflows", () => {
     expect(first.replayed).toBe(false);
     expect(replay).toEqual({ ...first, replayed: true });
     expect(first.deliveryNote.status).toBe("ACTIVE");
+    expect(first.deliveryNote.createdById).toBe(userId);
+    expect(first.deliveryNote.createdBy).toEqual({
+      id: userId,
+      username: contextA.actor.username,
+    });
     expect(first.deliveryNote.deliveryNoteNumber).toMatch(
       new RegExp(`^DN-${documentCodeA}-202607-\\d{6}$`),
     );
@@ -939,7 +956,7 @@ describeDatabase("P3.2b/P3.2c delivery-note workflows", () => {
 
     const key = randomUUID();
     const rebuilt = await rebuildDeliveryNoteForOrder(db, {
-      context: contextA,
+      context: orderEntryContext,
       companyId: companyA.id,
       salesOrderId: prepared.orderId,
       expectedRevisionNo: 2,
@@ -948,7 +965,7 @@ describeDatabase("P3.2b/P3.2c delivery-note workflows", () => {
       now: new Date("2026-07-28T03:00:00.000Z"),
     });
     const replay = await rebuildDeliveryNoteForOrder(db, {
-      context: contextA,
+      context: orderEntryContext,
       companyId: companyA.id,
       salesOrderId: prepared.orderId,
       expectedRevisionNo: 2,
@@ -963,6 +980,11 @@ describeDatabase("P3.2b/P3.2c delivery-note workflows", () => {
       status: "ACTIVE",
       salesOrderRevisionNo: 2,
       replacedDeliveryNoteId: prepared.old.id,
+      createdById: orderEntryContext.actor.userId,
+      createdBy: {
+        id: orderEntryContext.actor.userId,
+        username: orderEntryContext.actor.username,
+      },
     });
     expect(rebuilt.deliveryNote.deliveryNoteNumber).not.toBe(
       prepared.old.deliveryNoteNumber,
@@ -976,6 +998,8 @@ describeDatabase("P3.2b/P3.2c delivery-note workflows", () => {
       status: "VOIDED",
       voidSource: "ORDER_REVISION_REBUILD",
       replacementDeliveryNoteId: rebuilt.deliveryNote.id,
+      createdById: oldBefore.createdById,
+      createdBy: oldBefore.createdBy,
     });
     expect(oldAfter.customerSnapshot).toEqual(oldBefore.customerSnapshot);
     expect(oldAfter.lines).toEqual(oldBefore.lines);
@@ -1134,7 +1158,7 @@ describeDatabase("P3.2b/P3.2c delivery-note workflows", () => {
   it("ADMIN direct void is scoped, idempotent and permits a later new number", async () => {
     const order = await createConfirmedOrder(companyA);
     const created = await createDeliveryNoteFromOrder(db, {
-      context: adminContext,
+      context: orderEntryContext,
       companyId: companyA.id,
       salesOrderId: order.id,
       expectedRevisionNo: 1,
@@ -1161,6 +1185,8 @@ describeDatabase("P3.2b/P3.2c delivery-note workflows", () => {
       status: "VOIDED",
       voidSource: "ADMIN_DIRECT",
       voidReason: "管理員例外作廢",
+      createdById: created.deliveryNote.createdById,
+      createdBy: created.deliveryNote.createdBy,
       voidedById: userId,
     });
     expect(voided.deliveryNote.voidedBy).toMatchObject({ id: userId });
@@ -1538,6 +1564,8 @@ describeDatabase("P3.2b/P3.2c delivery-note workflows", () => {
       deliveryNote: {
         id: string;
         deliveryNoteNumber: string;
+        createdById: string;
+        createdBy: { id: string; username: string };
         subtotal: string;
         freightAmount: string;
         totalAmount: string;
@@ -1555,6 +1583,11 @@ describeDatabase("P3.2b/P3.2c delivery-note workflows", () => {
       replayed: false,
       correlationId: requestId,
       deliveryNote: {
+        createdById: userId,
+        createdBy: {
+          id: userId,
+          username: contextA.actor.username,
+        },
         subtotal: "10",
         freightAmount: "2",
         totalAmount: "12",
@@ -1599,7 +1632,14 @@ describeDatabase("P3.2b/P3.2c delivery-note workflows", () => {
     );
     expect(current.status).toBe(200);
     await expect(current.json()).resolves.toMatchObject({
-      deliveryNote: { id: createBody.deliveryNote.id },
+      deliveryNote: {
+        id: createBody.deliveryNote.id,
+        createdById: userId,
+        createdBy: {
+          id: userId,
+          username: contextA.actor.username,
+        },
+      },
     });
 
     const detail = await getDeliveryNoteRoute(
@@ -1614,6 +1654,11 @@ describeDatabase("P3.2b/P3.2c delivery-note workflows", () => {
       deliveryNote: {
         id: createBody.deliveryNote.id,
         customer: { name: "確認時客戶" },
+        createdById: userId,
+        createdBy: {
+          id: userId,
+          username: contextA.actor.username,
+        },
       },
     });
 
@@ -1624,7 +1669,8 @@ describeDatabase("P3.2b/P3.2c delivery-note workflows", () => {
       ),
     );
     expect(list.status).toBe(200);
-    await expect(list.json()).resolves.toMatchObject({
+    const listBody = await list.json();
+    expect(listBody).toMatchObject({
       items: [
         {
           id: createBody.deliveryNote.id,
@@ -1638,6 +1684,8 @@ describeDatabase("P3.2b/P3.2c delivery-note workflows", () => {
       pageSize: 10,
       total: 1,
     });
+    expect(listBody.items[0]).not.toHaveProperty("createdById");
+    expect(listBody.items[0]).not.toHaveProperty("createdBy");
   });
 
   it("enforces API auth, strict input, company scope and concurrent uniqueness", async () => {
@@ -1738,7 +1786,11 @@ describeDatabase("P3.2b/P3.2c delivery-note workflows", () => {
       { params: Promise.resolve({ id: order.id }) },
     );
     const initialBody = (await initial.json()) as {
-      deliveryNote: { id: string };
+      deliveryNote: {
+        id: string;
+        createdById: string;
+        createdBy: { id: string; username: string };
+      };
     };
     await startSalesOrderRevision(db, {
       context: adminContext,
@@ -1773,6 +1825,8 @@ describeDatabase("P3.2b/P3.2c delivery-note workflows", () => {
     const rebuildBody = (await rebuild.json()) as {
       deliveryNote: {
         id: string;
+        createdById: string;
+        createdBy: { id: string; username: string };
         replacedDeliveryNoteId: string | null;
       };
       replayed: boolean;
@@ -1781,6 +1835,11 @@ describeDatabase("P3.2b/P3.2c delivery-note workflows", () => {
       replayed: false,
       deliveryNote: {
         replacedDeliveryNoteId: initialBody.deliveryNote.id,
+        createdById: userId,
+        createdBy: {
+          id: userId,
+          username: adminContext.actor.username,
+        },
       },
     });
     const rebuildReplay = await rebuildDeliveryNoteRoute(
@@ -1837,6 +1896,8 @@ describeDatabase("P3.2b/P3.2c delivery-note workflows", () => {
       deliveryNote: {
         id: rebuildBody.deliveryNote.id,
         status: "VOIDED",
+        createdById: rebuildBody.deliveryNote.createdById,
+        createdBy: rebuildBody.deliveryNote.createdBy,
         voidSource: "ADMIN_DIRECT",
         voidReason: "API 管理員直接作廢",
       },

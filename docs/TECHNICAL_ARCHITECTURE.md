@@ -244,6 +244,7 @@ P3.2a 已完成 Prisma schema、`0010_p3_delivery_notes`、custom SQL、fresh DB
 - `0010_p3_delivery_notes` 已建立兩表及 enum，custom SQL 實作 `WHERE status <> 'VOIDED'` partial unique、composite FK、複雜 CHECK、replacement chain 與 ADDITION graph trigger；0001～0009 未修改。兩個 fresh DB 均由零套用 0001～0010 且 schema diff=0，本機 `erp` 亦已套用 0010，production live／ready／worker health 均通過。
 - P3.2d1 route 只負責 session/context、strict validation、idempotency header、correlation ID、service dispatch、error mapping 與 DTO serialization；不得在 route 重複 business rule 或直接組合 Prisma mutation。Client 不得指定 company、actor、status、number、date、snapshot 或 amount。
 - API response 的 Decimal 使用固定精度十進位字串、PostgreSQL `date` 使用 `YYYY-MM-DD`、timestamp 使用 ISO-8601 UTC；錯誤 envelope 不洩漏 SQL、Prisma、stack 或帳號存在性。
+- Delivery-note detail serializer 在原查詢一併 select `createdBy.id`／`createdBy.username`，以不可為空的 `createdById` 與最小 actor summary 回傳；不進行額外逐筆查詢，不暴露 password hash、session、token、角色或公司 scope。List serializer 使用明確欄位白名單，維持既有 summary contract。
 - DB test files 目前共用單一 disposable `DATABASE_URL`，且會建立固定共享角色，因此正式 `test:db` 採 `--maxWorkers=1`。Unit suite 保持平行；這是測試資料庫生命週期限制，不是 production concurrency 限制。若未來改為每個 test file 獨立 DB／schema，可重新評估平行執行。
 
 ## 19. 變更紀錄

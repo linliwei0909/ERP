@@ -187,6 +187,7 @@ P2.6 完成狀態：
 - [P3.2c 完成] Revision start 保留上一版 `ACTIVE` 銷貨單；新 revision 重新確認後，由單一 rebuild transaction 以 `ORDER_REVISION_REBUILD` 作廢舊單、建立 replacement 並將 order 改回 `DELIVERY_CREATED`。Header、line、order 或 audit 失敗時舊單仍 `ACTIVE`、order 仍 `CONFIRMED`。
 - [P3.2c 完成] Order 作廢沿用 `ORDER_VOID` 原子連動；ADMIN direct void 以 `ADMIN_DIRECT` 作廢 `ACTIVE` 銷貨單並將 order 恢復 `CONFIRMED`，reason、audit、idempotency 與 rollback 已驗證。
 - [P3.2d1 完成] Delivery-note create／rebuild／ADMIN void 與 list／detail／current API 已完成；所有 route 使用 session context、後端 RBAC、selected-company scope、strict DTO、`Idempotency-Key`、correlation ID、typed error 與穩定 Decimal／date serialization。
+- [P3.2d1a 完成] Detail、current 與 mutation response 已補上不可為空的 `createdById` 及只含 `id`／`username` 的建立者摘要；list summary contract 不變，沒有擴張敏感帳號資料。
 - [P3.2d2 尚未開始] Delivery-note UI、order linkage action、清單與明細畫面須另案授權。
 - [P3.2 規格完成／實作待授權] 追加訂單各自有單號、revision、snapshot、金額及銷貨單，全部直接關聯 root original order；不形成 chain、不 aggregate、不重複原單數量。
 - [P3.2 規格完成／實作待授權] `DN-{document_company_code}-{YYYYMM}-{sequence6}` 使用 `DELIVERY_NOTE` 與 server `Asia/Taipei` `delivery_note_date` 月 scope；重建取新號，作廢不回收。

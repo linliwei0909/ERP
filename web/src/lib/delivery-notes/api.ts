@@ -85,10 +85,25 @@ export function deliveryNoteRequestId(request: Request): string {
 export function mapDeliveryNoteSummary(
   value: DeliveryNoteSummary,
 ): DeliveryNoteSummaryDto {
-  const { customerName, ...summary } = value;
   return {
-    ...summary,
-    customer: { name: customerName },
+    id: value.id,
+    companyId: value.companyId,
+    deliveryNoteNumber: value.deliveryNoteNumber,
+    deliveryNoteDate: value.deliveryNoteDate,
+    fiscalYear: value.fiscalYear,
+    fiscalMonth: value.fiscalMonth,
+    salesOrderId: value.salesOrderId,
+    salesOrderNumber: value.salesOrderNumber,
+    salesOrderRevisionNo: value.salesOrderRevisionNo,
+    status: value.status,
+    customer: { name: value.customerName },
+    subtotal: value.subtotal,
+    freightAmount: value.freightAmount,
+    totalAmount: value.totalAmount,
+    voidSource: value.voidSource,
+    voidedAt: value.voidedAt,
+    voidReason: value.voidReason,
+    createdAt: value.createdAt,
   };
 }
 
@@ -106,6 +121,7 @@ export function mapDeliveryNoteDetail(
     replacementDeliveryNote: detail.replacementDeliveryNote
       ? { ...detail.replacementDeliveryNote }
       : null,
+    createdBy: { ...detail.createdBy },
     voidedBy: detail.voidedBy ? { ...detail.voidedBy } : null,
   };
 }

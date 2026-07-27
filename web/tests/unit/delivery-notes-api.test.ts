@@ -58,6 +58,8 @@ function detailFixture(
     deliverySnapshot: { fullAddress: "測試地址" },
     paymentTermsText: null,
     freightSnapshot: { mode: "FIXED_PER_LOCATION" },
+    createdById: ids.actor,
+    createdBy: { id: ids.actor, username: "admin" },
     replacedDeliveryNoteId: null,
     replacementDeliveryNoteId: null,
     replacedDeliveryNote: null,
@@ -203,6 +205,19 @@ describe("delivery-note API validation and serialization", () => {
       id: ids.actor,
       username: "admin",
     });
+    expect(mapped.createdById).toBe(ids.actor);
+    expect(mapped.createdBy).toEqual({
+      id: ids.actor,
+      username: "admin",
+    });
+    expect(Object.keys(mapped.createdBy).sort()).toEqual([
+      "id",
+      "username",
+    ]);
+    expect(mapped.createdAt).toBe("2026-07-27T03:00:00.000Z");
+    expect(JSON.stringify(mapped.createdBy)).not.toMatch(
+      /password|token|session|role|companyScope/i,
+    );
     expect(() => JSON.stringify(mapped)).not.toThrow();
   });
 
@@ -217,7 +232,11 @@ describe("delivery-note API validation and serialization", () => {
     await expect(response.json()).resolves.toMatchObject({
       replayed: false,
       correlationId: "request-123",
-      deliveryNote: { totalAmount: "123456789012345698" },
+      deliveryNote: {
+        totalAmount: "123456789012345698",
+        createdById: ids.actor,
+        createdBy: { id: ids.actor, username: "admin" },
+      },
     });
   });
 
@@ -519,11 +538,14 @@ describe("delivery-note route boundaries", () => {
     const list = await listGet(
       nextRequest("/api/delivery-notes?status=ACTIVE&page=1&pageSize=20"),
     );
-    expect(await list.json()).toMatchObject({
+    const listBody = await list.json();
+    expect(listBody).toMatchObject({
       items: [{ customer: { name: "測試客戶" } }],
       page: 1,
       correlationId: "route-request",
     });
+    expect(listBody.items[0]).not.toHaveProperty("createdById");
+    expect(listBody.items[0]).not.toHaveProperty("createdBy");
     expect(routeMocks.list).toHaveBeenCalledWith(
       {},
       expect.objectContaining({
@@ -537,7 +559,11 @@ describe("delivery-note route boundaries", () => {
       { params: Promise.resolve({ id: ids.note }) },
     );
     expect(await detail.json()).toMatchObject({
-      deliveryNote: { id: ids.note },
+      deliveryNote: {
+        id: ids.note,
+        createdById: ids.actor,
+        createdBy: { id: ids.actor, username: "admin" },
+      },
       correlationId: "route-request",
     });
 
@@ -546,7 +572,11 @@ describe("delivery-note route boundaries", () => {
       { params: Promise.resolve({ id: ids.order }) },
     );
     expect(await current.json()).toMatchObject({
-      deliveryNote: { id: ids.note },
+      deliveryNote: {
+        id: ids.note,
+        createdById: ids.actor,
+        createdBy: { id: ids.actor, username: "admin" },
+      },
     });
   });
 

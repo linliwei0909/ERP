@@ -61,6 +61,8 @@ export type DeliveryNoteDetail = DeliveryNoteSummary & {
   deliverySnapshot: Prisma.JsonValue;
   paymentTermsText: string | null;
   freightSnapshot: Prisma.JsonValue;
+  createdById: string;
+  createdBy: DeliveryNoteActorSummary;
   replacedDeliveryNoteId: string | null;
   replacementDeliveryNoteId: string | null;
   replacedDeliveryNote: DeliveryNoteReferenceSummary | null;

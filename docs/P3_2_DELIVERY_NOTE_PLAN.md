@@ -398,6 +398,13 @@ Revision start 沒有 delivery-note mutation，沿用既有 sales-order revision
 
 所有 POST 必須有 `Idempotency-Key`、correlation ID 與一致 error envelope。`companyId` 只能由 server selected company context 取得，不作為授權依據。Request body 採 strict schema，拒絕 client 注入 company、actor、status、number、date、snapshot 或 amount。Decimal 使用固定精度字串、date 使用 `YYYY-MM-DD`、timestamp 使用 ISO-8601 UTC。不得提供 PATCH snapshot、DELETE、partial shipment、print 或 receivable route。
 
+### 14.1 建立者 detail contract 補件
+
+- Detail、current、create、rebuild 與 ADMIN direct void 的完整銷貨單回應包含不可為空的 `createdById`，以及只含 `id`、`username` 的 `createdBy` actor summary。
+- 建立者取自既有 `created_by` FK；初次建立後，不得因重建舊單作廢或 ADMIN direct void 被覆寫。Replacement 的建立者是執行 rebuild 的 actor。
+- List 維持原 summary DTO，不增加建立者欄位，也不回傳 password hash、session、token、角色或公司 scope。
+- 本補件不變更 schema、migration、transaction、狀態機或 UI。
+
 ## 15. UI plan
 
 - 訂單明細：

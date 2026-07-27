@@ -23,7 +23,12 @@ export type DeliveryNoteActorDto = DeliveryNoteActorSummary;
 
 export type DeliveryNoteDetailDto = Omit<
   DeliveryNoteDetail,
-  "customerName" | "lines" | "replacedDeliveryNote" | "replacementDeliveryNote" | "voidedBy"
+  | "customerName"
+  | "lines"
+  | "replacedDeliveryNote"
+  | "replacementDeliveryNote"
+  | "createdBy"
+  | "voidedBy"
 > & {
   customer: {
     name: string | null;
@@ -31,6 +36,7 @@ export type DeliveryNoteDetailDto = Omit<
   lines: DeliveryNoteLineDto[];
   replacedDeliveryNote: DeliveryNoteReferenceDto | null;
   replacementDeliveryNote: DeliveryNoteReferenceDto | null;
+  createdBy: DeliveryNoteActorDto;
   voidedBy: DeliveryNoteActorDto | null;
 };
 

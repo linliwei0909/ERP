@@ -106,7 +106,7 @@ export function buildAdminVoidIdempotencyPayload(input: {
 
 export type DeliveryNoteTransaction = Prisma.TransactionClient;
 
-type LoadedDeliveryNote = DeliveryNote & {
+type LoadedDeliveryNoteSummary = DeliveryNote & {
   lines: DeliveryNoteLine[];
   salesOrder: { orderNumber: string };
   replacedDeliveryNote: {
@@ -124,6 +124,10 @@ type LoadedDeliveryNote = DeliveryNote & {
     status: DeliveryNote["status"];
   } | null;
   voidedBy: { id: string; username: string } | null;
+};
+
+type LoadedDeliveryNote = LoadedDeliveryNoteSummary & {
+  createdBy: { id: string; username: string };
 };
 
 function auditContext(context: RequestContext, companyId: string) {
@@ -162,7 +166,9 @@ function snapshotCustomerName(value: Prisma.JsonValue): string | null {
   return null;
 }
 
-function serializeSummary(note: LoadedDeliveryNote): DeliveryNoteSummary {
+function serializeSummary(
+  note: LoadedDeliveryNoteSummary,
+): DeliveryNoteSummary {
   return {
     id: note.id,
     companyId: note.companyId,
@@ -207,6 +213,8 @@ function serializeDetail(note: LoadedDeliveryNote): DeliveryNoteDetail {
     deliverySnapshot: note.deliverySnapshot,
     paymentTermsText: note.paymentTermsText,
     freightSnapshot: note.freightSnapshot,
+    createdById: note.createdById,
+    createdBy: note.createdBy,
     replacedDeliveryNoteId: note.replacedDeliveryNoteId,
     replacementDeliveryNoteId: note.replacementDeliveryNote?.id ?? null,
     replacedDeliveryNote: serializeReference(note.replacedDeliveryNote),
@@ -257,6 +265,7 @@ async function loadDeliveryNote(
           status: true,
         },
       },
+      createdBy: { select: { id: true, username: true } },
       voidedBy: { select: { id: true, username: true } },
     },
   });
@@ -1272,6 +1281,7 @@ export async function getCurrentDeliveryNoteForOrder(
           status: true,
         },
       },
+      createdBy: { select: { id: true, username: true } },
       voidedBy: { select: { id: true, username: true } },
     },
     take: 2,
