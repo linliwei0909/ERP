@@ -48,7 +48,7 @@ describe("background job retry policy", () => {
 });
 
 describe("readiness migration contract", () => {
-  it("tracks the complete immutable chain through P2.6", () => {
+  it("tracks the complete immutable chain through P3.1", () => {
     expect(EXPECTED_MIGRATIONS).toEqual([
       "0001_p1_foundation_baseline",
       "0002_p1_authentication_and_access",
@@ -58,6 +58,7 @@ describe("readiness migration contract", () => {
       "0006_p2_pricing_master",
       "0007_p2_freight_rules",
       "0008_p2_master_import_foundation",
+      "0009_p3_sales_orders",
     ]);
   });
 });

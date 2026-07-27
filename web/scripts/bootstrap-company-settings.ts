@@ -38,8 +38,8 @@ async function main() {
     for (const result of results) {
       console.log(
         result.created
-          ? `已建立 ${result.companyCode} 的初始公司切帳日設定`
-          : `${result.companyCode} 的相同初始設定已存在，未重複建立`,
+          ? `已建立 ${result.companyCode} / ${result.settingKey} 初始設定`
+          : `${result.companyCode} / ${result.settingKey} 相同有效設定已存在，未重複建立`,
       );
     }
   } finally {

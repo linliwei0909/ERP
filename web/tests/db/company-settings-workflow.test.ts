@@ -10,6 +10,7 @@ import {
   CompanySettingVersionImmutableError,
   createFutureSettingVersion,
   getBillingCutoffDay,
+  getCompanyLegalSettings,
   listCompanySettingHistory,
   parseDateOnly,
   updateFutureSettingVersion,
@@ -478,6 +479,22 @@ describeDatabase("P2.1 company setting workflows", () => {
     await expect(
       getBillingCutoffDay(db, biotech.id, effectiveFrom),
     ).resolves.toBe(20);
+    await expect(
+      getCompanyLegalSettings(db, industrial.id, effectiveFrom),
+    ).resolves.toMatchObject({
+      companyName: "奇麗實業有限公司",
+      documentCompanyCode: "IN",
+      companyTaxId: "60603347",
+      companyPhone: "02-29571175",
+    });
+    await expect(
+      getCompanyLegalSettings(db, biotech.id, effectiveFrom),
+    ).resolves.toMatchObject({
+      companyName: "奇麗生技有限公司",
+      documentCompanyCode: "BI",
+      companyTaxId: "60377546",
+      companyPhone: "02-26805751",
+    });
     expect(
       await db.auditLog.count({
         where: {
@@ -486,6 +503,6 @@ describeDatabase("P2.1 company setting workflows", () => {
           requestId: `bootstrap-company-settings-${suffix}`,
         },
       }),
-    ).toBe(2);
+    ).toBe(12);
   });
 });

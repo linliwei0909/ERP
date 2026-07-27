@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getPageRequestContext } from "@/lib/auth/request-context";
-import { COMPANY_SETTING_KEYS } from "@/lib/company-settings/registry";
+import {
+  assertCompanySettingKey,
+  COMPANY_SETTING_KEYS,
+} from "@/lib/company-settings/registry";
 import { listCompanySettingHistory } from "@/lib/company-settings/service";
 import { prisma } from "@/lib/prisma";
 import { CompanySettingsClient } from "./company-settings-client";
@@ -9,21 +12,25 @@ import { CompanySettingsClient } from "./company-settings-client";
 export default async function CompanySettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ companyId?: string }>;
+  searchParams: Promise<{ companyId?: string; settingKey?: string }>;
 }) {
   let pageData;
 
   try {
     const context = await getPageRequestContext();
-    const requestedCompanyId = (await searchParams).companyId;
+    const query = await searchParams;
+    const requestedCompanyId = query.companyId;
     const companyId = requestedCompanyId ?? context.selectedCompany.id;
+    const settingKey =
+      query.settingKey ?? COMPANY_SETTING_KEYS.BILLING_CUTOFF_DAY;
+    assertCompanySettingKey(settingKey);
     const history = await listCompanySettingHistory(
       prisma,
       context,
       companyId,
-      COMPANY_SETTING_KEYS.BILLING_CUTOFF_DAY,
+      settingKey,
     );
-    pageData = { context, companyId, history };
+    pageData = { context, companyId, settingKey, history };
   } catch {
     redirect("/");
   }
@@ -42,6 +49,7 @@ export default async function CompanySettingsPage({
       <CompanySettingsClient
         companies={pageData.context.authorizedCompanies}
         selectedCompanyId={pageData.companyId}
+        selectedSettingKey={pageData.settingKey}
         history={pageData.history}
       />
     </main>

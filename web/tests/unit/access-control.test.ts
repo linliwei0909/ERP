@@ -17,6 +17,8 @@ describe("RBAC", () => {
     expect(hasPermission(["ORDER_ENTRY"], "company.switch")).toBe(true);
     expect(hasPermission(["ADMIN"], "master_import.manage")).toBe(true);
     expect(hasPermission(["ORDER_ENTRY"], "master_import.read")).toBe(false);
+    expect(hasPermission(["ORDER_ENTRY"], "sales_orders.read")).toBe(true);
+    expect(hasPermission(["ORDER_ENTRY"], "sales_orders.manage")).toBe(true);
   });
 });
 

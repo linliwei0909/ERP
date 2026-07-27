@@ -1,14 +1,14 @@
 # Ragic 本地端系統技術架構
 
-文件狀態：P1.2 Identity & Access 基礎已實作；後續模組仍為架構草稿
-同步基線：`DECISIONS.md` V0.3  
-版本日期：2026-07-24
+文件狀態：P1、P2 已完成；P3.1 銷售訂單程式已建立、待獨立 DB 驗證與部署；P3.2 以後仍為架構草稿
+同步基線：`DECISIONS.md` V0.9
+版本日期：2026-07-27
 
 ## 1. 規格依據與範圍
 
 本架構依下列優先順序設計：
 
-1. `DECISIONS.md` V0.3。
+1. `DECISIONS.md` V0.9。
 2. `business-rules.md`。
 3. `DATABASE_DESIGN.md`。
 4. `TECHNICAL_ARCHITECTURE.md`。
@@ -175,6 +175,8 @@ P1.2 依上述流程建立 `0002_p1_authentication_and_access`，並只在獨立
 
 P2.6 依相同流程建立 `0008_p2_master_import_foundation`；0001～0007 未修改，並於乾淨 disposable database 由零套用 0001～0008、驗證 catalog 及 schema diff。
 
+P3.1 使用 `0009_p3_sales_orders` 擴充既有 `document_sequences` 的月份 scope，並新增銷售訂單三表。Migration 以 custom SQL 實作價格欄位組合、狀態 actor、快照、軟移除及 composite FK；不建立第二套 sequence 或任何銷貨單資料表。
+
 ## 13. 部署與營運
 
 部署單元：
@@ -208,3 +210,15 @@ P1.2 只實作帳號、密碼、Session、`ADMIN`／`ORDER_ENTRY` 後端 RBAC、
 ## 16. P2 工程結案邊界
 
 P2.1～P2.6 已完成公司參數、客戶、品項、價格、運費的主檔功能與整合驗收，以及小量主檔匯入框架。P2 未建立訂單、銷貨單、快照、列印、應收、庫存、採購、生產或會計資料表；完整 Ragic 正式移轉仍屬 P8。
+
+## 17. P3.1 銷售訂單架構
+
+- 訂單命令集中於 server-side service 與 state machine；一般 PATCH 只允許 `DRAFT`，確認、修訂及作廢使用獨立命令。
+- API 只使用 session 中的目前公司，不接受 client 自行指定可信 `companyId`、訂單號、狀態、版次、合計、actor 或 snapshot。
+- 草稿取號透過 `document_sequences` 的原子 `INSERT ... ON CONFLICT ... DO UPDATE ... RETURNING` 完成。取號、訂單、audit 與 idempotency completion 位於一致 transaction；失敗時流水增量一併 rollback。
+- 金額以十進位字串及整數縮放計算，不使用 JavaScript `Number` 作核心乘法；明細 half-up 至元後再加總。
+- 訂單確認會重新驗證客戶公司關係、地點、聯絡人、可銷售品項、訂單日期有效價格、人工價格理由、運費規則及公司法定設定，再建立 typed snapshot。
+- typed JSON contract：Decimal 使用十進位字串、date 使用 `YYYY-MM-DD`、timestamp 使用 ISO-8601 UTC；必要快照由 DB 阻擋 null／空物件，再由 Zod／service 驗證完整內容。
+- 明細移除採 `is_active=false` 並保存 `removed_at/by` 與 audit；不提供 DELETE route 或 hard-delete UI。
+- `sales_orders.read` 與 `sales_orders.manage` 授予 `ADMIN`、`ORDER_ENTRY`，但每個 request 仍由後端驗證 session、selected company 與 company scope。
+- P3.1 頁面及 API 不提供銷貨單、列印、PDF、出貨、回收確認、應收或庫存功能。

@@ -47,6 +47,9 @@ describeDatabase("formal schema baseline", () => {
       "migration_reconciliations",
       "price_lists",
       "roles",
+      "sales_order_lines",
+      "sales_order_relations",
+      "sales_orders",
       "user_company_scopes",
       "user_roles",
       "user_sessions",
@@ -73,6 +76,7 @@ describeDatabase("formal schema baseline", () => {
       "0006_p2_pricing_master",
       "0007_p2_freight_rules",
       "0008_p2_master_import_foundation",
+      "0009_p3_sales_orders",
     ]);
   });
 
@@ -125,6 +129,15 @@ describeDatabase("formal schema baseline", () => {
           ,'migration_issues_resolution_check'
           ,'migration_reconciliations_counts_check'
           ,'migration_reconciliations_status_check'
+          ,'document_sequences_fiscal_month_check'
+          ,'company_settings_document_company_code_check'
+          ,'sales_orders_amount_check'
+          ,'sales_orders_confirmation_check'
+          ,'sales_orders_void_check'
+          ,'sales_order_lines_quantity_check'
+          ,'sales_order_lines_price_source_check'
+          ,'sales_order_lines_removal_check'
+          ,'sales_order_relations_not_self_check'
         )
        UNION ALL
        SELECT indexname AS object_name
@@ -143,6 +156,8 @@ describeDatabase("formal schema baseline", () => {
       "background_jobs_attempt_count_check",
       "background_jobs_lock_pair_check",
       "background_jobs_max_attempts_check",
+      "company_settings_document_company_code_check",
+      "document_sequences_fiscal_month_check",
       "document_sequences_fiscal_year_check",
       "document_sequences_last_value_check",
       "idempotency_keys_expiry_check",
@@ -156,6 +171,13 @@ describeDatabase("formal schema baseline", () => {
       "migration_issues_row_number_check",
       "migration_reconciliations_counts_check",
       "migration_reconciliations_status_check",
+      "sales_order_lines_price_source_check",
+      "sales_order_lines_quantity_check",
+      "sales_order_lines_removal_check",
+      "sales_order_relations_not_self_check",
+      "sales_orders_amount_check",
+      "sales_orders_confirmation_check",
+      "sales_orders_void_check",
       "user_sessions_active_idx",
       "user_sessions_idle_window_check",
       "user_sessions_revocation_reason_check",

@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from "react";
 import type { CompanySettingHistoryEntry } from "@/lib/company-settings/service";
 import { COMPANY_SETTING_KEYS } from "@/lib/company-settings/registry";
+import type { CompanySettingKey } from "@/lib/company-settings/registry";
 
 type Company = {
   id: string;
@@ -48,10 +49,12 @@ async function settingRequest(
 export function CompanySettingsClient({
   companies,
   selectedCompanyId,
+  selectedSettingKey,
   history,
 }: {
   companies: Company[];
   selectedCompanyId: string;
+  selectedSettingKey: CompanySettingKey;
   history: CompanySettingHistoryEntry[];
 }) {
   const [message, setMessage] = useState<string | null>(null);
@@ -59,8 +62,25 @@ export function CompanySettingsClient({
   const minimumDate = tomorrowDate();
 
   function selectCompany(companyId: string) {
-    const params = new URLSearchParams({ companyId });
+    const params = new URLSearchParams({
+      companyId,
+      settingKey: selectedSettingKey,
+    });
     window.location.assign(`/admin/company-settings?${params.toString()}`);
+  }
+
+  function selectSetting(settingKey: string) {
+    const params = new URLSearchParams({
+      companyId: selectedCompanyId,
+      settingKey,
+    });
+    window.location.assign(`/admin/company-settings?${params.toString()}`);
+  }
+
+  function parseSettingValue(value: FormDataEntryValue | null) {
+    return selectedSettingKey === COMPANY_SETTING_KEYS.BILLING_CUTOFF_DAY
+      ? Number(value)
+      : String(value ?? "");
   }
 
   async function createVersion(event: FormEvent<HTMLFormElement>) {
@@ -72,8 +92,8 @@ export function CompanySettingsClient({
     try {
       await settingRequest("/api/admin/company-settings", "POST", {
         companyId: selectedCompanyId,
-        settingKey: COMPANY_SETTING_KEYS.BILLING_CUTOFF_DAY,
-        settingValue: Number(form.get("settingValue")),
+        settingKey: selectedSettingKey,
+        settingValue: parseSettingValue(form.get("settingValue")),
         effectiveFrom: form.get("effectiveFrom"),
       });
       window.location.reload();
@@ -98,8 +118,8 @@ export function CompanySettingsClient({
         "PATCH",
         {
           companyId: selectedCompanyId,
-          settingKey: COMPANY_SETTING_KEYS.BILLING_CUTOFF_DAY,
-          settingValue: Number(form.get("settingValue")),
+          settingKey: selectedSettingKey,
+          settingValue: parseSettingValue(form.get("settingValue")),
           effectiveFrom: form.get("effectiveFrom"),
         },
       );
@@ -123,7 +143,7 @@ export function CompanySettingsClient({
         "POST",
         {
           companyId: selectedCompanyId,
-          settingKey: COMPANY_SETTING_KEYS.BILLING_CUTOFF_DAY,
+          settingKey: selectedSettingKey,
         },
       );
       window.location.reload();
@@ -150,9 +170,25 @@ export function CompanySettingsClient({
             ))}
           </select>
         </label>
-        <p className="mt-4 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          短月份規則：超過當月最後一天時，以當月最後一天為準。
-        </p>
+        <label className="mt-4 block text-sm font-medium">
+          設定鍵
+          <select
+            value={selectedSettingKey}
+            onChange={(event) => selectSetting(event.target.value)}
+            className="mt-1 block w-full max-w-md rounded-lg border px-3 py-2"
+          >
+            {Object.values(COMPANY_SETTING_KEYS).map((key) => (
+              <option key={key} value={key}>
+                {key}
+              </option>
+            ))}
+          </select>
+        </label>
+        {selectedSettingKey === COMPANY_SETTING_KEYS.BILLING_CUTOFF_DAY ? (
+          <p className="mt-4 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            短月份規則：超過當月最後一天時，以當月最後一天為準。
+          </p>
+        ) : null}
         {message ? (
           <p
             role="alert"
@@ -172,19 +208,39 @@ export function CompanySettingsClient({
           <label className="text-sm font-medium">
             設定鍵
             <input
-              value={COMPANY_SETTING_KEYS.BILLING_CUTOFF_DAY}
+              value={selectedSettingKey}
               readOnly
               className="mt-1 w-full rounded-lg border bg-slate-50 px-3 py-2"
             />
           </label>
           <label className="text-sm font-medium">
-            切帳日
+            設定值
             <input
-              type="number"
+              type={
+                selectedSettingKey ===
+                COMPANY_SETTING_KEYS.BILLING_CUTOFF_DAY
+                  ? "number"
+                  : "text"
+              }
               name="settingValue"
-              min={1}
-              max={31}
-              step={1}
+              min={
+                selectedSettingKey ===
+                COMPANY_SETTING_KEYS.BILLING_CUTOFF_DAY
+                  ? 1
+                  : undefined
+              }
+              max={
+                selectedSettingKey ===
+                COMPANY_SETTING_KEYS.BILLING_CUTOFF_DAY
+                  ? 31
+                  : undefined
+              }
+              step={
+                selectedSettingKey ===
+                COMPANY_SETTING_KEYS.BILLING_CUTOFF_DAY
+                  ? 1
+                  : undefined
+              }
               required
               className="mt-1 w-full rounded-lg border px-3 py-2"
             />
@@ -252,14 +308,34 @@ export function CompanySettingsClient({
                     className="mt-4 grid gap-3 border-t pt-4 md:grid-cols-3"
                   >
                     <label className="text-sm font-medium">
-                      修改切帳日
+                      修改設定值
                       <input
-                        type="number"
+                        type={
+                          selectedSettingKey ===
+                          COMPANY_SETTING_KEYS.BILLING_CUTOFF_DAY
+                            ? "number"
+                            : "text"
+                        }
                         name="settingValue"
-                        min={1}
-                        max={31}
-                        step={1}
-                        defaultValue={Number(entry.settingValue)}
+                        min={
+                          selectedSettingKey ===
+                          COMPANY_SETTING_KEYS.BILLING_CUTOFF_DAY
+                            ? 1
+                            : undefined
+                        }
+                        max={
+                          selectedSettingKey ===
+                          COMPANY_SETTING_KEYS.BILLING_CUTOFF_DAY
+                            ? 31
+                            : undefined
+                        }
+                        step={
+                          selectedSettingKey ===
+                          COMPANY_SETTING_KEYS.BILLING_CUTOFF_DAY
+                            ? 1
+                            : undefined
+                        }
+                        defaultValue={String(entry.settingValue)}
                         required
                         className="mt-1 w-full rounded-lg border px-3 py-2"
                       />

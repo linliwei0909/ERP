@@ -1,8 +1,8 @@
 # Ragic 本地端系統資料庫設計草稿
 
-文件狀態：P1 正式基線及 P2.1～P2.5 主檔已實作；P2.6 以後仍為 ERD 草稿
-同步基線：`DECISIONS.md` V0.8
-版本日期：2026-07-25
+文件狀態：P1、P2 已完成；P3.1 銷售訂單 schema 與 0009 草稿已建立、待獨立 DB 驗證；P3.2 以後仍為 ERD 草稿
+同步基線：`DECISIONS.md` V0.9
+版本日期：2026-07-27
 
 ## 1. 設計基線
 
@@ -141,7 +141,7 @@ erDiagram
 | `roles` | — | `code` | `status` |
 | `user_roles` | `user_id -> users.id`, `role_id -> roles.id` | `(user_id, role_id)` | `(role_id, user_id)` |
 | `user_company_scopes` | `user_id -> users.id`, `company_id -> companies.id` | `(user_id, company_id)` | `(company_id, user_id)` |
-| `document_sequences` | `company_id -> companies.id` | `(company_id, fiscal_year, document_type)` | `(document_type, fiscal_year)` |
+| `document_sequences` | `company_id -> companies.id` | `(company_id, fiscal_year, fiscal_month, document_type)` | `(document_type, fiscal_year, fiscal_month)` |
 | `idempotency_keys` | `user_id -> users.id` nullable | `(scope, idempotency_key)` | `expires_at` |
 | `background_jobs` | `company_id -> companies.id` nullable | active partial UQ `(job_type, dedupe_key)` | `(status, run_after)`, `(job_type, created_at desc)` |
 | `audit_logs` | `actor_user_id -> users.id` nullable, `company_id -> companies.id` nullable | — | `(entity_type, entity_id, occurred_at desc)`, `(actor_user_id, occurred_at desc)` |
@@ -225,13 +225,19 @@ P2.3 正式欄位與限制：
 
 | 資料表 | 主要 FK | 唯一限制 | 重要索引 |
 | --- | --- | --- | --- |
-| `sales_orders` | `company_id -> companies.id`, `customer_id -> customers.id`, `delivery_location_id -> delivery_locations.id`, `price_list_id -> price_lists.id` nullable | `(company_id, fiscal_year, order_no)` | `(company_id, status, order_date desc)`, `(customer_id, order_date desc)` |
-| `sales_order_lines` | `sales_order_id -> sales_orders.id`, `item_id -> items.id`, `item_price_id -> item_prices.id` nullable | `(sales_order_id, line_no)` | `(item_id, sales_order_id)` |
+| `sales_orders` | `company_id -> companies.id`, `(customer_id, company_id) -> customer_companies`, `(delivery_location_id, customer_id) -> delivery_locations`, `customer_contact_id`, `freight_rule_id` nullable | `(company_id, fiscal_year, fiscal_month, order_number)`；supporting UQ `(id, company_id)` | `(company_id, status, order_date desc)`, `(company_id, customer_id, order_date desc)` |
+| `sales_order_lines` | `(sales_order_id, company_id) -> sales_orders`, `(item_id, company_id) -> item_companies`, `price_list_id`, `item_price_id` nullable；所有 actor FK 均 RESTRICT | `(sales_order_id, line_number)` | `(company_id, item_id, sales_order_id)`, `(price_list_id, item_price_id)` |
 | `sales_order_relations` | `source_order_id -> sales_orders.id`, `related_order_id -> sales_orders.id` | `(source_order_id, related_order_id, relation_type)` | `(related_order_id, relation_type)` |
 | `delivery_notes` | `company_id -> companies.id`, `sales_order_id -> sales_orders.id`, `returned_confirmed_by -> users.id` nullable | `(company_id, fiscal_year, delivery_no)`；partial UQ `(sales_order_id) WHERE status <> 'voided'` | `(sales_order_id, status)`, `(company_id, status, actual_delivery_date desc)` |
 | `delivery_note_lines` | `delivery_note_id -> delivery_notes.id`, `sales_order_line_id -> sales_order_lines.id`, `item_id -> items.id` | `(delivery_note_id, line_no)` | `sales_order_line_id`, `(item_id, delivery_note_id)` |
 
-`sales_order_lines` 保存標準價、成交價、價格來源、價格表與價格版本，以及客戶、品項、稅務及運費快照。查無有效價格時將 `price_source` 標示為人工價格；查有標準價格但成交價不同時，`manual_price_reason`、`price_overridden_by`、`price_overridden_at` 必須有值。`delivery_notes` 使用 `returned_confirmed`, `returned_confirmed_at`, `returned_confirmed_by` 作第一階段人工回收確認及建立應收條件；第一階段不實作電子簽收。
+P3.1 的 `sales_orders` 保存客戶、客戶公司、聯絡人、送貨地點、公司法定資訊、運費及付款條件快照；`sales_order_lines` 保存品項與價格 typed snapshot，以及標準價、成交價、價格來源、價格表與價格版本參照。所有 JSON Decimal 使用字串、date 使用 ISO date、timestamp 使用 ISO-8601 UTC。
+
+`PriceSource` 為 `STANDARD`, `STANDARD_OVERRIDE`, `MANUAL`。後兩者均要求 non-blank `manual_price_reason`、`price_overridden_by`、`price_overridden_at`；`STANDARD` 必須有正式價格參照且成交價等於標準價。明細軟移除使用 `is_active`, `removed_at`, `removed_by`，保留原列及 audit，不提供 DELETE route。
+
+訂單號由既有 `document_sequences` 產生。`fiscal_month = 0` 保留給既有年度 scope；P3.1 `SALES_ORDER` 使用 1～12 月 scope。格式為 `SO-{兩碼公司縮寫}-{YYYYMM}-{六碼流水}`，取號、草稿、audit 與 idempotency completion 位於安全 transaction 邊界。
+
+P3.1 尚未建立 `delivery_notes` 或 `delivery_note_lines`；表格中的銷貨單兩列仍是 P3.2 草案，不得視為現有 schema。
 
 ### 4.5 應收、正式發票與調整
 

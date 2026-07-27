@@ -13,6 +13,8 @@ export type Permission =
   | "pricing.manage"
   | "freight.read"
   | "freight.manage"
+  | "sales_orders.read"
+  | "sales_orders.manage"
   | "master_import.read"
   | "master_import.manage";
 
@@ -30,6 +32,8 @@ const rolePermissions: Record<RoleCode, ReadonlySet<Permission>> = {
     "pricing.manage",
     "freight.read",
     "freight.manage",
+    "sales_orders.read",
+    "sales_orders.manage",
     "master_import.read",
     "master_import.manage",
   ]),
@@ -39,6 +43,8 @@ const rolePermissions: Record<RoleCode, ReadonlySet<Permission>> = {
     "items.read",
     "pricing.read",
     "freight.read",
+    "sales_orders.read",
+    "sales_orders.manage",
   ]),
 };
 

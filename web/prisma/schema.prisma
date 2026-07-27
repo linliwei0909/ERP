@@ -54,6 +54,31 @@ enum FreightMode {
   @@map("freight_mode")
 }
 
+enum SalesOrderStatus {
+  DRAFT
+  CONFIRMED
+  DELIVERY_CREATED
+  SHIPPED
+  COMPLETED
+  VOIDED
+
+  @@map("sales_order_status")
+}
+
+enum PriceSource {
+  STANDARD
+  STANDARD_OVERRIDE
+  MANUAL
+
+  @@map("price_source")
+}
+
+enum SalesOrderRelationType {
+  ADDITION
+
+  @@map("sales_order_relation_type")
+}
+
 enum MigrationBatchStatus {
   PENDING
   VALIDATING
@@ -107,6 +132,7 @@ model Company {
   customerRelations CustomerCompany[]
   itemRelations     ItemCompany[]
   priceLists        PriceList[]
+  salesOrders       SalesOrder[]
   migrationBatches  MigrationBatch[]
 
   @@index([status, name], map: "companies_status_name_idx")
@@ -167,6 +193,15 @@ model User {
   priceAssignmentsUpdated CustomerPriceListAssignment[] @relation("PriceAssignmentUpdatedBy")
   freightRulesCreated FreightRule[] @relation("FreightRuleCreatedBy")
   freightRulesUpdated FreightRule[] @relation("FreightRuleUpdatedBy")
+  salesOrdersCreated SalesOrder[] @relation("SalesOrderCreatedBy")
+  salesOrdersUpdated SalesOrder[] @relation("SalesOrderUpdatedBy")
+  salesOrdersConfirmed SalesOrder[] @relation("SalesOrderConfirmedBy")
+  salesOrdersVoided SalesOrder[] @relation("SalesOrderVoidedBy")
+  salesOrderLinesCreated SalesOrderLine[] @relation("SalesOrderLineCreatedBy")
+  salesOrderLinesUpdated SalesOrderLine[] @relation("SalesOrderLineUpdatedBy")
+  salesOrderPriceOverrides SalesOrderLine[] @relation("SalesOrderLinePriceOverriddenBy")
+  salesOrderLinesRemoved SalesOrderLine[] @relation("SalesOrderLineRemovedBy")
+  salesOrderRelationsCreated SalesOrderRelation[] @relation("SalesOrderRelationCreatedBy")
   migrationBatchesInitiated MigrationBatch[] @relation("MigrationBatchInitiatedBy")
   migrationIssuesResolved MigrationIssue[] @relation("MigrationIssueResolvedBy")
   defaultCompany  Company?           @relation("UserDefaultCompany", fields: [defaultCompanyId], references: [id], onDelete: Restrict, onUpdate: Cascade)
@@ -247,6 +282,7 @@ model DocumentSequence {
   id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   companyId    String   @map("company_id") @db.Uuid
   fiscalYear   Int      @map("fiscal_year")
+  fiscalMonth  Int      @default(0) @map("fiscal_month")
   documentType String   @map("document_type") @db.VarChar(64)
   lastValue    BigInt   @default(0) @map("last_value")
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -254,8 +290,8 @@ model DocumentSequence {
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
-  @@unique([companyId, fiscalYear, documentType], map: "document_sequences_company_year_type_key")
-  @@index([documentType, fiscalYear], map: "document_sequences_type_year_idx")
+  @@unique([companyId, fiscalYear, fiscalMonth, documentType], map: "document_sequences_company_period_type_key")
+  @@index([documentType, fiscalYear, fiscalMonth], map: "document_sequences_type_period_idx")
   @@map("document_sequences")
 }
 
@@ -376,6 +412,7 @@ model Customer {
   contacts          CustomerContact[]
   deliveryLocations DeliveryLocation[]
   priceAssignments  CustomerPriceListAssignment[]
+  salesOrders       SalesOrder[] @relation("SalesOrderCustomer")
 
   @@index([status, name], map: "customers_status_name_idx")
   @@index([customerType, status], map: "customers_type_status_idx")
@@ -401,6 +438,7 @@ model CustomerCompany {
   updatedBy User     @relation("CustomerCompanyUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
   priceAssignments CustomerPriceListAssignment[]
   freightRules     FreightRule[]
+  salesOrders      SalesOrder[]
 
   @@unique([customerId, companyId], map: "customer_companies_customer_company_key")
   @@unique([companyId, normalizedCustomerCode], map: "customer_companies_company_code_key")
@@ -429,6 +467,7 @@ model CustomerContact {
   customer  Customer @relation(fields: [customerId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   createdBy User     @relation("CustomerContactCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
   updatedBy User     @relation("CustomerContactUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  salesOrders SalesOrder[]
 
   @@index([customerId, status, isPrimary(sort: Desc)], map: "customer_contacts_customer_status_primary_idx")
   @@index([email], map: "customer_contacts_email_idx")
@@ -459,6 +498,7 @@ model DeliveryLocation {
   createdBy User     @relation("DeliveryLocationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
   updatedBy User     @relation("DeliveryLocationUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
   freightRules FreightRule[]
+  salesOrders SalesOrder[]
 
   @@unique([customerId, code], map: "delivery_locations_customer_code_key")
   @@unique([id, customerId], map: "delivery_locations_id_customer_key")
@@ -491,6 +531,7 @@ model Item {
   updatedBy        User          @relation("ItemUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
   companyRelations ItemCompany[]
   prices           ItemPrice[]
+  salesOrderLines  SalesOrderLine[]
 
   @@index([status, salesEnabled, itemType, name], map: "items_status_sales_type_name_idx")
   @@index([itemType, status, name], map: "items_type_status_name_idx")
@@ -514,6 +555,7 @@ model ItemCompany {
   company   Company @relation(fields: [companyId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   createdBy User    @relation("ItemCompanyCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
   updatedBy User    @relation("ItemCompanyUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  salesOrderLines SalesOrderLine[]
 
   @@unique([itemId, companyId], map: "item_companies_item_company_key")
   @@unique([companyId, normalizedCompanyItemCode], map: "item_companies_company_code_key")
@@ -539,6 +581,7 @@ model PriceList {
   updatedBy   User                          @relation("PriceListUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
   itemPrices  ItemPrice[]
   assignments CustomerPriceListAssignment[]
+  salesOrderLines SalesOrderLine[]
 
   @@unique([companyId, normalizedCode], map: "price_lists_company_code_key")
   @@unique([id, companyId], map: "price_lists_id_company_key")
@@ -563,6 +606,7 @@ model ItemPrice {
   item      Item      @relation(fields: [itemId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   createdBy User      @relation("ItemPriceCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
   updatedBy User      @relation("ItemPriceUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  salesOrderLines SalesOrderLine[]
 
   @@index([priceListId, itemId, validFrom(sort: Desc)], map: "item_prices_lookup_idx")
   @@index([itemId, status, validFrom, validTo], map: "item_prices_item_status_period_idx")
@@ -613,10 +657,127 @@ model FreightRule {
   deliveryLocation DeliveryLocation @relation(fields: [deliveryLocationId, customerId], references: [id, customerId], onDelete: Restrict, onUpdate: Restrict)
   createdBy User @relation("FreightRuleCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
   updatedBy User @relation("FreightRuleUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  salesOrders SalesOrder[]
 
   @@index([companyId, customerId, deliveryLocationId, status, validFrom, validTo], map: "freight_rules_lookup_idx")
   @@index([companyId, customerId, deliveryLocationId, validFrom(sort: Desc)], map: "freight_rules_history_idx")
   @@map("freight_rules")
+}
+
+model SalesOrder {
+  id                      String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId               String           @map("company_id") @db.Uuid
+  fiscalYear              Int              @map("fiscal_year")
+  fiscalMonth             Int              @map("fiscal_month")
+  orderNumber             String           @map("order_number") @db.VarChar(32)
+  orderDate               DateTime         @map("order_date") @db.Date
+  customerId              String           @map("customer_id") @db.Uuid
+  deliveryLocationId      String           @map("delivery_location_id") @db.Uuid
+  customerContactId       String?          @map("customer_contact_id") @db.Uuid
+  status                  SalesOrderStatus @default(DRAFT)
+  revisionNo              Int              @default(1) @map("revision_no")
+  customerSnapshot        Json             @map("customer_snapshot")
+  customerCompanySnapshot Json             @map("customer_company_snapshot")
+  contactSnapshot         Json?            @map("contact_snapshot")
+  deliverySnapshot        Json             @map("delivery_snapshot")
+  companySnapshot         Json             @map("company_snapshot")
+  paymentTermsText        String?          @map("payment_terms_text")
+  subtotal                Decimal          @default(0) @db.Decimal(18, 0)
+  freightRuleId           String?          @map("freight_rule_id") @db.Uuid
+  freightMode             FreightMode?     @map("freight_mode")
+  freightSnapshot         Json?            @map("freight_snapshot")
+  freightAmount           Decimal          @default(0) @map("freight_amount") @db.Decimal(18, 0)
+  totalAmount             Decimal          @default(0) @map("total_amount") @db.Decimal(18, 0)
+  confirmedAt             DateTime?        @map("confirmed_at") @db.Timestamptz(3)
+  confirmedById           String?          @map("confirmed_by") @db.Uuid
+  voidedAt                DateTime?        @map("voided_at") @db.Timestamptz(3)
+  voidedById              String?          @map("voided_by") @db.Uuid
+  voidReason              String?          @map("void_reason")
+  createdById             String           @map("created_by") @db.Uuid
+  updatedById             String           @map("updated_by") @db.Uuid
+  createdAt               DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt               DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  company          Company          @relation(fields: [companyId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  customer         Customer         @relation("SalesOrderCustomer", fields: [customerId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  customerCompany  CustomerCompany  @relation(fields: [customerId, companyId], references: [customerId, companyId], onDelete: Restrict, onUpdate: Restrict)
+  deliveryLocation DeliveryLocation @relation(fields: [deliveryLocationId, customerId], references: [id, customerId], onDelete: Restrict, onUpdate: Restrict)
+  customerContact  CustomerContact? @relation(fields: [customerContactId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  freightRule      FreightRule?     @relation(fields: [freightRuleId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  confirmedBy      User?            @relation("SalesOrderConfirmedBy", fields: [confirmedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  voidedBy         User?            @relation("SalesOrderVoidedBy", fields: [voidedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  createdBy        User             @relation("SalesOrderCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  updatedBy        User             @relation("SalesOrderUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  lines            SalesOrderLine[]
+  sourceRelations  SalesOrderRelation[] @relation("SalesOrderRelationSource")
+  relatedRelations SalesOrderRelation[] @relation("SalesOrderRelationRelated")
+
+  @@unique([companyId, fiscalYear, fiscalMonth, orderNumber], map: "sales_orders_company_period_number_key")
+  @@unique([id, companyId], map: "sales_orders_id_company_key")
+  @@index([companyId, status, orderDate(sort: Desc)], map: "sales_orders_company_status_date_idx")
+  @@index([companyId, customerId, orderDate(sort: Desc)], map: "sales_orders_company_customer_date_idx")
+  @@index([deliveryLocationId, orderDate(sort: Desc)], map: "sales_orders_location_date_idx")
+  @@map("sales_orders")
+}
+
+model SalesOrderLine {
+  id                    String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  salesOrderId          String      @map("sales_order_id") @db.Uuid
+  companyId             String      @map("company_id") @db.Uuid
+  lineNumber            Int         @map("line_number")
+  itemId                String      @map("item_id") @db.Uuid
+  priceListId           String?     @map("price_list_id") @db.Uuid
+  itemPriceId           String?     @map("item_price_id") @db.Uuid
+  itemSnapshot          Json        @map("item_snapshot")
+  priceSnapshot         Json        @map("price_snapshot")
+  quantity              Decimal     @db.Decimal(18, 4)
+  standardUnitPrice     Decimal?    @map("standard_unit_price") @db.Decimal(18, 5)
+  unitPrice             Decimal     @map("unit_price") @db.Decimal(18, 5)
+  priceSource           PriceSource @map("price_source")
+  manualPriceReason     String?     @map("manual_price_reason")
+  priceOverriddenAt     DateTime?   @map("price_overridden_at") @db.Timestamptz(3)
+  priceOverriddenById   String?     @map("price_overridden_by") @db.Uuid
+  lineAmount            Decimal     @map("line_amount") @db.Decimal(18, 0)
+  isActive              Boolean     @default(true) @map("is_active")
+  removedAt             DateTime?   @map("removed_at") @db.Timestamptz(3)
+  removedById           String?     @map("removed_by") @db.Uuid
+  createdById           String      @map("created_by") @db.Uuid
+  updatedById           String      @map("updated_by") @db.Uuid
+  createdAt             DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  salesOrder       SalesOrder  @relation(fields: [salesOrderId, companyId], references: [id, companyId], onDelete: Restrict, onUpdate: Restrict)
+  item             Item        @relation(fields: [itemId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  itemCompany      ItemCompany @relation(fields: [itemId, companyId], references: [itemId, companyId], onDelete: Restrict, onUpdate: Restrict)
+  priceList        PriceList?  @relation(fields: [priceListId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  itemPrice        ItemPrice?  @relation(fields: [itemPriceId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  priceOverriddenBy User?      @relation("SalesOrderLinePriceOverriddenBy", fields: [priceOverriddenById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  removedBy         User?      @relation("SalesOrderLineRemovedBy", fields: [removedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  createdBy        User        @relation("SalesOrderLineCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  updatedBy        User        @relation("SalesOrderLineUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([salesOrderId, lineNumber], map: "sales_order_lines_order_line_key")
+  @@index([companyId, itemId, salesOrderId], map: "sales_order_lines_company_item_order_idx")
+  @@index([priceListId, itemPriceId], map: "sales_order_lines_price_source_idx")
+  @@map("sales_order_lines")
+}
+
+model SalesOrderRelation {
+  id             String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sourceOrderId  String                 @map("source_order_id") @db.Uuid
+  relatedOrderId String                 @map("related_order_id") @db.Uuid
+  relationType   SalesOrderRelationType @map("relation_type")
+  reason         String
+  createdById    String                 @map("created_by") @db.Uuid
+  createdAt      DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  sourceOrder  SalesOrder @relation("SalesOrderRelationSource", fields: [sourceOrderId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  relatedOrder SalesOrder @relation("SalesOrderRelationRelated", fields: [relatedOrderId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  createdBy    User       @relation("SalesOrderRelationCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([sourceOrderId, relatedOrderId, relationType], map: "sales_order_relations_source_related_type_key")
+  @@index([relatedOrderId, relationType], map: "sales_order_relations_related_type_idx")
+  @@map("sales_order_relations")
 }
 
 model MigrationBatch {

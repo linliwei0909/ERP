@@ -97,6 +97,11 @@ export type CompanySettingAuditContext = {
   requestId?: string;
 };
 
+type CompanySettingReadDatabase = Pick<
+  PrismaClient | Prisma.TransactionClient,
+  "companySetting"
+>;
+
 function utcDate(year: number, monthIndex: number, day: number): Date {
   return new Date(Date.UTC(year, monthIndex, day));
 }
@@ -157,6 +162,20 @@ function isUniqueConflict(error: unknown): boolean {
   );
 }
 
+async function assertDocumentCompanyCodeCanChange(
+  tx: Prisma.TransactionClient,
+  companyId: string,
+  settingKey: string,
+): Promise<void> {
+  if (settingKey !== COMPANY_SETTING_KEYS.DOCUMENT_COMPANY_CODE) return;
+  const issuedDocumentCount = await tx.salesOrder.count({
+    where: { companyId },
+  });
+  if (issuedDocumentCount > 0) {
+    throw new CompanySettingVersionImmutableError();
+  }
+}
+
 export async function requireAdminCompanySettingAccess(
   db: PrismaClient,
   context: RequestContext,
@@ -199,7 +218,7 @@ function replayResult(
 }
 
 export async function getEffectiveCompanySetting<K extends CompanySettingKey>(
-  db: PrismaClient,
+  db: CompanySettingReadDatabase,
   companyId: string,
   settingKey: K,
   effectiveDate: Date,
@@ -239,6 +258,62 @@ export async function getBillingCutoffDay(
       effectiveDate,
     )
   ).settingValue;
+}
+
+export type CompanyLegalSettings = {
+  companyName: string;
+  documentCompanyCode: string;
+  companyTaxId: string;
+  companyAddress: string;
+  companyPhone: string;
+};
+
+export async function getCompanyLegalSettings(
+  db: CompanySettingReadDatabase,
+  companyId: string,
+  effectiveDate: Date,
+): Promise<CompanyLegalSettings> {
+  const [companyName, documentCompanyCode, companyTaxId, companyAddress, companyPhone] =
+    await Promise.all([
+      getEffectiveCompanySetting(
+        db,
+        companyId,
+        COMPANY_SETTING_KEYS.COMPANY_NAME,
+        effectiveDate,
+      ),
+      getEffectiveCompanySetting(
+        db,
+        companyId,
+        COMPANY_SETTING_KEYS.DOCUMENT_COMPANY_CODE,
+        effectiveDate,
+      ),
+      getEffectiveCompanySetting(
+        db,
+        companyId,
+        COMPANY_SETTING_KEYS.COMPANY_TAX_ID,
+        effectiveDate,
+      ),
+      getEffectiveCompanySetting(
+        db,
+        companyId,
+        COMPANY_SETTING_KEYS.COMPANY_ADDRESS,
+        effectiveDate,
+      ),
+      getEffectiveCompanySetting(
+        db,
+        companyId,
+        COMPANY_SETTING_KEYS.COMPANY_PHONE,
+        effectiveDate,
+      ),
+    ]);
+
+  return {
+    companyName: companyName.settingValue,
+    documentCompanyCode: documentCompanyCode.settingValue,
+    companyTaxId: companyTaxId.settingValue,
+    companyAddress: companyAddress.settingValue,
+    companyPhone: companyPhone.settingValue,
+  };
 }
 
 export function resolveBillingCutoffDateFromDay(
@@ -416,6 +491,11 @@ export async function createFutureSettingVersion(
           now,
         },
         async (tx) => {
+          await assertDocumentCompanyCodeCanChange(
+            tx,
+            input.companyId,
+            input.settingKey,
+          );
           const setting = await tx.companySetting.create({
             data: {
               companyId: input.companyId,
@@ -487,6 +567,11 @@ export async function updateFutureSettingVersion(
           now,
         },
         async (tx) => {
+          await assertDocumentCompanyCodeCanChange(
+            tx,
+            input.companyId,
+            input.settingKey,
+          );
           const existing = await tx.companySetting.findFirst({
             where: {
               id: input.id,
@@ -564,6 +649,11 @@ export async function cancelFutureSettingVersion(
         now,
       },
       async (tx) => {
+        await assertDocumentCompanyCodeCanChange(
+          tx,
+          input.companyId,
+          input.settingKey,
+        );
         const existing = await tx.companySetting.findFirst({
           where: {
             id: input.id,
@@ -611,11 +701,38 @@ export async function bootstrapInitialCompanySettings(
     requestId?: string;
   },
 ): Promise<
-  Array<{ companyCode: string; settingId: string; created: boolean }>
+  Array<{
+    companyCode: string;
+    settingKey: CompanySettingKey;
+    settingId: string;
+    created: boolean;
+  }>
 > {
   const initialSettings = [
-    { companyCode: "INDUSTRIAL", settingValue: 25 },
-    { companyCode: "BIOTECH", settingValue: 20 },
+    {
+      companyCode: "INDUSTRIAL",
+      values: {
+        [COMPANY_SETTING_KEYS.BILLING_CUTOFF_DAY]: 25,
+        [COMPANY_SETTING_KEYS.COMPANY_NAME]: "奇麗實業有限公司",
+        [COMPANY_SETTING_KEYS.DOCUMENT_COMPANY_CODE]: "IN",
+        [COMPANY_SETTING_KEYS.COMPANY_TAX_ID]: "60603347",
+        [COMPANY_SETTING_KEYS.COMPANY_ADDRESS]:
+          "新北市中和區國光街109巷22弄13號",
+        [COMPANY_SETTING_KEYS.COMPANY_PHONE]: "02-29571175",
+      },
+    },
+    {
+      companyCode: "BIOTECH",
+      values: {
+        [COMPANY_SETTING_KEYS.BILLING_CUTOFF_DAY]: 20,
+        [COMPANY_SETTING_KEYS.COMPANY_NAME]: "奇麗生技有限公司",
+        [COMPANY_SETTING_KEYS.DOCUMENT_COMPANY_CODE]: "BI",
+        [COMPANY_SETTING_KEYS.COMPANY_TAX_ID]: "60377546",
+        [COMPANY_SETTING_KEYS.COMPANY_ADDRESS]:
+          "新北市中和區國光街109巷22弄13號",
+        [COMPANY_SETTING_KEYS.COMPANY_PHONE]: "02-26805751",
+      },
+    },
   ] as const;
   const effectiveFrom = dateOnly(input.effectiveFrom);
   const requestId = createRequestId(input.requestId);
@@ -656,6 +773,7 @@ export async function bootstrapInitialCompanySettings(
     );
     const results: Array<{
       companyCode: string;
+      settingKey: CompanySettingKey;
       settingId: string;
       created: boolean;
     }> = [];
@@ -667,63 +785,90 @@ export async function bootstrapInitialCompanySettings(
           `初始管理員沒有公司權限或公司不存在：${initial.companyCode}`,
         );
       }
-      const settingValue = validateCompanySetting(
-        COMPANY_SETTING_KEYS.BILLING_CUTOFF_DAY,
-        initial.settingValue,
-      );
-      const existing = await tx.companySetting.findUnique({
-        where: {
-          companyId_settingKey_effectiveFrom: {
+      for (const [rawKey, rawValue] of Object.entries(initial.values)) {
+        assertCompanySettingKey(rawKey);
+        const settingKey = rawKey;
+        const settingValue = validateCompanySetting(settingKey, rawValue);
+        const exactVersion = await tx.companySetting.findUnique({
+          where: {
+            companyId_settingKey_effectiveFrom: {
+              companyId: company.id,
+              settingKey,
+              effectiveFrom,
+            },
+          },
+        });
+        if (exactVersion) {
+          const existingValue = validateCompanySetting(
+            settingKey,
+            exactVersion.settingValue,
+          );
+          if (existingValue !== settingValue) {
+            throw new CompanySettingVersionConflictError();
+          }
+          results.push({
+            companyCode: company.code,
+            settingKey,
+            settingId: exactVersion.id,
+            created: false,
+          });
+          continue;
+        }
+        const effectiveVersion = await tx.companySetting.findFirst({
+          where: {
             companyId: company.id,
-            settingKey: COMPANY_SETTING_KEYS.BILLING_CUTOFF_DAY,
+            settingKey,
+            effectiveFrom: { lte: effectiveFrom },
+          },
+          orderBy: { effectiveFrom: "desc" },
+        });
+        if (effectiveVersion) {
+          const existingValue = validateCompanySetting(
+            settingKey,
+            effectiveVersion.settingValue,
+          );
+          if (existingValue !== settingValue) {
+            throw new CompanySettingVersionConflictError();
+          }
+          results.push({
+            companyCode: company.code,
+            settingKey,
+            settingId: effectiveVersion.id,
+            created: false,
+          });
+          continue;
+        }
+
+        const created = await tx.companySetting.create({
+          data: {
+            companyId: company.id,
+            settingKey,
+            settingValue,
             effectiveFrom,
           },
-        },
-      });
-      if (existing) {
-        const existingValue = validateCompanySetting(
-          COMPANY_SETTING_KEYS.BILLING_CUTOFF_DAY,
-          existing.settingValue,
-        );
-        if (existingValue !== settingValue) {
-          throw new CompanySettingVersionConflictError();
-        }
+        });
+        await writeAudit(tx, {
+          ...systemAuditContext({
+            companyId: company.id,
+            actorUserId: admin.id,
+            requestId,
+          }),
+          entityType: "company_setting",
+          entityId: created.id,
+          operation: "bootstrap.company_setting.created",
+          afterJson: companySettingSnapshot(created),
+          metadata: {
+            settingKey,
+            companyCode: company.code,
+          },
+        });
         results.push({
           companyCode: company.code,
-          settingId: existing.id,
-          created: false,
+          settingKey,
+          settingId: created.id,
+          created: true,
         });
-        continue;
       }
-
-      const created = await tx.companySetting.create({
-        data: {
-          companyId: company.id,
-          settingKey: COMPANY_SETTING_KEYS.BILLING_CUTOFF_DAY,
-          settingValue,
-          effectiveFrom,
-        },
-      });
-      await writeAudit(tx, {
-        ...systemAuditContext({
-          companyId: company.id,
-          actorUserId: admin.id,
-          requestId,
-        }),
-        entityType: "company_setting",
-        entityId: created.id,
-        operation: "bootstrap.company_setting.created",
-        afterJson: companySettingSnapshot(created),
-        metadata: {
-          settingKey: COMPANY_SETTING_KEYS.BILLING_CUTOFF_DAY,
-          companyCode: company.code,
-        },
-      });
-      results.push({
-        companyCode: company.code,
-        settingId: created.id,
-        created: true,
-      });
     }
 
     return results;

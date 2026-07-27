@@ -1,8 +1,8 @@
 # Ragic 本地端系統正式決議
 
 文件性質：本專案最高優先級的業務決議紀錄  
-版本：V0.8
-最後更新：2026-07-25
+版本：V0.9
+最後更新：2026-07-27
 
 ## 1. 使用原則
 
@@ -1051,6 +1051,26 @@
 - 一般 UI 與 API 不提供 hard delete。模式、金額、期間與狀態的重要異動必須與 audit log 位於同一 transaction，並使用後端 RBAC、company scope、idempotency 及 correlation ID。
 
 
+## DEC-056 銷售訂單、公司單據縮寫與確認快照
+
+- `companies.code` 維持既有系統代碼 `INDUSTRIAL` 與 `BIOTECH`，不得因單據編號縮短或改寫。
+- 單據編號另使用版本化公司設定 `document_company_code`，固定為兩碼大寫英文字母且全系統唯一；`INDUSTRIAL = IN`、`BIOTECH = BI`。訂單服務只能由後端有效公司設定取得，不信任 client 輸入。
+- 公司法定資訊使用既有 `company_settings` 有效版本機制保存。正式設定鍵包含 `company_name`、`document_company_code`、`company_tax_id`、`company_address`、`company_phone`；所有鍵均須經 registry 驗證，並在訂單確認時保存於 `company_snapshot`。
+- 奇麗實業有限公司對應 `INDUSTRIAL`，統編 `60603347`，地址「新北市中和區國光街109巷22弄13號」，電話 `02-29571175`。
+- 奇麗生技有限公司對應 `BIOTECH`，統編 `60377546`，地址「新北市中和區國光街109巷22弄13號」，電話 `02-26805751`。
+- 銷售訂單號格式為 `SO-{document_company_code}-{YYYYMM}-{六碼流水號}`。草稿建立成功時取號；每公司、每月及 `SALES_ORDER` document type 獨立流水，自 `000001` 起，作廢號碼不得回收。
+- 訂單數量使用 `numeric(18,4)` 且必須大於零；未稅交易單價使用 `numeric(18,5)` 且不得為負數。明細金額為數量乘交易單價，以 decimal-safe half-up 四捨五入至新臺幣元；小計、未稅運費及未稅總額使用 `numeric(18,0)`。
+- P3.1 不計算正式稅額；畫面清楚標示小計、運費與總額均為未稅。
+- `PriceSource` 正式值為 `STANDARD`、`STANDARD_OVERRIDE`、`MANUAL`。標準價改價及查無標準價而使用人工價時，人工價格理由均必填，並保存操作者、時間、前後值及 audit；人工價格不得回寫正式價格表。
+- 訂單初始 `revision_no = 1`。草稿一般編輯不增加版次；已確認訂單只能透過正式修訂回到草稿，版次加一並清除確認人與確認時間。修訂開始時不自動查價、重算運費或刷新快照，再次確認時才重新解析並凍結新快照。P3.1 不建立完整不可變訂單版本表，歷程由版次及 audit before／after image 保存。
+- 建立草稿時預設同客戶有效主要聯絡人，使用者可改選同客戶其他有效聯絡人或不選；確認時保存聯絡人快照。
+- P3.1 使用 nullable `payment_terms_text`，確認時保存文字快照；不建立付款條件主檔、enum 或工作流程。
+- 草稿及已確認訂單均可作廢，作廢理由一律必填。作廢後不得恢復、修改、確認、修訂或 hard delete，單號不回收。
+- 訂單確認時由 server 依正式來源建立客戶、客戶公司關係、聯絡人、送貨地點、品項、價格、運費及公司法定資訊的 typed snapshot。不得信任 client snapshot，且確認後不得因主檔修改而自動重建。
+- P3.1 實作 `DRAFT -> CONFIRMED`、`DRAFT -> VOIDED`、`CONFIRMED -> DRAFT`（正式修訂）及 `CONFIRMED -> VOIDED`。`DELIVERY_CREATED`、`SHIPPED`、`COMPLETED` 只保留 enum，不提供進入流程。
+- `ADMIN` 與 `ORDER_ENTRY` 都具有 `sales_orders.read` 及 `sales_orders.manage`，但只能操作目前授權公司。所有寫入使用後端 RBAC、company scope、transaction、audit、idempotency 及 correlation ID。
+- P3.1 只建立 `sales_orders`、`sales_order_lines`、`sales_order_relations`；不得建立銷貨單、列印、PDF、實際送貨日、回收確認、應收、庫存或其他後續模組。
+
 ## 3. 尚未定案且應保留於 OPEN_QUESTIONS.md 的事項
 
 - `OQ-005`：第二階段是否實作正式電子簽收，以及簽收狀態、簽收人、附件、撤銷與例外更正流程如何設計。（不阻塞第一階段）
@@ -1061,6 +1081,7 @@
 
 ## 4. 變更紀錄
 
+- V0.9（2026-07-27）：新增 DEC-056，正式化兩家公司法定資訊與單據縮寫、月流水訂單號、未稅金額與 half-up、價格來源及人工理由、修訂版次、聯絡人與付款條件、作廢及確認快照規則，並限定 P3.1 不建立銷貨單。
 - V0.8（2026-07-25）：新增 DEC-055，確認送貨地點運費模式、金額精度、decimal-safe 試算、半開期間、全歷程排除重疊、兩組 composite FK、明確日期查詢、FREIGHT_RULE_NOT_FOUND、權限及稽核規則。
 - V0.7（2026-07-25）：新增 DEC-054，確認價格表、未稅價格精度、半開期間、全歷程排除重疊、客戶指派 composite FK、effectiveDate 查價、PRICE_NOT_FOUND、權限及稽核規則。
 - V0.6（2026-07-25）：新增 DEC-053，確認跨公司品項、正式類型、代碼與條碼 normalization、用途旗標、公司別代碼、可銷售條件、權限、停用及稽核規則。

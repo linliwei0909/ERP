@@ -64,6 +64,12 @@ export default async function Home() {
 
         <div className="mt-8 flex gap-3">
           <Link
+            href="/sales-orders"
+            className="rounded-lg bg-teal-700 px-4 py-2 text-white"
+          >
+            銷售訂單
+          </Link>
+          <Link
             href="/customers"
             className="rounded-lg border border-teal-700 px-4 py-2 text-teal-800"
           >

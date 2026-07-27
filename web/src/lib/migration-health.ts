@@ -9,6 +9,7 @@ export const EXPECTED_MIGRATIONS = [
   "0006_p2_pricing_master",
   "0007_p2_freight_rules",
   "0008_p2_master_import_foundation",
+  "0009_p3_sales_orders",
 ] as const;
 
 export async function assertExpectedMigrations(
