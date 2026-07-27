@@ -1,14 +1,14 @@
 # Ragic 本地端系統技術架構
 
-文件狀態：P1、P2 已完成；P3.1 銷售訂單程式已建立、待獨立 DB 驗證與部署；P3.2 以後仍為架構草稿
-同步基線：`DECISIONS.md` V0.9
+文件狀態：P1、P2、P3.1 已完成；P3.2 規格決議完成、尚未開始實作
+同步基線：`DECISIONS.md` V0.10
 版本日期：2026-07-27
 
 ## 1. 規格依據與範圍
 
 本架構依下列優先順序設計：
 
-1. `DECISIONS.md` V0.9。
+1. `DECISIONS.md` V0.10。
 2. `business-rules.md`。
 3. `DATABASE_DESIGN.md`。
 4. `TECHNICAL_ARCHITECTURE.md`。
@@ -17,7 +17,7 @@
 7. `OPEN_QUESTIONS.md`。
 8. 其他舊文件。
 
-第一階段固定為 Ragic 本地端重建，不採 ERP MVP 的庫存、批號、分批出貨、出庫依賴或正式會計過帳。`OPEN_QUESTIONS.md` 保留 OQ-005、OQ-044 與 OQ-045，均不阻塞 P1；第一階段以「銷貨單已回收」的人工確認作為建立應收條件，不實作正式電子簽收。
+第一階段固定為 Ragic 本地端重建，不採 ERP MVP 的庫存、批號、分批出貨、出庫依賴或正式會計過帳。`OPEN_QUESTIONS.md` 保留 OQ-005、OQ-044、OQ-045 與可延後的 OQ-051；OQ-046～OQ-050 已由 DEC-057 決議。第一階段以「銷貨單已回收」的人工確認作為建立應收條件，不實作正式電子簽收。
 
 ## 2. 第一階段模組
 
@@ -92,7 +92,10 @@ flowchart TB
 
 以下動作必須在單一資料庫 transaction 完成：
 
-- 建立／修改訂單、作廢舊銷貨單並重建唯一有效銷貨單。
+- 使用者由 `CONFIRMED` order 明確建立銷貨單；sequence、header、lines、order `DELIVERY_CREATED`、audit 與 idempotency completion 同一 transaction。
+- Revision start 不作廢舊 `ACTIVE` 銷貨單；新 revision 重新確認後，單一 rebuild transaction 鎖定 order 與目前非 `VOIDED` 銷貨單、取新號、建立 replacement、作廢舊單、更新 order 並寫 audit。任一步驟失敗時舊單仍 `ACTIVE`、order 仍 `CONFIRMED`。
+- `DRAFT`、`CONFIRMED`、`DELIVERY_CREATED` order 作廢時，在同一 transaction 以 `ORDER_VOID` 自動作廢目前非 `VOIDED` 銷貨單。
+- ADMIN 直接作廢 `ACTIVE` 銷貨單時，在同一 transaction 以 `ADMIN_DIRECT` 作廢並將 order `DELIVERY_CREATED -> CONFIRMED`；不自動重建。
 - 由已出貨且已人工確認「銷貨單已回收」的銷貨單建立唯一應收並鎖定來源；第一階段不實作正式電子簽收。
 - 應收在沒有發票、收款、票據及月結來源時可直接更正並寫 audit；存在任一後續資料時改以正式調整、核准及同步更新應收餘額。
 - 收款、預收、退款、付款及票據分配；撤銷時建立反向紀錄。
@@ -115,7 +118,7 @@ flowchart TB
 
 ## 8. 銷售與應收控制
 
-- 同一訂單同時最多一張有效銷貨單；作廢歷史保留。
+- 同一訂單同時最多一張 `status <> 'VOIDED'` 銷貨單；partial unique 不得只限制 `ACTIVE`，作廢歷史保留。
 - 首次列印且實際出貨日為空時才自動帶入日期；重印不得覆蓋。
 - 第一階段以 `returned_confirmed` 或等效欄位記錄銷貨單已回收，作為建立應收的人工作業證據。
 - 第一階段不實作正式電子簽收。OQ-005 只保留第二階段的電子簽收設計，不影響第一階段開發；未來簽收功能不得覆蓋人工確認歷程。
@@ -124,7 +127,7 @@ flowchart TB
 - 所有交易數量使用 `numeric(18,4)`。
 - 客戶價格表指派與品項價格都使用半開有效期間；同客戶、同公司的指派期間不得重疊。
 - 查無有效價格時將交易明細標示為人工價格；有標準價而改價時理由必填。正式價格表只允許管理員新增或更新。
-- 同一 `sales_order_id` 只允許一張狀態非 `voided` 的 `delivery_notes`；作廢歷史保留。
+- 同一 `sales_order_id` 只允許一張狀態非 `VOIDED` 的 `delivery_notes`；作廢歷史保留。
 - 應收調整保存 `approval_status`、`approved_by`、`approved_at`；折讓、退貨與呆帳核准後才生效，退貨與呆帳缺少附件時不得核准。
 - 第一階段應付帳單月份依應付日期與公司有效切帳日計算，不進行逐筆收入配對。
 
@@ -222,3 +225,24 @@ P2.1～P2.6 已完成公司參數、客戶、品項、價格、運費的主檔�
 - 明細移除採 `is_active=false` 並保存 `removed_at/by` 與 audit；不提供 DELETE route 或 hard-delete UI。
 - `sales_orders.read` 與 `sales_orders.manage` 授予 `ADMIN`、`ORDER_ENTRY`，但每個 request 仍由後端驗證 session、selected company 與 company scope。
 - P3.1 頁面及 API 不提供銷貨單、列印、PDF、出貨、回收確認、應收或庫存功能。
+
+## 18. P3.2 銷貨單架構決議
+
+P3.2a 已完成 Prisma schema、`0010_p3_delivery_notes`、custom SQL、fresh DB 驗證及本機 `erp` 受控部署。Delivery-note service、API 與 UI 均尚未建立。
+
+- 公開 command 為 `createDeliveryNoteFromOrder`、`rebuildDeliveryNoteForOrder`、`adminVoidDeliveryNote`；查詢為 `getDeliveryNote`、`listDeliveryNotes`、`getCurrentDeliveryNoteForOrder`。Order 作廢使用內部 `voidDeliveryNoteForOrderVoid` helper，revision start 不操作 delivery note。
+- 初次建立由使用者明確觸發。Server 驗證 order=`CONFIRMED`、permission、company scope 及不存在非 `VOIDED` 銷貨單，才在 transaction 內配置 `DELIVERY_NOTE` 號碼並建立完整快照。
+- Rebuild 是不可拆分的 server command。Lock 順序固定為 idempotency claim、order、目前非 `VOIDED` delivery note、document sequence，接著建立新單、作廢舊單、更新 order、audit 與 idempotency completion。
+- 銷貨單 header／lines 只複製新 revision 已確認的 typed snapshots 與凍結金額，不重新查詢 customer／item／price／freight master，也不接受 client snapshot、金額、單號、日期或 current delivery note。
+- `delivery_note_date` 由 server 以 `Asia/Taipei` business date 產生並保存為 PostgreSQL `date`。號碼年月與 `document_company_code` 有效版本都依此日期；禁止用 UTC 日期切割、client today、`order_date` 或 `actual_delivery_date`。
+- 每張追加訂單直接以 `ADDITION` 指向 root original order，並建立自己的銷貨單；不形成 chain、aggregate delivery note 或跨 order 合併。Service 解析 root 並防 self、duplicate、cycle 及 addition-as-source。
+- 0010 已以 PostgreSQL custom constraint trigger／function、transaction advisory lock 與 recursive query 在 DB 層再次檢查 ADDITION 同公司、source 為 root、無 cycle 且 source 不是另一張 addition；未來 application transaction 仍須先行驗證並固定 lock order。
+- 權限分為 `delivery_notes.read`、`delivery_notes.manage`、`delivery_notes.admin_void`。ADMIN 與 ORDER_ENTRY 可在授權公司 read／manage；只有 ADMIN 有 direct void。內部 order workflow 的自動作廢不要求 admin void。
+- Audit 使用 `delivery_note.created`、`delivery_note.voided`、`delivery_note.rebuilt`、`sales_order.delivery_created`、`sales_order.delivery_rebuilt`，並以 `ADMIN_DIRECT`、`ORDER_REVISION_REBUILD`、`ORDER_VOID` 表達 void source。
+- Idempotency operations 為 `delivery_note.create`、`delivery_note.rebuild`、`delivery_note.admin_void`、`sales_order.void_with_delivery_note`。P3.2 全部保持同步 transaction，不使用 background job。
+- `0010_p3_delivery_notes` 已建立兩表及 enum，custom SQL 實作 `WHERE status <> 'VOIDED'` partial unique、composite FK、複雜 CHECK、replacement chain 與 ADDITION graph trigger；0001～0009 未修改。兩個 fresh DB 均由零套用 0001～0010 且 schema diff=0，本機 `erp` 亦已套用 0010，production live／ready／worker health 均通過。
+
+## 19. 變更紀錄
+
+- V0.10（2026-07-27，P3.2a 工程同步）：完成 Prisma model、`0010_p3_delivery_notes`、partial unique、composite FK、replacement／ADDITION constraint trigger、兩個 fresh DB、本機部署及 health 驗證；service／API／UI 未開始。
+- V0.10（2026-07-27）：同步 DEC-057，完成 P3.2 銷貨單手動建立、revision 原子重建、追加 root 關聯、ADMIN direct void、`delivery_note_date` 取號、snapshot、權限、transaction、audit、idempotency 與 0010 架構規劃；尚未開始實作。

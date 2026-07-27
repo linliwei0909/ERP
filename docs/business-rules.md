@@ -1,12 +1,12 @@
 # Ragic 本地端系統共通業務規則
 
 文件狀態：第一階段正式規則彙整  
-同步基線：`DECISIONS.md` V0.9
+同步基線：`DECISIONS.md` V0.10
 最後更新：2026-07-27
 
 ## 1. 規格效力
 
-- 本文件依 `DECISIONS.md` V0.9 同步整理；內容衝突時一律以 `DECISIONS.md` 為準。
+- 本文件依 `DECISIONS.md` V0.10 同步整理；內容衝突時一律以 `DECISIONS.md` 為準。
 - 已由 `DECISIONS.md` 決議的事項不得重新列為待確認。
 - 第一階段不得自行加入庫存、批號、分批出貨、出庫依賴或正式會計過帳。
 - `OPEN_QUESTIONS.md` 保留 OQ-005、OQ-044 與 OQ-045；三者均不阻塞 P1。
@@ -128,11 +128,18 @@
 - P3.1 不建立銷貨單、列印、PDF、實際送貨日、回收確認或任何應收、庫存及後續交易資料。
 
 - 銷貨單只能由銷售訂單建立，不允許獨立人工新增。
-- 一張訂單同一時間最多一張有效銷貨單；第一階段不分批出貨。
-- 訂單已確認但尚未出貨前，所有欄位可修改。若已有銷貨單，必須作廢舊單、保留歷史並重新建立完整銷貨單。
-- 原訂單已出貨後需要追加時，不修改原訂單或原銷貨單；另建追加訂單、關聯原訂單，再建立新的銷貨單。
-- 尚未建立應收前，銷貨單可修改。一般使用者不提供獨立作廢按鈕；訂單作廢或重建由流程連動作廢銷貨單。
-- 管理員例外作廢銷貨單時，必須確認沒有應收、收款、票據或月結資料，並保存原因、時間、操作者及來源操作。
+- 初次銷貨單不在訂單確認時自動建立。使用者須在 `CONFIRMED` 訂單明細明確執行「建立銷貨單」；成功後新單為 `ACTIVE`、order 改為 `DELIVERY_CREATED`，失敗時 order 維持 `CONFIRMED` 且不得留下半成品或重複取號。
+- 一張訂單同一時間最多一張 `status <> 'VOIDED'` 的銷貨單；`SHIPPED` 與 `RECEIVABLE_CREATED` 仍占用唯一有效名額。第一階段不分批出貨。
+- `DELIVERY_CREATED` 訂單開始 revision 時，order 版次加一並回 `DRAFT`，但舊 `ACTIVE` 銷貨單保持不變，繼續代表上一個已確認 revision；編輯期間不得建立第二張非作廢銷貨單。
+- 新 revision 重新確認後 order 為 `CONFIRMED`，使用者須明確執行單一 server-side rebuild。Rebuild 在同一 transaction 建立新單、以 `ORDER_REVISION_REBUILD` 作廢舊單、建立 replacement reference、更新 order、寫 audit 並完成 idempotency；失敗時舊單維持 `ACTIVE`、order 維持 `CONFIRMED`。
+- 原訂單已出貨後需要追加時，不修改原訂單或原銷貨單；另建有獨立單號、revision、snapshot 與金額的追加訂單。所有追加訂單以 `ADDITION` 直接指向最初原始訂單，各自建立只包含自身內容的銷貨單，不形成 chain、不聚合原單、不跨訂單合併出貨。
+- 一般使用者不提供獨立作廢按鈕；`DRAFT`、`CONFIRMED`、`DELIVERY_CREATED` 訂單作廢時，由同一 transaction 以 `ORDER_VOID` 連動作廢目前非作廢銷貨單。
+- ADMIN 具 `delivery_notes.admin_void` 及公司 scope 時，可例外直接將 `ACTIVE` 銷貨單作廢；理由 trim 後必填，`void_source = ADMIN_DIRECT`，並在同一 transaction 將 order `DELIVERY_CREATED -> CONFIRMED`。作廢後不自動重建，使用者可再明確建立新單。ORDER_ENTRY 不得直接作廢。
+- `SHIPPED`、`RECEIVABLE_CREATED`、`VOIDED` 不得由 P3.2 ADMIN 直接作廢，也不得進入 P3.2 revision／rebuild。
+- 尚未建立應收前可修改銷貨單的 DEC-016 原則維持；P3.2 的訂單／價格／運費快照不得直接 PATCH，只能透過 order revision 與原子 rebuild 形成 replacement。實際出貨日等可修改欄位由 P3.4 實作。
+- 銷貨單號為 `DN-{document_company_code}-{YYYYMM}-{六碼流水}`，document type 為 `DELIVERY_NOTE`。`YYYYMM` 與公司縮寫版本依 server 產生的 `Asia/Taipei` `delivery_note_date` 判斷，不得使用 `order_date`、`actual_delivery_date` 或 client 日期。重建使用重建當日並取得新號；作廢號碼不回收。
+- 銷貨單複製已確認 order 的 typed 快照與凍結金額，不重新讀取目前主檔、查價或重算運費。
+- 銷貨單狀態為 `ACTIVE`、`SHIPPED`、`RECEIVABLE_CREATED`、`VOIDED`。P3.2 只實作建立為 `ACTIVE` 及三種 `ACTIVE -> VOIDED`；實際出貨與應收狀態由後續階段處理，紙本回收確認不是 status。
 - 實際出貨日預設為首次列印銷貨單的日期；只在欄位尚未填寫時帶入，後續重印不得覆蓋。使用者可修改，第一階段不要求修改原因，另記首次列印時間。
 - 填入實際出貨日後，訂單與銷貨單更新為已出貨。
 - 第一階段不檢查庫存、不分配批號、不建立出庫或庫存異動，也不因庫存不足阻擋銷貨或應收。
@@ -271,6 +278,7 @@
 
 ## 17. 變更紀錄
 
+- V0.10（2026-07-27）：同步 DEC-057，正式化銷貨單手動建立、revision 原子重建、追加訂單 root 關聯且不聚合、ADMIN 直接作廢、`delivery_note_date` 月流水、非作廢唯一、快照、audit 與 idempotency；P3.2 尚未開始實作。
 - V0.9（2026-07-27）：同步 DEC-056，新增 P3.1 公司縮寫與法定資訊、月流水訂單號、未稅金額、價格來源、正式修訂、作廢、聯絡人、付款條件及 typed snapshot 規則。
 - V0.8（2026-07-25，P2.6 同步）：不新增業務決議；記錄主檔匯入框架的安全、transaction、mapping、reconciliation 與已完成 importer 邊界。
 - V0.8（2026-07-25）：同步 DEC-055，正式化送貨地點運費模式、金額精度、decimal-safe 試算、半開期間、全歷程排除重疊、composite FK、明確日期查詢、`FREIGHT_RULE_NOT_FOUND`、權限及 audit。

@@ -1,7 +1,7 @@
 # Ragic 本地端系統資料庫設計草稿
 
-文件狀態：P1、P2 已完成；P3.1 銷售訂單 schema 與 0009 草稿已建立、待獨立 DB 驗證；P3.2 以後仍為 ERD 草稿
-同步基線：`DECISIONS.md` V0.9
+文件狀態：P1、P2、P3.1 已完成；P3.2a schema／migration 已完成 fresh DB 驗證並部署本機 `erp`，P3.2 service／API／UI 未開始
+同步基線：`DECISIONS.md` V0.10
 版本日期：2026-07-27
 
 ## 1. 設計基線
@@ -226,10 +226,10 @@ P2.3 正式欄位與限制：
 | 資料表 | 主要 FK | 唯一限制 | 重要索引 |
 | --- | --- | --- | --- |
 | `sales_orders` | `company_id -> companies.id`, `(customer_id, company_id) -> customer_companies`, `(delivery_location_id, customer_id) -> delivery_locations`, `customer_contact_id`, `freight_rule_id` nullable | `(company_id, fiscal_year, fiscal_month, order_number)`；supporting UQ `(id, company_id)` | `(company_id, status, order_date desc)`, `(company_id, customer_id, order_date desc)` |
-| `sales_order_lines` | `(sales_order_id, company_id) -> sales_orders`, `(item_id, company_id) -> item_companies`, `price_list_id`, `item_price_id` nullable；所有 actor FK 均 RESTRICT | `(sales_order_id, line_number)` | `(company_id, item_id, sales_order_id)`, `(price_list_id, item_price_id)` |
+| `sales_order_lines` | `(sales_order_id, company_id) -> sales_orders`, `(item_id, company_id) -> item_companies`, `price_list_id`, `item_price_id` nullable；所有 actor FK 均 RESTRICT | `(sales_order_id, line_number)`；0010 supporting UQ `(id, company_id)` | `(company_id, item_id, sales_order_id)`, `(price_list_id, item_price_id)` |
 | `sales_order_relations` | `source_order_id -> sales_orders.id`, `related_order_id -> sales_orders.id` | `(source_order_id, related_order_id, relation_type)` | `(related_order_id, relation_type)` |
-| `delivery_notes` | `company_id -> companies.id`, `sales_order_id -> sales_orders.id`, `returned_confirmed_by -> users.id` nullable | `(company_id, fiscal_year, delivery_no)`；partial UQ `(sales_order_id) WHERE status <> 'voided'` | `(sales_order_id, status)`, `(company_id, status, actual_delivery_date desc)` |
-| `delivery_note_lines` | `delivery_note_id -> delivery_notes.id`, `sales_order_line_id -> sales_order_lines.id`, `item_id -> items.id` | `(delivery_note_id, line_no)` | `sales_order_line_id`, `(item_id, delivery_note_id)` |
+| `delivery_notes`（0010 已部署 `erp`） | `company_id -> companies.id`, `(sales_order_id, company_id) -> sales_orders(id, company_id)`, actor FK；`(replaced_delivery_note_id, sales_order_id, company_id)` 為同公司、同 order 的 self-reference | `delivery_note_number`；partial UQ `(sales_order_id) WHERE status <> 'VOIDED'`；supporting UQ `(id, company_id)`, `(id, sales_order_id, company_id)`；一張舊單最多一個直接 replacement | `(sales_order_id, status)`, `(company_id, delivery_note_date desc)`, `(company_id, status, delivery_note_date desc)` |
+| `delivery_note_lines`（0010 已部署 `erp`） | `(delivery_note_id, company_id) -> delivery_notes`, `(sales_order_line_id, company_id) -> sales_order_lines`, `item_id -> items.id`, `(item_id, company_id) -> item_companies`, `created_by -> users.id` | `(delivery_note_id, line_number)` | `sales_order_line_id`, `(company_id, item_id, delivery_note_id)` |
 
 P3.1 的 `sales_orders` 保存客戶、客戶公司、聯絡人、送貨地點、公司法定資訊、運費及付款條件快照；`sales_order_lines` 保存品項與價格 typed snapshot，以及標準價、成交價、價格來源、價格表與價格版本參照。所有 JSON Decimal 使用字串、date 使用 ISO date、timestamp 使用 ISO-8601 UTC。
 
@@ -237,7 +237,28 @@ P3.1 的 `sales_orders` 保存客戶、客戶公司、聯絡人、送貨地點�
 
 訂單號由既有 `document_sequences` 產生。`fiscal_month = 0` 保留給既有年度 scope；P3.1 `SALES_ORDER` 使用 1～12 月 scope。格式為 `SO-{兩碼公司縮寫}-{YYYYMM}-{六碼流水}`，取號、草稿、audit 與 idempotency completion 位於安全 transaction 邊界。
 
-P3.1 尚未建立 `delivery_notes` 或 `delivery_note_lines`；表格中的銷貨單兩列仍是 P3.2 草案，不得視為現有 schema。
+P3.2a 已建立 `DeliveryNoteStatus`、`DeliveryNoteVoidSource`、`DeliveryNote`、`DeliveryNoteLine` 與 create-only `0010_p3_delivery_notes`，並在兩個獨立 fresh DB 完成 0001～0010、catalog 與 schema diff=0 驗證。0010 已受控部署本機 `erp` 並通過 migration、catalog 與 health Gate；仍未建立任何 delivery-note service、API 或 UI。
+
+P3.2a `delivery_notes` 正式 schema：
+
+- 識別與來源：`id`, `company_id`, `delivery_note_number`, `delivery_note_date`, `fiscal_year`, `fiscal_month`, `sales_order_id`, `sales_order_revision_no`, `status`。
+- 凍結快照：`company_snapshot`, `customer_snapshot`, `customer_company_snapshot`, nullable `contact_snapshot`, `delivery_snapshot`, `freight_snapshot`, nullable `payment_terms_text`。
+- 金額：`subtotal`, `freight_amount`, `total_amount`，均為 `numeric(18,0)` 且沿用已確認 order，不重新計算。
+- Replacement：nullable `replaced_delivery_note_id` 指向被取代的同公司、同 order 舊單；不保存 `superseded_by`，不可 self-reference。
+- 作廢：nullable `void_source`, `voided_at`, `voided_by`, `void_reason`；`VOIDED` 時必須完整，其他狀態必須為 null。正式來源為 `ADMIN_DIRECT`, `ORDER_REVISION_REBUILD`, `ORDER_VOID`。
+- Actor／時間：`created_at`, `created_by`, `updated_at`, `updated_by`，時間使用 `timestamptz(3)`。
+- 不採 `sales_orders.current_delivery_note_id`、active boolean、任意完整 `order_snapshot`、delivery note `root_order_id`、`source_order_ids` JSON、`delivery_note_relations` 或 cascade delete。
+
+P3.2a `delivery_note_lines` 正式 schema：
+
+- `id`, `delivery_note_id`, `company_id`, `line_number`, `sales_order_line_id`, `item_id`。
+- `item_snapshot`, `price_snapshot`, `quantity numeric(18,4)`, `unit_price numeric(18,5)`, `line_amount numeric(18,0)`。
+- `created_at`, `created_by`。明細不保留 `updated_at`／`updated_by`，因 P3.2 不提供獨立修改、刪除或部分出貨；重建時建立新 header 與 lines。
+- `(delivery_note_id, company_id)` 與 `(sales_order_line_id, company_id)` composite FK 保證公司一致；不增加冗餘 `sales_order_id` 欄位。來源 order 一致性仍須由未來 service transaction 驗證。
+
+`DeliveryNoteStatus` 正式值為 `ACTIVE`, `SHIPPED`, `RECEIVABLE_CREATED`, `VOIDED`；P3.2 只實作 `ACTIVE` 與 `VOIDED`。`DeliveryNoteVoidSource` 正式值為 `ADMIN_DIRECT`, `ORDER_REVISION_REBUILD`, `ORDER_VOID`。
+
+銷貨單號使用既有 `document_sequences`，`document_type = 'DELIVERY_NOTE'`。`delivery_note_date` 是 server 依 `Asia/Taipei` 產生的 PostgreSQL `date`；取號 scope 為公司、該日期年月及 document type，格式 `DN-{document_company_code}-{YYYYMM}-{sequence6}`。公司縮寫有效版本亦依 `delivery_note_date` 解析，不使用 `order_date`、`actual_delivery_date` 或 client 日期。
 
 ### 4.5 應收、正式發票與調整
 
@@ -329,7 +350,9 @@ P3.1 尚未建立 `delivery_notes` 或 `delivery_note_lines`；表格中的銷�
 ### 5.2 Transaction 中驗證
 
 - 使用者、客戶、品項、廠商及交易單據皆在 `company_id` 可用範圍內。
-- 同一 `sales_order_id` 在 `delivery_notes.status <> 'voided'` 時最多一張；同一銷貨單最多一筆有效應收。
+- 同一 `sales_order_id` 在 `delivery_notes.status <> 'VOIDED'` 時最多一張；partial unique 不得只限制 `ACTIVE`。同一銷貨單最多一筆有效應收。
+- Revision start 只更新 order 版次與確認狀態，舊 `ACTIVE` 銷貨單保持不變；rebuild 在單一 transaction 置換新舊單，失敗時舊單仍 `ACTIVE`、order 仍 `CONFIRMED`。
+- 追加訂單全部透過 `sales_order_relations.ADDITION` 直接指向最初原始訂單；不得 self、duplicate、cycle、跨公司或以 addition 作為 source。0010 已以 custom SQL constraint trigger／function、transaction advisory lock 及 recursive query 查驗同公司、root／leaf 與 cycle；未來 service 仍須在 transaction 內先行驗證並固定 lock order。每張追加訂單與自己的銷貨單獨立，不建立 aggregate delivery note。
 - 建立應收前銷貨單已出貨、已人工確認回收、未作廢且沒有既有應收。
 - 正式價格及同客戶、同公司的價格表指派期間不得重疊；缺價時標示人工價格，有標準價而改價時理由必填；人工價格不得回寫正式價表。
 - 應收直接更正只允許在沒有發票、收款分配、票據分配及月結來源時執行；否則必須建立正式調整。
@@ -359,9 +382,12 @@ P3.1 尚未建立 `delivery_notes` 或 `delivery_note_lines`；表格中的銷�
 - PostgreSQL exclusion constraint、partial unique index、composite FK 與複雜 CHECK 由 custom SQL 補入尚未定稿的 create-only 草稿，constraint／index 必須明確命名。
 - SQL 審查必須確認既有資料前置檢核、執行順序、鎖定影響、重跑策略及 rollback／forward-fix。
 - DB integration test 必須在乾淨測試資料庫由零套用完整正式 migration 鏈，並覆蓋允許案例、違規案例、跨公司關聯、migration 與 constraint 存在性。
+- P3.2a 新增 `0010_p3_delivery_notes`：建立兩個 enum、兩張表、supporting unique、RESTRICT composite FK、`status <> 'VOIDED'` partial unique、snapshot／年月／單號／作廢／金額 CHECK，以及 replacement 與 ADDITION graph constraint trigger。已在兩個 fresh DB 驗證並受控部署本機 `erp`。
 
 ## 8. 變更紀錄
 
+- V0.10（2026-07-27，P3.2a 工程同步）：建立並驗證 `0010_p3_delivery_notes`、Prisma model、partial unique、composite FK、CHECK、replacement chain 與 ADDITION graph trigger；0010 已部署本機 `erp` 並通過 health Gate，service／API／UI 未開始。
+- V0.10（2026-07-27）：同步 DEC-057，完成 P3.2 兩張銷貨單表、狀態、日期月流水、replacement、composite FK、非 `VOIDED` partial unique、CHECK 與 transaction plan；Prisma schema 與 0010 尚未建立。
 - V0.8（2026-07-25，P2.6 同步）：不新增業務決議；將既有移轉概念對齊 `0008_p2_master_import_foundation` 的正式批次、mapping、issue、reconciliation 欄位、限制及公司隔離。
 - V0.8（2026-07-25）：同步 DEC-055 與 `0007_p2_freight_rules`，正式化 freight enum、模式／金額 CHECK、`numeric(18,0)`、半開期間、全歷程 GiST exclusion、兩組 composite FK、索引及 decimal-safe 試算。
 - V0.7（2026-07-25）：同步 DEC-054 與 `0006_p2_pricing_master`，正式化三張價格主檔、`numeric(18,5)`、半開期間 CHECK、全歷程 GiST exclusion、兩組 composite FK、索引與查價驗證。

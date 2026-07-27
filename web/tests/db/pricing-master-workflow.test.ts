@@ -354,7 +354,7 @@ describeDatabase("P2.4 pricing master workflows", () => {
     const prohibited = await db.$queryRaw<Array<{ table_name: string }>>`
       SELECT table_name FROM information_schema.tables
       WHERE table_schema='public' AND table_name IN
-        ('orders','delivery_notes','inventory','warehouses','procurement')
+        ('orders','inventory','warehouses','procurement')
     `;
     expect(prohibited).toEqual([]);
   });

@@ -533,8 +533,6 @@ describeDatabase("P3.1 sales-order workflows", () => {
         FROM information_schema.tables
        WHERE table_schema = 'public'
          AND table_name IN (
-           'delivery_notes',
-           'delivery_note_lines',
            'receivables',
            'inventory',
            'warehouses',

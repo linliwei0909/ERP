@@ -16,7 +16,7 @@ describeDatabase("formal schema baseline", () => {
     await client.end();
   });
 
-  it("contains only the approved P1 through P2.6 tables", async () => {
+  it("contains only the approved P1 through P3.2a tables", async () => {
     const result = await client.query<{ tablename: string }>(
       `SELECT tablename
          FROM pg_catalog.pg_tables
@@ -35,6 +35,8 @@ describeDatabase("formal schema baseline", () => {
       "customer_price_list_assignments",
       "customers",
       "delivery_locations",
+      "delivery_note_lines",
+      "delivery_notes",
       "document_sequences",
       "freight_rules",
       "idempotency_keys",
@@ -58,7 +60,7 @@ describeDatabase("formal schema baseline", () => {
     ]);
   });
 
-  it("executes only the formal migration chain through P2.6", async () => {
+  it("executes only the formal migration chain through P3.2a", async () => {
     const result = await client.query<{ migration_name: string }>(
       `SELECT migration_name
          FROM _prisma_migrations
@@ -77,6 +79,7 @@ describeDatabase("formal schema baseline", () => {
       "0007_p2_freight_rules",
       "0008_p2_master_import_foundation",
       "0009_p3_sales_orders",
+      "0010_p3_delivery_notes",
     ]);
   });
 

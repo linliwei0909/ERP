@@ -1,7 +1,7 @@
 # Ragic 本地端系統正式決議
 
 文件性質：本專案最高優先級的業務決議紀錄  
-版本：V0.9
+版本：V0.10
 最後更新：2026-07-27
 
 ## 1. 使用原則
@@ -1071,16 +1071,40 @@
 - `ADMIN` 與 `ORDER_ENTRY` 都具有 `sales_orders.read` 及 `sales_orders.manage`，但只能操作目前授權公司。所有寫入使用後端 RBAC、company scope、transaction、audit、idempotency 及 correlation ID。
 - P3.1 只建立 `sales_orders`、`sales_order_lines`、`sales_order_relations`；不得建立銷貨單、列印、PDF、實際送貨日、回收確認、應收、庫存或其他後續模組。
 
+## DEC-057 銷貨單建立、修訂重建、追加、例外作廢與取號
+
+- 銷貨單初次建立採使用者明確執行，不在訂單確認時自動建立。只有 `CONFIRMED` 訂單可由訂單明細執行建立；成功後新銷貨單為 `ACTIVE`、訂單改為 `DELIVERY_CREATED`，失敗時訂單維持 `CONFIRMED`，不得留下半成品或重複取號。
+- 不提供獨立新增空白銷貨單。相同 idempotency key 與相同 payload 必須 replay 原結果，不得重複建立或取號；相同 key、不同 payload 必須 conflict。
+- `DELIVERY_CREATED` 訂單開始 revision 時，訂單版次加一、回到 `DRAFT` 並清除確認人／時間；目前有效銷貨單不立即作廢，仍以 `ACTIVE` 代表上一個已確認 revision，且不得更新其 snapshot。Revision 編輯期間不得建立第二張非 `VOIDED` 銷貨單。
+- 新 revision 重新確認後 order 為 `CONFIRMED`，舊 `ACTIVE` 銷貨單暫時代表上一版。使用者必須明確執行單一 server-side rebuild command；client 不得分別呼叫作廢與建立。
+- Rebuild 必須在同一 transaction 鎖定 order 與 server 查得的目前非 `VOIDED` 銷貨單，驗證新舊 revision，取得新號、建立新銷貨單與明細、複製新 revision 確認快照、以 `ORDER_REVISION_REBUILD` 作廢舊單、建立 replacement reference、將 order 改為 `DELIVERY_CREATED`、寫 audit 並完成 idempotency。任一步驟失敗全部 rollback，舊單維持 `ACTIVE`、order 維持 `CONFIRMED`、新單不存在。
+- `DRAFT`、`CONFIRMED`、`DELIVERY_CREATED` 訂單作廢時，如有非 `VOIDED` 銷貨單，必須在同一 transaction 以 `ORDER_VOID` 自動作廢。訂單與銷貨單任一步驟失敗全部 rollback。
+- 維持 DEC-013。追加必須建立獨立 sales order，擁有自己的單號、revision、狀態、snapshot 與金額；所有追加訂單以 `sales_order_relations` 的 `ADDITION` 直接指向最初原始訂單，不形成 addition chain。每張追加訂單建立自己的銷貨單，且只包含該追加訂單內容；不聚合原單、不重複原單數量、不重建原單銷貨單，也不跨訂單合併出貨。
+- P3.2 不建立 `root_order_id`。Service 必須解析 root original order；DB／service 必須阻擋 self relation、duplicate relation、cycle 及 addition 作為另一 addition 的 source。追加訂單作廢只處理自己的有效銷貨單；原始訂單作廢不自動作廢所有追加訂單。
+- `ADMIN` 具 `delivery_notes.admin_void` 且有該公司 scope 時，可例外直接作廢 `ACTIVE` 銷貨單。`void_reason` trim 後必填，必須使用正式 server service，不提供直接 status PATCH 或 DELETE。作廢與 order `DELIVERY_CREATED -> CONFIRMED` 必須同一 transaction，`void_source = ADMIN_DIRECT`；作廢後不自動重建，使用者可再明確建立新銷貨單並取得新號。`ORDER_ENTRY` 不得直接作廢；內部 order workflow 自動作廢不需 `admin_void`。
+- `ADMIN` 不得直接作廢 `SHIPPED`、`RECEIVABLE_CREATED` 或 `VOIDED` 銷貨單。P3.2 亦不允許上述狀態進入 revision、rebuild 或直接作廢流程。
+- `DeliveryNoteStatus` 正式值為 `ACTIVE`、`SHIPPED`、`RECEIVABLE_CREATED`、`VOIDED`。P3.2 只實作不存在→`ACTIVE`，以及 revision rebuild、order void、admin direct void 的 `ACTIVE -> VOIDED`；`VOIDED` 為終止狀態。`SHIPPED` 由 P3.4 實際出貨流程觸發，`RECEIVABLE_CREATED` 由應收模組觸發；紙本回收確認不是 status。
+- 同一 `sales_order_id` 最多只能有一張 `status <> 'VOIDED'` 的銷貨單。未來 partial unique index 必須使用等價條件，不得只限制 `ACTIVE`。
+- 銷貨單號格式為 `DN-{document_company_code}-{YYYYMM}-{六碼流水號}`，document type 為 `DELIVERY_NOTE`。`delivery_note_date` 是獨立 PostgreSQL `date` 單據日期，不是 `actual_delivery_date`、首次列印或紙本回收日期。
+- 初次建立及重建的 `delivery_note_date` 均由 server 以 `Asia/Taipei` business date 產生；重建使用重建當日，不沿用舊日期。`YYYYMM` 與 `document_company_code` 有效版本均依 `delivery_note_date` 解析，不得使用 `order_date`、`actual_delivery_date`、client 日期或 UTC 日期切割。
+- Sequence 以 `company_id`、`DELIVERY_NOTE`、`delivery_note_date` 年月獨立，自 `000001` 起固定六碼。取號、銷貨單、明細、order 狀態、audit 與 idempotency completion 同一 transaction；作廢號碼不回收，重建取得新號，replay 不取得第二個號。P3.2 不開放一般使用者修改 `delivery_note_date`。
+- P3.2 銷貨單複製已確認 order 的 typed company、customer、customer-company、contact、delivery、item、price、freight、payment terms 與金額快照，不重新讀取目前主檔、查價或重算運費。不保存任意完整 `order_snapshot` JSON，不在 order 保存 `current_delivery_note_id`，不建立 active boolean、root/source IDs JSON、delivery-note relations table 或 cascade delete。
+- Replacement 使用新銷貨單的 `replaced_delivery_note_id` 單向指向同公司、同 sales order 的舊單；不得 self-reference，舊單不另存 `superseded_by`。
+- 正式 audit operations 為 `delivery_note.created`、`delivery_note.voided`、`delivery_note.rebuilt`、`sales_order.delivery_created`、`sales_order.delivery_rebuilt`；`delivery_note.voided` 以 `ADMIN_DIRECT`、`ORDER_REVISION_REBUILD`、`ORDER_VOID` 區分來源。正式 idempotency operations 為 `delivery_note.create`、`delivery_note.rebuild`、`delivery_note.admin_void`、`sales_order.void_with_delivery_note`。P3.2 保持同步 transaction，不使用 background job。
+- P3.2 規格決議已完成，但尚未核准程式實作；`0010_p3_delivery_notes` 尚未建立。
+
 ## 3. 尚未定案且應保留於 OPEN_QUESTIONS.md 的事項
 
 - `OQ-005`：第二階段是否實作正式電子簽收，以及簽收狀態、簽收人、附件、撤銷與例外更正流程如何設計。（不阻塞第一階段）
 - `OQ-044`：上線後允許回退至 Ragic 的窗口長度與結束條件。（P8 前確認，不阻塞 P1）
 - `OQ-045`：附件移轉的表單、日期、狀態與檔案範圍。（P8 前確認，不阻塞 P1）
+- `OQ-051`：銷貨單備註、預計送貨日、客戶採購單號或外部參考號是否需要，以及欄位與快照規則。（P3.3／P3.4 前確認，不阻塞 P3.2）
 
 第一階段已依 DEC-019 明確採「銷貨單已回收」的人工確認作為建立應收條件，不實作正式電子簽收。OQ-044 與 OQ-045 僅影響 P8 切換方案；其餘原 V0.2 未決事項 `OQ-042`、`OQ-012`、`OQ-023`、`OQ-037`、`OQ-038` 均已於 V0.3 定案。
 
 ## 4. 變更紀錄
 
+- V0.10（2026-07-27）：新增 DEC-057，裁定 P3.2 銷貨單手動建立、revision 保留舊單及原子重建、追加單直接關聯 root 且不聚合、ADMIN 直接作廢、非 `VOIDED` 唯一限制、`delivery_note_date` 與月流水取號、快照、replacement、audit 及 idempotency；P3.2 尚未開始實作。
 - V0.9（2026-07-27）：新增 DEC-056，正式化兩家公司法定資訊與單據縮寫、月流水訂單號、未稅金額與 half-up、價格來源及人工理由、修訂版次、聯絡人與付款條件、作廢及確認快照規則，並限定 P3.1 不建立銷貨單。
 - V0.8（2026-07-25）：新增 DEC-055，確認送貨地點運費模式、金額精度、decimal-safe 試算、半開期間、全歷程排除重疊、兩組 composite FK、明確日期查詢、FREIGHT_RULE_NOT_FOUND、權限及稽核規則。
 - V0.7（2026-07-25）：新增 DEC-054，確認價格表、未稅價格精度、半開期間、全歷程排除重疊、客戶指派 composite FK、effectiveDate 查價、PRICE_NOT_FOUND、權限及稽核規則。

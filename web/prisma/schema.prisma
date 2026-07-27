@@ -79,6 +79,23 @@ enum SalesOrderRelationType {
   @@map("sales_order_relation_type")
 }
 
+enum DeliveryNoteStatus {
+  ACTIVE
+  SHIPPED
+  RECEIVABLE_CREATED
+  VOIDED
+
+  @@map("delivery_note_status")
+}
+
+enum DeliveryNoteVoidSource {
+  ADMIN_DIRECT
+  ORDER_REVISION_REBUILD
+  ORDER_VOID
+
+  @@map("delivery_note_void_source")
+}
+
 enum MigrationBatchStatus {
   PENDING
   VALIDATING
@@ -133,6 +150,7 @@ model Company {
   itemRelations     ItemCompany[]
   priceLists        PriceList[]
   salesOrders       SalesOrder[]
+  deliveryNotes     DeliveryNote[]
   migrationBatches  MigrationBatch[]
 
   @@index([status, name], map: "companies_status_name_idx")
@@ -202,6 +220,10 @@ model User {
   salesOrderPriceOverrides SalesOrderLine[] @relation("SalesOrderLinePriceOverriddenBy")
   salesOrderLinesRemoved SalesOrderLine[] @relation("SalesOrderLineRemovedBy")
   salesOrderRelationsCreated SalesOrderRelation[] @relation("SalesOrderRelationCreatedBy")
+  deliveryNotesCreated DeliveryNote[] @relation("DeliveryNoteCreatedBy")
+  deliveryNotesUpdated DeliveryNote[] @relation("DeliveryNoteUpdatedBy")
+  deliveryNotesVoided DeliveryNote[] @relation("DeliveryNoteVoidedBy")
+  deliveryNoteLinesCreated DeliveryNoteLine[] @relation("DeliveryNoteLineCreatedBy")
   migrationBatchesInitiated MigrationBatch[] @relation("MigrationBatchInitiatedBy")
   migrationIssuesResolved MigrationIssue[] @relation("MigrationIssueResolvedBy")
   defaultCompany  Company?           @relation("UserDefaultCompany", fields: [defaultCompanyId], references: [id], onDelete: Restrict, onUpdate: Cascade)
@@ -532,6 +554,7 @@ model Item {
   companyRelations ItemCompany[]
   prices           ItemPrice[]
   salesOrderLines  SalesOrderLine[]
+  deliveryNoteLines DeliveryNoteLine[]
 
   @@index([status, salesEnabled, itemType, name], map: "items_status_sales_type_name_idx")
   @@index([itemType, status, name], map: "items_type_status_name_idx")
@@ -556,6 +579,7 @@ model ItemCompany {
   createdBy User    @relation("ItemCompanyCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
   updatedBy User    @relation("ItemCompanyUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
   salesOrderLines SalesOrderLine[]
+  deliveryNoteLines DeliveryNoteLine[]
 
   @@unique([itemId, companyId], map: "item_companies_item_company_key")
   @@unique([companyId, normalizedCompanyItemCode], map: "item_companies_company_code_key")
@@ -711,6 +735,7 @@ model SalesOrder {
   lines            SalesOrderLine[]
   sourceRelations  SalesOrderRelation[] @relation("SalesOrderRelationSource")
   relatedRelations SalesOrderRelation[] @relation("SalesOrderRelationRelated")
+  deliveryNotes    DeliveryNote[]
 
   @@unique([companyId, fiscalYear, fiscalMonth, orderNumber], map: "sales_orders_company_period_number_key")
   @@unique([id, companyId], map: "sales_orders_id_company_key")
@@ -755,8 +780,10 @@ model SalesOrderLine {
   removedBy         User?      @relation("SalesOrderLineRemovedBy", fields: [removedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
   createdBy        User        @relation("SalesOrderLineCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
   updatedBy        User        @relation("SalesOrderLineUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  deliveryNoteLines DeliveryNoteLine[]
 
   @@unique([salesOrderId, lineNumber], map: "sales_order_lines_order_line_key")
+  @@unique([id, companyId], map: "sales_order_lines_id_company_key")
   @@index([companyId, itemId, salesOrderId], map: "sales_order_lines_company_item_order_idx")
   @@index([priceListId, itemPriceId], map: "sales_order_lines_price_source_idx")
   @@map("sales_order_lines")
@@ -778,6 +805,81 @@ model SalesOrderRelation {
   @@unique([sourceOrderId, relatedOrderId, relationType], map: "sales_order_relations_source_related_type_key")
   @@index([relatedOrderId, relationType], map: "sales_order_relations_related_type_idx")
   @@map("sales_order_relations")
+}
+
+model DeliveryNote {
+  id                      String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId               String                 @map("company_id") @db.Uuid
+  deliveryNoteNumber      String                 @unique(map: "delivery_notes_number_key") @map("delivery_note_number") @db.VarChar(32)
+  deliveryNoteDate        DateTime               @map("delivery_note_date") @db.Date
+  fiscalYear              Int                    @map("fiscal_year")
+  fiscalMonth             Int                    @map("fiscal_month")
+  salesOrderId            String                 @map("sales_order_id") @db.Uuid
+  salesOrderRevisionNo    Int                    @map("sales_order_revision_no")
+  status                  DeliveryNoteStatus
+  voidSource              DeliveryNoteVoidSource? @map("void_source")
+  companySnapshot         Json                   @map("company_snapshot")
+  customerSnapshot        Json                   @map("customer_snapshot")
+  customerCompanySnapshot Json                   @map("customer_company_snapshot")
+  contactSnapshot         Json?                  @map("contact_snapshot")
+  deliverySnapshot        Json                   @map("delivery_snapshot")
+  paymentTermsText        String?                @map("payment_terms_text")
+  freightSnapshot         Json                   @map("freight_snapshot")
+  subtotal                Decimal                @db.Decimal(18, 0)
+  freightAmount           Decimal                @map("freight_amount") @db.Decimal(18, 0)
+  totalAmount             Decimal                @map("total_amount") @db.Decimal(18, 0)
+  replacedDeliveryNoteId  String?                @map("replaced_delivery_note_id") @db.Uuid
+  createdAt               DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+  createdById             String                 @map("created_by") @db.Uuid
+  updatedAt               DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
+  updatedById             String                 @map("updated_by") @db.Uuid
+  voidedAt                DateTime?              @map("voided_at") @db.Timestamptz(3)
+  voidedById              String?                @map("voided_by") @db.Uuid
+  voidReason              String?                @map("void_reason")
+
+  company                 Company          @relation(fields: [companyId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  salesOrder              SalesOrder       @relation(fields: [salesOrderId, companyId], references: [id, companyId], onDelete: Restrict, onUpdate: Restrict)
+  replacedDeliveryNote    DeliveryNote?    @relation("DeliveryNoteReplacement", fields: [replacedDeliveryNoteId, salesOrderId, companyId], references: [id, salesOrderId, companyId], onDelete: Restrict, onUpdate: Restrict)
+  replacementDeliveryNote DeliveryNote?    @relation("DeliveryNoteReplacement")
+  createdBy               User             @relation("DeliveryNoteCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  updatedBy               User             @relation("DeliveryNoteUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  voidedBy                User?            @relation("DeliveryNoteVoidedBy", fields: [voidedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  lines                   DeliveryNoteLine[]
+
+  @@unique([id, companyId], map: "delivery_notes_id_company_key")
+  @@unique([id, salesOrderId, companyId], map: "delivery_notes_id_order_company_key")
+  @@unique([replacedDeliveryNoteId, salesOrderId, companyId], map: "delivery_notes_replaced_order_company_key")
+  @@index([companyId, deliveryNoteDate(sort: Desc)], map: "delivery_notes_company_date_idx")
+  @@index([companyId, status, deliveryNoteDate(sort: Desc)], map: "delivery_notes_company_status_date_idx")
+  @@index([salesOrderId, status], map: "delivery_notes_order_status_idx")
+  @@map("delivery_notes")
+}
+
+model DeliveryNoteLine {
+  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  deliveryNoteId       String   @map("delivery_note_id") @db.Uuid
+  companyId            String   @map("company_id") @db.Uuid
+  lineNumber           Int      @map("line_number")
+  salesOrderLineId     String   @map("sales_order_line_id") @db.Uuid
+  itemId               String   @map("item_id") @db.Uuid
+  itemSnapshot         Json     @map("item_snapshot")
+  priceSnapshot        Json     @map("price_snapshot")
+  quantity             Decimal  @db.Decimal(18, 4)
+  unitPrice            Decimal  @map("unit_price") @db.Decimal(18, 5)
+  lineAmount           Decimal  @map("line_amount") @db.Decimal(18, 0)
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  createdById          String   @map("created_by") @db.Uuid
+
+  deliveryNote   DeliveryNote  @relation(fields: [deliveryNoteId, companyId], references: [id, companyId], onDelete: Restrict, onUpdate: Restrict)
+  salesOrderLine SalesOrderLine @relation(fields: [salesOrderLineId, companyId], references: [id, companyId], onDelete: Restrict, onUpdate: Restrict)
+  item           Item           @relation(fields: [itemId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  itemCompany    ItemCompany    @relation(fields: [itemId, companyId], references: [itemId, companyId], onDelete: Restrict, onUpdate: Restrict)
+  createdBy      User           @relation("DeliveryNoteLineCreatedBy", fields: [createdById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([deliveryNoteId, lineNumber], map: "delivery_note_lines_note_line_key")
+  @@index([salesOrderLineId], map: "delivery_note_lines_order_line_idx")
+  @@index([companyId, itemId, deliveryNoteId], map: "delivery_note_lines_company_item_note_idx")
+  @@map("delivery_note_lines")
 }
 
 model MigrationBatch {
