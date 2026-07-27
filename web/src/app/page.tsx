@@ -125,6 +125,12 @@ export default async function Home() {
               >
                 運費規則管理
               </Link>
+              <Link
+                href="/admin/master-import"
+                className="rounded-lg bg-cyan-800 px-4 py-2 text-white"
+              >
+                主檔匯入管理
+              </Link>
             </>
           ) : null}
           <form method="post" action="/api/auth/logout">

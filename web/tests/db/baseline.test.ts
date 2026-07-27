@@ -16,7 +16,7 @@ describeDatabase("formal schema baseline", () => {
     await client.end();
   });
 
-  it("contains only the approved P1 through P2.5 tables", async () => {
+  it("contains only the approved P1 through P2.6 tables", async () => {
     const result = await client.query<{ tablename: string }>(
       `SELECT tablename
          FROM pg_catalog.pg_tables
@@ -41,6 +41,10 @@ describeDatabase("formal schema baseline", () => {
       "item_companies",
       "item_prices",
       "items",
+      "legacy_id_map",
+      "migration_batches",
+      "migration_issues",
+      "migration_reconciliations",
       "price_lists",
       "roles",
       "user_company_scopes",
@@ -51,7 +55,7 @@ describeDatabase("formal schema baseline", () => {
     ]);
   });
 
-  it("executes only the formal migration chain through P2.5", async () => {
+  it("executes only the formal migration chain through P2.6", async () => {
     const result = await client.query<{ migration_name: string }>(
       `SELECT migration_name
          FROM _prisma_migrations
@@ -68,6 +72,7 @@ describeDatabase("formal schema baseline", () => {
       "0005_p2_item_master",
       "0006_p2_pricing_master",
       "0007_p2_freight_rules",
+      "0008_p2_master_import_foundation",
     ]);
   });
 
@@ -111,6 +116,15 @@ describeDatabase("formal schema baseline", () => {
           ,'background_jobs_max_attempts_check'
           ,'background_jobs_lock_pair_check'
           ,'worker_heartbeats_status_check'
+          ,'migration_batches_required_text_check'
+          ,'migration_batches_counts_check'
+          ,'migration_batches_completion_check'
+          ,'legacy_id_map_required_text_check'
+          ,'migration_issues_row_number_check'
+          ,'migration_issues_required_text_check'
+          ,'migration_issues_resolution_check'
+          ,'migration_reconciliations_counts_check'
+          ,'migration_reconciliations_status_check'
         )
        UNION ALL
        SELECT indexname AS object_name
@@ -133,6 +147,15 @@ describeDatabase("formal schema baseline", () => {
       "document_sequences_last_value_check",
       "idempotency_keys_expiry_check",
       "idempotency_keys_lifecycle_check",
+      "legacy_id_map_required_text_check",
+      "migration_batches_completion_check",
+      "migration_batches_counts_check",
+      "migration_batches_required_text_check",
+      "migration_issues_required_text_check",
+      "migration_issues_resolution_check",
+      "migration_issues_row_number_check",
+      "migration_reconciliations_counts_check",
+      "migration_reconciliations_status_check",
       "user_sessions_active_idx",
       "user_sessions_idle_window_check",
       "user_sessions_revocation_reason_check",
@@ -153,6 +176,12 @@ describeDatabase("formal schema baseline", () => {
             'background_jobs_company_id_fkey',
             'audit_logs_actor_user_id_fkey'
             ,'audit_logs_session_id_fkey'
+            ,'migration_batches_company_id_fkey'
+            ,'migration_batches_initiated_by_fkey'
+            ,'legacy_id_map_migration_batch_id_fkey'
+            ,'migration_issues_migration_batch_id_fkey'
+            ,'migration_issues_resolved_by_fkey'
+            ,'migration_reconciliations_migration_batch_id_fkey'
           )
         ORDER BY conname`,
     );
@@ -165,6 +194,9 @@ describeDatabase("formal schema baseline", () => {
             'user_roles_user_role_key',
             'user_company_scopes_user_company_key',
             'idempotency_keys_company_operation_key'
+            ,'migration_batches_company_source_entity_hash_dry_key'
+            ,'legacy_id_map_source_entity_legacy_key'
+            ,'migration_reconciliations_batch_entity_key'
           )
         ORDER BY indexname`,
     );
@@ -175,10 +207,19 @@ describeDatabase("formal schema baseline", () => {
       "background_jobs_company_id_fkey",
       "company_settings_company_id_fkey",
       "idempotency_keys_company_id_fkey",
+      "legacy_id_map_migration_batch_id_fkey",
+      "migration_batches_company_id_fkey",
+      "migration_batches_initiated_by_fkey",
+      "migration_issues_migration_batch_id_fkey",
+      "migration_issues_resolved_by_fkey",
+      "migration_reconciliations_migration_batch_id_fkey",
       "user_sessions_user_id_fkey",
     ]);
     expect(uniqueIndexes.rows.map((row) => row.index_name)).toEqual([
       "idempotency_keys_company_operation_key",
+      "legacy_id_map_source_entity_legacy_key",
+      "migration_batches_company_source_entity_hash_dry_key",
+      "migration_reconciliations_batch_entity_key",
       "user_company_scopes_user_company_key",
       "user_roles_user_role_key",
       "user_sessions_token_hash_key",

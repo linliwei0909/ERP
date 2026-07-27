@@ -151,7 +151,12 @@ flowchart TB
 ## 11. 移轉與切換架構
 
 - 採混合移轉：可可靠對應的主檔與未結交易由匯入程式處理，例外由管理員整理或輸入。
-- staging／mapping 保存來源表、Ragic Record ID、轉換狀態、目標 ID、建立人及核對結果。
+- P2.6 以 `migration_batches`、`legacy_id_map`、`migration_issues`、`migration_reconciliations` 建立可重跑的匯入控制面；正式 UUID 與 legacy ID 分離。
+- CSV 依「上傳安全檢查 → typed staging object → normalization → row／跨列／DB validation → legacy FK mapping → dry-run 或正式 service → audit／mapping → reconciliation」處理。
+- 正式 execute 只呼叫既有主檔 service；每列的正式主檔、公司關係、audit、idempotency 完成及 legacy mapping 在同一 transaction，失敗不得留下不完整關係。
+- 批次以公司、來源系統、實體、檔案 SHA-256 與 dry-run 模式識別；相同內容可安全重送。原始檔預設不落地，檔名、MIME、大小、UTF-8、CSV 結構及 formula injection 均先驗證。
+- issue 只保存遮罩後資料；production log 不記錄 CSV 原文或完整資料列。
+- P2.6 已實作客戶、客戶公司關係、品項、品項公司關係 importer；聯絡人、送貨地點、價格表、價格明細、客戶價格表指派及運費規則目前只有 CSV 契約。
 - 核對至少包含筆數、公司、客戶／廠商、月份、應收、應付、票據與月結餘額。
 - 上線前一天凍結 Ragic 寫入，執行增量匯入與最終核對；切換後 Ragic 唯讀，失敗時恢復 Ragic 寫入。
 - 新系統只移未結案件與整理後主檔；完整歷史保留於唯讀 Ragic 或封存至少 7 年。
@@ -167,6 +172,8 @@ flowchart TB
 5. 在乾淨資料庫及前一版本升級路徑執行 DB integration test，驗證 constraint 存在性及正反案例。
 
 P1.2 依上述流程建立 `0002_p1_authentication_and_access`，並只在獨立 P1 測試資料庫由空白依序套用 0001、0002；已定稿的 0001 未修改。
+
+P2.6 依相同流程建立 `0008_p2_master_import_foundation`；0001～0007 未修改，並於乾淨 disposable database 由零套用 0001～0008、驗證 catalog 及 schema diff。
 
 ## 13. 部署與營運
 
@@ -197,3 +204,7 @@ P1.2 依上述流程建立 `0002_p1_authentication_and_access`，並只在獨立
 ## 15. P1.2 實作邊界
 
 P1.2 只實作帳號、密碼、Session、`ADMIN`／`ORDER_ENTRY` 後端 RBAC、公司 scope、登入／登出／公司切換、最小使用者管理與初始管理員 bootstrap。未實作客戶、品項、價格、訂單、銷貨、帳款、票據、月結、採購、庫存、批號、倉庫或 Ragic 移轉；未重建或修改現有 `erp` 資料庫。
+
+## 16. P2 工程結案邊界
+
+P2.1～P2.6 已完成公司參數、客戶、品項、價格、運費的主檔功能與整合驗收，以及小量主檔匯入框架。P2 未建立訂單、銷貨單、快照、列印、應收、庫存、採購、生產或會計資料表；完整 Ragic 正式移轉仍屬 P8。

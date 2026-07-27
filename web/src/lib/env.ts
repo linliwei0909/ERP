@@ -25,6 +25,12 @@ export const serverEnvSchema = z.object({
     .min(5)
     .max(3600)
     .default(60),
+  IMPORT_MAX_FILE_BYTES: z.coerce
+    .number()
+    .int()
+    .min(1024)
+    .max(10 * 1024 * 1024)
+    .default(1024 * 1024),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;

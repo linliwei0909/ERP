@@ -360,6 +360,10 @@ export async function createCustomer(
     customerCode: string;
     idempotencyKey: string;
     now?: Date;
+    afterWrite?: (
+      tx: Prisma.TransactionClient,
+      result: { id: string },
+    ) => Promise<void>;
   },
 ): Promise<CustomerWriteResult> {
   await requireCustomerAccess(db, input.context, input.companyId, "write");
@@ -427,6 +431,7 @@ export async function createCustomer(
             operation: "customer_company.created",
             afterJson: customerCompanySnapshot(companyRelation),
           });
+          await input.afterWrite?.(tx, { id: created.id });
           return {
             value: { id: created.id },
             responseStatus: 201,
@@ -546,6 +551,10 @@ export async function assignCustomerCompany(
     relation: CustomerCompanyInput;
     idempotencyKey: string;
     now?: Date;
+    afterWrite?: (
+      tx: Prisma.TransactionClient,
+      result: { id: string },
+    ) => Promise<void>;
   },
 ): Promise<CustomerWriteResult> {
   await requireCustomerAccess(db, input.context, input.companyId, "write");
@@ -611,6 +620,7 @@ export async function assignCustomerCompany(
               : undefined,
             afterJson: customerCompanySnapshot(relation),
           });
+          await input.afterWrite?.(tx, { id: relation.id });
           return {
             value: { id: relation.id },
             responseStatus: existing ? 200 : 201,

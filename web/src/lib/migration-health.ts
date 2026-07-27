@@ -4,6 +4,11 @@ export const EXPECTED_MIGRATIONS = [
   "0001_p1_foundation_baseline",
   "0002_p1_authentication_and_access",
   "0003_p1_operational_foundation",
+  "0004_p2_customer_master",
+  "0005_p2_item_master",
+  "0006_p2_pricing_master",
+  "0007_p2_freight_rules",
+  "0008_p2_master_import_foundation",
 ] as const;
 
 export async function assertExpectedMigrations(

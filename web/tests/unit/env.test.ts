@@ -19,6 +19,7 @@ describe("server environment validation", () => {
       JOB_RETRY_BASE_SECONDS: 5,
       JOB_RETRY_MAX_SECONDS: 300,
       WORKER_READY_MAX_AGE_SECONDS: 60,
+      IMPORT_MAX_FILE_BYTES: 1_048_576,
     });
   });
 

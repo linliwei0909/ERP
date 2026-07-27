@@ -296,12 +296,16 @@ P2.3 正式欄位與限制：
 
 | 資料表 | 主要 FK | 唯一限制 | 重要索引 |
 | --- | --- | --- | --- |
-| `migration_batches` | `started_by -> users.id` | `batch_key` | `(status, started_at desc)` |
-| `legacy_id_map` | `batch_id -> migration_batches.id` | `(source_system, source_table, legacy_record_id)` | `(target_table, target_id)`, `(batch_id, status)` |
-| `migration_issues` | `batch_id -> migration_batches.id`, `resolved_by -> users.id` nullable | optional `(batch_id, issue_key)` | `(batch_id, severity, status)` |
-| `migration_reconciliations` | `batch_id -> migration_batches.id` | `(batch_id, metric_key, dimension_hash)` | `(batch_id, result)` |
+| `migration_batches` | `company_id -> companies.id`, `initiated_by -> users.id` | `(company_id, source_system, entity_type, source_file_hash, dry_run)` | `(company_id, status, started_at desc)`, `(initiated_by, started_at desc)` |
+| `legacy_id_map` | `migration_batch_id -> migration_batches.id` | `(source_system, entity_type, legacy_id)` | `(entity_type, local_id)`, `migration_batch_id` |
+| `migration_issues` | `migration_batch_id -> migration_batches.id`, `resolved_by -> users.id` nullable | PK `id` | `(migration_batch_id, severity, resolution_status)`, `(resolution_status, created_at)` |
+| `migration_reconciliations` | `migration_batch_id -> migration_batches.id` | `(migration_batch_id, entity_type)` | `(reconciliation_status, created_at)` |
 
-匯入與人工輸入均保存來源類型、legacy ID（如有）、建立人與核對狀態。第一階段不建立 `accounting_refs` 或其他正式會計介面表。
+`migration_batches` 保存來源系統、實體類型、經消毒檔名、SHA-256、dry-run、狀態、correlation ID、起訖時間、各類筆數及 JSON 摘要。狀態值域為 `PENDING`、`VALIDATING`、`VALIDATED`、`IMPORTING`、`COMPLETED`、`COMPLETED_WITH_ERRORS`、`FAILED`。批次直接綁定公司，查詢與寫入均須驗證 ADMIN 與 company scope。
+
+`migration_issues` 保存列號、legacy ID、`ERROR`／`WARNING`、錯誤代碼、遮罩後欄位、`OPEN`／`RESOLVED`／`IGNORED` 及處理者；原始 CSV 不永久保存。`migration_reconciliations` 保存來源、匯入、略過與失敗筆數，`MATCHED` 時三者合計必須等於來源筆數。
+
+數量不得為負，完成狀態必須有 `completed_at`，非完成狀態不得有；所有 FK 使用 RESTRICT／NO ACTION，不使用 cascade delete。匯入正式主檔、audit 與 legacy mapping 以同一 service transaction 完成。第一階段不建立 `accounting_refs` 或其他正式會計介面表。
 
 ## 5. 重要資料庫 Check 與跨表驗證
 
@@ -340,6 +344,8 @@ P2.3 正式欄位與限制：
 - P1.1 已建立新的正式 active migration chain：`web/prisma/migrations/`；首筆為 immutable 的 `0001_p1_foundation_baseline`。
 - P1.2 新增 immutable 的 `0002_p1_authentication_and_access`，只加入登入鎖定、預設公司、Session 目前公司及相關 FK、CHECK、index；不建立 P2 業務資料表。
 - P1.3 新增 immutable 的 `0003_p1_operational_foundation`，加入 operational constraint、audit append-only 與 worker heartbeat。
+- P2.2～P2.5 已依序建立 immutable 的 `0004_p2_customer_master`、`0005_p2_item_master`、`0006_p2_pricing_master`、`0007_p2_freight_rules`。
+- P2.6 新增 `0008_p2_master_import_foundation`，只建立四張匯入管理表、正式 enum、RESTRICT FK、unique、index 與複雜 CHECK；不建立交易資料表。
 - P1.1 前的舊 ERP migration 原檔封存於 `web/legacy/erp-mvp/prisma/migrations/`，不再由正式 Prisma 設定執行，且不得修改。
 - 正式 P1 migration chain 已依核准程序套用至 `erp`；後續 DB integration test 仍只能使用獨立測試資料庫，不得 reset 或重建 `erp`。
 - `DECISIONS.md` 已確認現有資料為測試資料，但任何移除、reset、drop 或 volume 清除仍需另案授權。
@@ -350,6 +356,7 @@ P2.3 正式欄位與限制：
 
 ## 8. 變更紀錄
 
+- V0.8（2026-07-25，P2.6 同步）：不新增業務決議；將既有移轉概念對齊 `0008_p2_master_import_foundation` 的正式批次、mapping、issue、reconciliation 欄位、限制及公司隔離。
 - V0.8（2026-07-25）：同步 DEC-055 與 `0007_p2_freight_rules`，正式化 freight enum、模式／金額 CHECK、`numeric(18,0)`、半開期間、全歷程 GiST exclusion、兩組 composite FK、索引及 decimal-safe 試算。
 - V0.7（2026-07-25）：同步 DEC-054 與 `0006_p2_pricing_master`，正式化三張價格主檔、`numeric(18,5)`、半開期間 CHECK、全歷程 GiST exclusion、兩組 composite FK、索引與查價驗證。
 - V0.6（2026-07-25）：同步 DEC-053 與 `0005_p2_item_master`，正式化 `items`、`item_companies`、item enum、normalized code、條碼 partial unique、用途旗標、公司可銷售條件及禁止範圍。

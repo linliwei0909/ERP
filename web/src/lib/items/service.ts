@@ -325,6 +325,10 @@ export async function createItem(
     companyRelation: ItemCompanyInput;
     idempotencyKey: string;
     now?: Date;
+    afterWrite?: (
+      tx: Prisma.TransactionClient,
+      result: { id: string },
+    ) => Promise<void>;
   },
 ): Promise<ItemWriteResult> {
   await requireItemAccess(db, input.context, input.companyId, "write");
@@ -392,6 +396,7 @@ export async function createItem(
             operation: "item_company.created",
             afterJson: relationSnapshot(companyRelation),
           });
+          await input.afterWrite?.(tx, { id: created.id });
           return {
             value: { id: created.id },
             responseStatus: 201,
@@ -503,6 +508,10 @@ export async function assignItemCompany(
     relation: ItemCompanyInput;
     idempotencyKey: string;
     now?: Date;
+    afterWrite?: (
+      tx: Prisma.TransactionClient,
+      result: { id: string },
+    ) => Promise<void>;
   },
 ): Promise<ItemWriteResult> {
   await requireItemAccess(db, input.context, input.companyId, "write");
@@ -575,6 +584,7 @@ export async function assignItemCompany(
             beforeJson: existing ? relationSnapshot(existing) : undefined,
             afterJson: relationSnapshot(relation),
           });
+          await input.afterWrite?.(tx, { id: relation.id });
           return {
             value: { id: relation.id },
             responseStatus: existing ? 200 : 201,

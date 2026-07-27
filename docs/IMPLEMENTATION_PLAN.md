@@ -138,6 +138,15 @@ P2.5 完成狀態：
 - 所有寫入使用後端 RBAC、company scope、transaction、audit、idempotency 與 correlation ID；一般 API/UI 不提供 hard delete。
 - Unit 與 DB workflow tests 已涵蓋模式互斥、零元／負值、期間邊界／重疊、composite FK、decimal-safe 試算、跨公司、RBAC、停用關聯、rollback、audit、idempotency、migration 與禁止資料表。
 
+P2.6 完成狀態：
+
+- `0008_p2_master_import_foundation` 新增 `migration_batches`、`legacy_id_map`、`migration_issues`、`migration_reconciliations`，未修改 0001～0007，未建立任何交易表。
+- 完成十類主檔 CSV template 與欄位契約；正式 importer 完成 `customers`、`customer_companies`、`items`、`item_companies`，其餘六類明確維持 contract-only。
+- 完成 ADMIN-only 上傳、dry-run、validation issue、legacy mapping、正式 execute、批次摘要與 reconciliation API/UI；ORDER_ENTRY 無匯入權限。
+- 完成 MIME／副檔名／大小／UTF-8／檔名／CSV formula injection 防護、敏感欄位遮罩及不永久保存原始 CSV。
+- P2 完整主檔鏈測試已涵蓋公司切帳日、客戶／地點、品項、價格／指派、運費、ORDER_ENTRY 查詢、期間邊界、跨公司拒絕、停用依賴、audit 與 idempotency。
+- 全新 disposable database 已由零套用 0001～0008，catalog 驗證通過且 Prisma schema diff 為零。
+
 工作：
 
 - [完成 P2.1] 公司、具有生效日的公司切帳參數。
@@ -155,9 +164,10 @@ P2.5 完成狀態：
 - 查無有效價格時標示人工價格；有標準價但改價時理由必填。
 - 正式價格表只允許管理員新增／更新；人工價格不回寫正式價表。
 - [完成 P2.5 主檔] 三種運費方式、半開有效期間與唯讀試算；交易快照留待交易模組。
-- 主檔合併、停用、改指、legacy mapping 與 audit。
+- [完成 P2.6] 主檔整合驗收、匯入 batch／issue／mapping／reconciliation、安全 dry-run 與四類小量 importer。
+- 主檔合併與完整 Ragic 正式資料移轉仍留待後續核准切片／P8。
 
-完成條件：P2.2～P2.5 的跨公司負面測試、主檔唯一限制、可用條件、有效期間、缺價／缺規則、停用、decimal-safe 試算、rollback 與稽核已通過；交易價格及運費快照留待後續已授權切片。
+完成條件：P2.1～P2.6 的主檔、跨公司負面測試、唯一限制、可用條件、期間邊界、缺價／缺規則、停用、decimal-safe 試算、rollback、稽核及匯入 reconciliation 已通過，P2 工程結案；交易價格／運費快照及所有 P3 功能尚未開始。
 
 ### P3：銷售訂單與銷貨單
 
@@ -317,6 +327,7 @@ P2.5 驗證及文件同步完成後停止。未取得使用者下一步授權前
 
 ## 7. 變更紀錄
 
+- V0.8（2026-07-25，P2.6 同步）：不新增業務決議；標示 P2 主檔整合、`0008` 匯入管理 schema、CSV 契約、四類 importer、安全驗證及 P2 工程結案完成；P3 尚未開始。
 - V0.8（2026-07-25）：同步 DEC-055，標示 P2.5 運費規則、互斥模式、有效期間、decimal-safe 試算、權限、稽核及驗證完成；P2.6 以後維持未授權。
 - V0.7（2026-07-25）：同步 DEC-054，標示 P2.4 價格表、價格版本、客戶指派、有效期間、查價、權限、稽核及驗證完成；P2.5 以後維持未授權。
 - V0.6（2026-07-25）：同步 DEC-053，標示 P2.3 品項、公司關係、可銷售條件、權限、稽核及驗證完成；P2.4 以後維持未授權。

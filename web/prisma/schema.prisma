@@ -54,6 +54,40 @@ enum FreightMode {
   @@map("freight_mode")
 }
 
+enum MigrationBatchStatus {
+  PENDING
+  VALIDATING
+  VALIDATED
+  IMPORTING
+  COMPLETED
+  COMPLETED_WITH_ERRORS
+  FAILED
+
+  @@map("migration_batch_status")
+}
+
+enum MigrationIssueSeverity {
+  ERROR
+  WARNING
+
+  @@map("migration_issue_severity")
+}
+
+enum MigrationResolutionStatus {
+  OPEN
+  RESOLVED
+  IGNORED
+
+  @@map("migration_resolution_status")
+}
+
+enum MigrationReconciliationStatus {
+  MATCHED
+  MISMATCHED
+
+  @@map("migration_reconciliation_status")
+}
+
 model Company {
   id        String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   code      String       @unique(map: "companies_code_key") @db.VarChar(32)
@@ -73,6 +107,7 @@ model Company {
   customerRelations CustomerCompany[]
   itemRelations     ItemCompany[]
   priceLists        PriceList[]
+  migrationBatches  MigrationBatch[]
 
   @@index([status, name], map: "companies_status_name_idx")
   @@map("companies")
@@ -132,6 +167,8 @@ model User {
   priceAssignmentsUpdated CustomerPriceListAssignment[] @relation("PriceAssignmentUpdatedBy")
   freightRulesCreated FreightRule[] @relation("FreightRuleCreatedBy")
   freightRulesUpdated FreightRule[] @relation("FreightRuleUpdatedBy")
+  migrationBatchesInitiated MigrationBatch[] @relation("MigrationBatchInitiatedBy")
+  migrationIssuesResolved MigrationIssue[] @relation("MigrationIssueResolvedBy")
   defaultCompany  Company?           @relation("UserDefaultCompany", fields: [defaultCompanyId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   @@index([status], map: "users_status_idx")
@@ -580,4 +617,95 @@ model FreightRule {
   @@index([companyId, customerId, deliveryLocationId, status, validFrom, validTo], map: "freight_rules_lookup_idx")
   @@index([companyId, customerId, deliveryLocationId, validFrom(sort: Desc)], map: "freight_rules_history_idx")
   @@map("freight_rules")
+}
+
+model MigrationBatch {
+  id             String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId      String               @map("company_id") @db.Uuid
+  sourceSystem   String               @map("source_system") @db.VarChar(50)
+  entityType     String               @map("entity_type") @db.VarChar(100)
+  sourceFileName String               @map("source_file_name") @db.VarChar(255)
+  sourceFileHash String               @map("source_file_hash") @db.Char(64)
+  status         MigrationBatchStatus @default(PENDING)
+  dryRun         Boolean              @default(true) @map("dry_run")
+  startedAt      DateTime             @default(now()) @map("started_at") @db.Timestamptz(3)
+  completedAt    DateTime?            @map("completed_at") @db.Timestamptz(3)
+  initiatedById  String               @map("initiated_by") @db.Uuid
+  correlationId  String               @map("correlation_id") @db.VarChar(100)
+  totalCount     Int                  @default(0) @map("total_count")
+  validCount     Int                  @default(0) @map("valid_count")
+  importedCount  Int                  @default(0) @map("imported_count")
+  skippedCount   Int                  @default(0) @map("skipped_count")
+  failedCount    Int                  @default(0) @map("failed_count")
+  summaryJson    Json?                @map("summary_json")
+  updatedAt      DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  company         Company                   @relation(fields: [companyId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  initiatedBy     User                      @relation("MigrationBatchInitiatedBy", fields: [initiatedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  legacyMappings  LegacyIdMap[]
+  issues          MigrationIssue[]
+  reconciliations MigrationReconciliation[]
+
+  @@unique([companyId, sourceSystem, entityType, sourceFileHash, dryRun], map: "migration_batches_company_source_entity_hash_dry_key")
+  @@index([companyId, status, startedAt(sort: Desc)], map: "migration_batches_company_status_started_idx")
+  @@index([initiatedById, startedAt(sort: Desc)], map: "migration_batches_initiator_started_idx")
+  @@map("migration_batches")
+}
+
+model LegacyIdMap {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sourceSystem     String   @map("source_system") @db.VarChar(50)
+  entityType       String   @map("entity_type") @db.VarChar(100)
+  legacyId         String   @map("legacy_id") @db.VarChar(255)
+  localId          String   @map("local_id") @db.Uuid
+  migrationBatchId String   @map("migration_batch_id") @db.Uuid
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  migrationBatch MigrationBatch @relation(fields: [migrationBatchId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([sourceSystem, entityType, legacyId], map: "legacy_id_map_source_entity_legacy_key")
+  @@index([entityType, localId], map: "legacy_id_map_entity_local_idx")
+  @@index([migrationBatchId], map: "legacy_id_map_batch_idx")
+  @@map("legacy_id_map")
+}
+
+model MigrationIssue {
+  id                 String                    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  migrationBatchId   String                    @map("migration_batch_id") @db.Uuid
+  rowNumber           Int?                      @map("row_number")
+  legacyId            String?                   @map("legacy_id") @db.VarChar(255)
+  severity            MigrationIssueSeverity
+  issueCode           String                    @map("issue_code") @db.VarChar(100)
+  message             String                    @db.VarChar(500)
+  sourceDataJson      Json?                     @map("source_data_json")
+  resolutionStatus   MigrationResolutionStatus @default(OPEN) @map("resolution_status")
+  resolvedById        String?                   @map("resolved_by") @db.Uuid
+  resolvedAt          DateTime?                 @map("resolved_at") @db.Timestamptz(3)
+  createdAt           DateTime                  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  migrationBatch MigrationBatch @relation(fields: [migrationBatchId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  resolvedBy     User?          @relation("MigrationIssueResolvedBy", fields: [resolvedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([migrationBatchId, severity, resolutionStatus], map: "migration_issues_batch_severity_resolution_idx")
+  @@index([resolutionStatus, createdAt], map: "migration_issues_resolution_created_idx")
+  @@map("migration_issues")
+}
+
+model MigrationReconciliation {
+  id                   String                        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  migrationBatchId     String                        @map("migration_batch_id") @db.Uuid
+  entityType           String                        @map("entity_type") @db.VarChar(100)
+  sourceCount          Int                           @map("source_count")
+  importedCount        Int                           @map("imported_count")
+  skippedCount         Int                           @map("skipped_count")
+  failedCount          Int                           @map("failed_count")
+  reconciliationStatus MigrationReconciliationStatus @map("reconciliation_status")
+  detailsJson          Json?                         @map("details_json")
+  createdAt            DateTime                      @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  migrationBatch MigrationBatch @relation(fields: [migrationBatchId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([migrationBatchId, entityType], map: "migration_reconciliations_batch_entity_key")
+  @@index([reconciliationStatus, createdAt], map: "migration_reconciliations_status_created_idx")
+  @@map("migration_reconciliations")
 }

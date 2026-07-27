@@ -230,6 +230,14 @@
 - 上線後回退窗口與附件移轉範圍於 P8 切換前確認，不阻塞 P1；未確認前不得刪除來源資料或形成依賴未決事項的不可逆操作。
 - 現有資料均為測試資料，不要求保留；是否移除既有資料庫或 schema 必須在另行授權的 migration／環境重建任務中處理，本輪不得執行。
 
+### P2.6 工程落地
+
+- P2.6 只完成主檔整合驗收及小量匯入框架，不代表已執行 Ragic 正式全量移轉。
+- 匯入支援 dry-run、型別驗證、normalization、檔內與資料庫重複檢查、legacy FK mapping、issue report、冪等重送、批次摘要及 reconciliation。
+- 正式寫入必須經既有主檔 service、ADMIN、company scope、transaction、audit、idempotency 與 correlation ID；不得停用正式 constraint 或將 legacy ID 當作正式 UUID。
+- 原始 CSV 預設不永久保存，不記錄完整資料列；issue 僅保存已遮罩且已防 CSV formula injection 的欄位。
+- P2.6 正式 importer 僅完成 `customers`、`customer_companies`、`items`、`item_companies`；其餘六類僅完成 CSV template、validation contract 與後續規劃，不得視為已可正式匯入。
+
 ## 15. 非功能基線
 
 - 同時使用者：10 人。
@@ -249,6 +257,7 @@
 
 ## 17. 變更紀錄
 
+- V0.8（2026-07-25，P2.6 同步）：不新增業務決議；記錄主檔匯入框架的安全、transaction、mapping、reconciliation 與已完成 importer 邊界。
 - V0.8（2026-07-25）：同步 DEC-055，正式化送貨地點運費模式、金額精度、decimal-safe 試算、半開期間、全歷程排除重疊、composite FK、明確日期查詢、`FREIGHT_RULE_NOT_FOUND`、權限及 audit。
 - V0.7（2026-07-25）：同步 DEC-054，正式化公司價格表、未稅單價精度、半開有效期間、全歷程排除重疊、客戶指派 composite FK、明確日期查價、`PRICE_NOT_FOUND`、權限及 audit。
 - V0.6（2026-07-25）：同步 DEC-053，正式化跨公司品項、兩種品項類型、代碼與條碼 normalization、用途旗標、公司別代碼、可銷售條件、權限及 audit。
