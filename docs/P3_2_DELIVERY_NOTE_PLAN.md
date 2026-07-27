@@ -1,12 +1,12 @@
 # P3.2 銷貨單規格盤點與實作規劃
 
-文件狀態：P3.2a schema／migration fresh DB 驗證完成；P3.2b service 以後尚未核准
+文件狀態：P3.2a schema／migration、P3.2b 核心 service 與 P3.2c revision rebuild／ADMIN direct void 已完成工程驗證；P3.2d API／UI 尚未開始
 規劃日期：2026-07-27
 規格基線：`DECISIONS.md` V0.10／DEC-057
 適用範圍：P3.2 銷貨單與銷貨單明細
 明確排除：列印／PDF、實際出貨日正式流程、紙本回收確認、應收、庫存與 P3.3／P3.4
 
-> OQ-046～OQ-050 已由 DEC-057 正式決議。P3.2a 已完成 Prisma schema、0010 與 DB contract 驗證；service、API、UI、列印、PDF、出貨、回收確認與應收仍未開始。
+> OQ-046～OQ-050 已由 DEC-057 正式決議。P3.2a～P3.2c 已完成 DB contract、核心 service、revision rebuild、replacement chain 與 ADMIN direct void 驗證；API、UI、列印、PDF、出貨、回收確認與應收仍未開始。
 
 ## 1. 現況盤點
 
@@ -423,7 +423,7 @@ Revision start 沒有 delivery-note mutation，沿用既有 sales-order revision
 4. Custom SQL partial unique、composite FK、supporting unique、複雜 CHECK。
 5. Custom SQL constraint trigger／function 強制 `sales_order_relations.ADDITION` 同公司、source 為 root、不得 cycle 或 addition-as-source；保留既有 self CHECK 與 duplicate unique。
 6. `delivery_note_date`／fiscal period、號碼 regex、void lifecycle、replacement、snapshot 與金額 CHECK。
-7. Migration-health 精確 chain 已加入 `0010_p3_delivery_notes`；P3.2 權限程式未開始。
+7. Migration-health 精確 chain 已加入 `0010_p3_delivery_notes`；P3.2b／P3.2c service 已實作後端 RBAC 與 company scope，P3.2d API／UI 權限整合尚未開始。
 8. 不修改 `0001`～`0009`。
 
 驗證流程：
@@ -508,9 +508,9 @@ Revision start 沒有 delivery-note mutation，沿用既有 sales-order revision
 
 P3.2 實作取得另案授權後，建議拆成：
 
-1. **P3.2a Schema／migration**：enum、兩表、constraints、catalog tests、fresh DB。
-2. **P3.2b 建立與查詢**：number、snapshot copy、create/get/list、order `DELIVERY_CREATED`。
-3. **P3.2c 修訂／作廢／重建**：原子 workflow、replacement history、admin void。
+1. **P3.2a Schema／migration（完成）**：enum、兩表、constraints、catalog tests、fresh DB。
+2. **P3.2b 建立與查詢（完成）**：number、snapshot copy、create/get/list、order `DELIVERY_CREATED`。
+3. **P3.2c 修訂／作廢／重建（完成）**：原子 workflow、replacement history、admin void。
 4. **P3.2d API／UI**：order linkage、delivery list/detail、permission-gated actions。
 5. **P3.2e 整合驗收**：concurrency、rollback、idempotency、company isolation、fresh chain、health、smoke、validation 文件。
 
@@ -520,10 +520,17 @@ P3.2 實作取得另案授權後，建議拆成：
 
 已完成 `createDeliveryNoteFromOrder`、`getDeliveryNote`、`listDeliveryNotes`、`getCurrentDeliveryNoteForOrder`、RBAC／company scope、row lock、Asia/Taipei 取號、confirmed snapshot copy、Decimal invariant、audit、idempotency、order `DELIVERY_CREATED` 與 order void 的 `ORDER_VOID` 內部 helper。`erp_p3_2b_test_run_20260727_03` 完成 0001～0010、diff 0、單獨 9 項及完整 114 項 DB tests；unit、lint、typecheck、build 與 health 均通過。
 
-P3.2c 的 revision rebuild、replacement 與 ADMIN direct void，以及 P3.2d API／UI，仍須另案授權。
+P3.2c 的 revision rebuild、replacement chain 與 ADMIN direct void 已完成工程驗證。P3.2d API／UI 仍須另案授權。
 
-## 22. 變更紀錄
+## 22. P3.2c 工程狀態
 
+**P3.2c 修訂重建、replacement chain 與 ADMIN direct void service 已完成工程驗證。**
+
+已完成 `DELIVERY_CREATED -> DRAFT` revision start 且保留舊 `ACTIVE` 銷貨單、re-confirm controlled state、`rebuildDeliveryNoteForOrder`、`adminVoidDeliveryNote`、固定 row-lock 順序、`ORDER_REVISION_REBUILD`／`ADMIN_DIRECT`、replacement 雙向摘要、typed errors、audit、idempotency 及完整 atomic rollback。`erp_p3_2c_test_run_20260727_02` 完成 0001～0010、schema diff 0、delivery-note 16 項專項測試與完整 121 項 DB tests；unit、lint、typecheck、build、Prisma 與本機唯讀 health Gate 全部通過。
+
+## 23. 變更紀錄
+
+- V0.10（2026-07-27，P3.2c 工程同步）：完成 revision start/re-confirm controlled state、原子 rebuild、replacement chain、ADMIN direct void、固定 lock 順序、audit、idempotency、typed errors 與 rollback；API／UI 仍未開始。
 - V0.10（2026-07-27，P3.2b 工程同步）：完成初次建立與三個 query service、row lock、RBAC、月流水、snapshot、Decimal、audit、idempotency、ORDER_VOID 內部整合及 atomic rollback；API／UI／rebuild／ADMIN direct void 未開始。
 - V0.10（2026-07-27，P3.2a 工程同步）：完成 Prisma schema、`0010_p3_delivery_notes`、partial unique、composite FK、CHECK、replacement／ADDITION trigger、兩個 fresh DB、本機部署、health 與測試驗證；service／API／UI 未開始。
 - V0.10（2026-07-27）：同步 DEC-057 與 OQ-046～OQ-050 resolution，將 P3.2 狀態改為規格決議完成、實作未開始，並統一狀態、日期取號、revision rebuild、追加、ADMIN direct void、schema、service、audit、idempotency、migration 與 test plan。

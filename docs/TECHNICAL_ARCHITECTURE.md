@@ -1,6 +1,6 @@
 # Ragic 本地端系統技術架構
 
-文件狀態：P1、P2、P3.1 已完成；P3.2a schema 與 P3.2b 核心 service 已完成，P3.2c 以後未開始
+文件狀態：P1、P2、P3.1 已完成；P3.2a schema、P3.2b 核心 service 與 P3.2c rebuild／ADMIN direct void 已完成，P3.2d API／UI 尚未開始
 同步基線：`DECISIONS.md` V0.10
 版本日期：2026-07-27
 
@@ -228,11 +228,11 @@ P2.1～P2.6 已完成公司參數、客戶、品項、價格、運費的主檔�
 
 ## 18. P3.2 銷貨單架構決議
 
-P3.2a 已完成 Prisma schema、`0010_p3_delivery_notes`、custom SQL、fresh DB 驗證及本機 `erp` 受控部署。P3.2b 已完成建立／查詢 service、RBAC、row lock、snapshot copy、取號、audit、idempotency、order `DELIVERY_CREATED` 與 order-void 內部整合；API、UI、rebuild 與 ADMIN direct void 尚未建立。
+P3.2a 已完成 Prisma schema、`0010_p3_delivery_notes`、custom SQL、fresh DB 驗證及本機 `erp` 受控部署。P3.2b 已完成建立／查詢 service；P3.2c 已完成 revision start/re-confirm controlled state、原子 rebuild、replacement chain、ADMIN direct void、typed errors、固定 row lock、audit、idempotency 與 rollback。API 與 UI 尚未建立。
 
 - 公開 command 為 `createDeliveryNoteFromOrder`、`rebuildDeliveryNoteForOrder`、`adminVoidDeliveryNote`；查詢為 `getDeliveryNote`、`listDeliveryNotes`、`getCurrentDeliveryNoteForOrder`。Order 作廢使用內部 `voidDeliveryNoteForOrderVoid` helper，revision start 不操作 delivery note。
 - 初次建立由使用者明確觸發。Server 驗證 order=`CONFIRMED`、permission、company scope 及不存在非 `VOIDED` 銷貨單，才在 transaction 內配置 `DELIVERY_NOTE` 號碼並建立完整快照。
-- Rebuild 是不可拆分的 server command。Lock 順序固定為 idempotency claim、order、目前非 `VOIDED` delivery note、document sequence，接著建立新單、作廢舊單、更新 order、audit 與 idempotency completion。
+- Rebuild 是不可拆分的 server command。Lock 順序固定為 idempotency claim、order、目前非 `VOIDED` delivery note、document sequence；為符合 partial unique，同一 transaction 先將舊單改為 `VOIDED`，再建立新 `ACTIVE` header／lines、更新 order、寫 audit 並完成 idempotency。任一步失敗會完整 rollback。
 - 銷貨單 header／lines 只複製新 revision 已確認的 typed snapshots 與凍結金額，不重新查詢 customer／item／price／freight master，也不接受 client snapshot、金額、單號、日期或 current delivery note。
 - `delivery_note_date` 由 server 以 `Asia/Taipei` business date 產生並保存為 PostgreSQL `date`。號碼年月與 `document_company_code` 有效版本都依此日期；禁止用 UTC 日期切割、client today、`order_date` 或 `actual_delivery_date`。
 - 每張追加訂單直接以 `ADDITION` 指向 root original order，並建立自己的銷貨單；不形成 chain、aggregate delivery note 或跨 order 合併。Service 解析 root 並防 self、duplicate、cycle 及 addition-as-source。
@@ -245,6 +245,7 @@ P3.2a 已完成 Prisma schema、`0010_p3_delivery_notes`、custom SQL、fresh DB
 
 ## 19. 變更紀錄
 
+- V0.10（2026-07-27，P3.2c 工程同步）：完成 revision start/re-confirm controlled state、原子 replacement rebuild、ADMIN direct void、固定 lock 順序、typed errors、audit、idempotency 與 rollback；API／UI 未開始。
 - V0.10（2026-07-27，P3.2b 工程同步）：完成 delivery-note 核心建立／查詢 service、company scope／RBAC、order／current-note row lock、Asia/Taipei 月流水、confirmed snapshot copy、Decimal invariant、audit、idempotency 與 ORDER_VOID 整合；API／UI／rebuild／ADMIN direct void 未開始。
 - V0.10（2026-07-27，P3.2a 工程同步）：完成 Prisma model、`0010_p3_delivery_notes`、partial unique、composite FK、replacement／ADDITION constraint trigger、兩個 fresh DB、本機部署及 health 驗證；service／API／UI 未開始。
 - V0.10（2026-07-27）：同步 DEC-057，完成 P3.2 銷貨單手動建立、revision 原子重建、追加 root 關聯、ADMIN direct void、`delivery_note_date` 取號、snapshot、權限、transaction、audit、idempotency 與 0010 架構規劃；尚未開始實作。

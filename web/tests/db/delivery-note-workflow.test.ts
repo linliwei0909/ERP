@@ -4,24 +4,35 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PrismaClient } from "../../src/generated/prisma/client";
 import type { RequestContext } from "../../src/lib/auth/session";
 import {
+  adminVoidDeliveryNote,
   createDeliveryNoteFromOrder,
   getCurrentDeliveryNoteForOrder,
   getDeliveryNote,
   listDeliveryNotes,
+  rebuildDeliveryNoteForOrder,
 } from "../../src/lib/delivery-notes/service";
 import {
   DeliveryNoteAccessDeniedError,
+  DeliveryNoteAdminVoidNotAllowedError,
   DeliveryNoteAlreadyExistsError,
+  DeliveryNoteDownstreamLockedError,
   DeliveryNoteIdempotencyConflictError,
   DeliveryNoteInvariantError,
   DeliveryNotePrerequisiteError,
+  DeliveryNoteRebuildNotAllowedError,
+  DeliveryNoteRebuildRequiredError,
+  DeliveryNoteVoidReasonRequiredError,
 } from "../../src/lib/delivery-notes/errors";
-import { voidSalesOrder } from "../../src/lib/sales-orders/service";
+import {
+  confirmSalesOrder,
+  startSalesOrderRevision,
+  voidSalesOrder,
+} from "../../src/lib/sales-orders/service";
 
 const databaseUrl = process.env.P1_TEST_DATABASE_URL;
 const describeDatabase = databaseUrl ? describe.sequential : describe.skip;
 
-describeDatabase("P3.2b delivery-note workflows", () => {
+describeDatabase("P3.2b/P3.2c delivery-note workflows", () => {
   const db = new PrismaClient({
     adapter: new PrismaPg({ connectionString: databaseUrl! }),
   });
@@ -30,6 +41,8 @@ describeDatabase("P3.2b delivery-note workflows", () => {
   let companyB: { id: string; code: string; name: string };
   let contextA: RequestContext;
   let contextBoth: RequestContext;
+  let adminContext: RequestContext;
+  let noScopeAdminContext: RequestContext;
   let noPermissionContext: RequestContext;
   let customerId: string;
   let deliveryLocationId: string;
@@ -93,6 +106,17 @@ describeDatabase("P3.2b delivery-note workflows", () => {
       ...baseContext,
       authorizedCompanies: [companyA, companyB],
       selectedCompany: companyA,
+    };
+    adminContext = {
+      ...baseContext,
+      roleCodes: ["ADMIN"],
+      authorizedCompanies: [companyA, companyB],
+      selectedCompany: companyA,
+    };
+    noScopeAdminContext = {
+      ...adminContext,
+      authorizedCompanies: [companyB],
+      selectedCompany: companyB,
     };
     noPermissionContext = {
       ...contextA,
@@ -339,6 +363,52 @@ describeDatabase("P3.2b delivery-note workflows", () => {
       },
     });
     return { ...order, lines: [line] };
+  }
+
+  async function prepareConfirmedRevision(
+    context: RequestContext = contextA,
+  ) {
+    const order = await createConfirmedOrder(companyA);
+    const old = await createDeliveryNoteFromOrder(db, {
+      context,
+      companyId: companyA.id,
+      salesOrderId: order.id,
+      expectedRevisionNo: 1,
+      idempotencyKey: randomUUID(),
+      now: new Date("2026-07-27T03:00:00.000Z"),
+    });
+    await startSalesOrderRevision(db, {
+      context,
+      companyId: companyA.id,
+      orderId: order.id,
+      idempotencyKey: randomUUID(),
+      now: new Date("2026-07-27T04:00:00.000Z"),
+    });
+    const draft = await db.salesOrder.findUniqueOrThrow({
+      where: { id: order.id },
+    });
+    expect(draft).toMatchObject({
+      status: "DRAFT",
+      revisionNo: 2,
+      confirmedAt: null,
+      confirmedById: null,
+    });
+    expect(
+      await db.deliveryNote.findUniqueOrThrow({
+        where: { id: old.deliveryNote.id },
+      }),
+    ).toMatchObject({
+      status: "ACTIVE",
+      salesOrderRevisionNo: 1,
+    });
+    await confirmSalesOrder(db, {
+      context,
+      companyId: companyA.id,
+      orderId: order.id,
+      idempotencyKey: randomUUID(),
+      now: new Date("2026-07-27T05:00:00.000Z"),
+    });
+    return { orderId: order.id, old: old.deliveryNote };
   }
 
   it("creates ACTIVE lines from confirmed snapshots and replays without new number or audit", async () => {
@@ -763,5 +833,600 @@ describeDatabase("P3.2b delivery-note workflows", () => {
     expect(sequenceAfter?.lastValue ?? BigInt(0)).toBe(
       sequenceBefore?.lastValue ?? BigInt(0),
     );
+  });
+
+  it("keeps the old note through revision and atomically rebuilds with stable replay", async () => {
+    const prepared = await prepareConfirmedRevision();
+    const oldBefore = await getDeliveryNote(db, {
+      context: contextA,
+      companyId: companyA.id,
+      deliveryNoteId: prepared.old.id,
+    });
+    await expect(
+      createDeliveryNoteFromOrder(db, {
+        context: contextA,
+        companyId: companyA.id,
+        salesOrderId: prepared.orderId,
+        expectedRevisionNo: 2,
+        idempotencyKey: randomUUID(),
+      }),
+    ).rejects.toBeInstanceOf(DeliveryNoteRebuildRequiredError);
+
+    const key = randomUUID();
+    const rebuilt = await rebuildDeliveryNoteForOrder(db, {
+      context: contextA,
+      companyId: companyA.id,
+      salesOrderId: prepared.orderId,
+      expectedRevisionNo: 2,
+      reason: "訂單修訂後重建",
+      idempotencyKey: key,
+      now: new Date("2026-07-28T03:00:00.000Z"),
+    });
+    const replay = await rebuildDeliveryNoteForOrder(db, {
+      context: contextA,
+      companyId: companyA.id,
+      salesOrderId: prepared.orderId,
+      expectedRevisionNo: 2,
+      reason: "訂單修訂後重建",
+      idempotencyKey: key,
+      // 明確落在首次請求的 idempotency TTL 內，避免測試到期邊界語意。
+      now: new Date("2026-07-28T03:05:00.000Z"),
+    });
+    expect(rebuilt.replayed).toBe(false);
+    expect(replay).toEqual({ ...rebuilt, replayed: true });
+    expect(rebuilt.deliveryNote).toMatchObject({
+      status: "ACTIVE",
+      salesOrderRevisionNo: 2,
+      replacedDeliveryNoteId: prepared.old.id,
+    });
+    expect(rebuilt.deliveryNote.deliveryNoteNumber).not.toBe(
+      prepared.old.deliveryNoteNumber,
+    );
+    const oldAfter = await getDeliveryNote(db, {
+      context: contextA,
+      companyId: companyA.id,
+      deliveryNoteId: prepared.old.id,
+    });
+    expect(oldAfter).toMatchObject({
+      status: "VOIDED",
+      voidSource: "ORDER_REVISION_REBUILD",
+      replacementDeliveryNoteId: rebuilt.deliveryNote.id,
+    });
+    expect(oldAfter.customerSnapshot).toEqual(oldBefore.customerSnapshot);
+    expect(oldAfter.lines).toEqual(oldBefore.lines);
+    expect(rebuilt.deliveryNote.replacedDeliveryNote).toMatchObject({
+      id: prepared.old.id,
+      status: "VOIDED",
+      salesOrderRevisionNo: 1,
+    });
+    expect(
+      await db.salesOrder.findUniqueOrThrow({
+        where: { id: prepared.orderId },
+      }),
+    ).toMatchObject({ status: "DELIVERY_CREATED", revisionNo: 2 });
+    expect(
+      await getCurrentDeliveryNoteForOrder(db, {
+        context: contextA,
+        companyId: companyA.id,
+        salesOrderId: prepared.orderId,
+      }),
+    ).toMatchObject({ id: rebuilt.deliveryNote.id });
+    expect(
+      await db.auditLog.count({
+        where: {
+          OR: [
+            {
+              entityId: rebuilt.deliveryNote.id,
+              operation: "delivery_note.rebuilt",
+            },
+            {
+              entityId: prepared.orderId,
+              operation: "sales_order.delivery_rebuilt",
+            },
+          ],
+        },
+      }),
+    ).toBe(2);
+  });
+
+  it("extends the replacement chain forward without rewriting history", async () => {
+    const prepared = await prepareConfirmedRevision();
+    const second = await rebuildDeliveryNoteForOrder(db, {
+      context: contextA,
+      companyId: companyA.id,
+      salesOrderId: prepared.orderId,
+      expectedRevisionNo: 2,
+      reason: "建立第二版",
+      idempotencyKey: randomUUID(),
+    });
+    await startSalesOrderRevision(db, {
+      context: contextA,
+      companyId: companyA.id,
+      orderId: prepared.orderId,
+      idempotencyKey: randomUUID(),
+    });
+    await confirmSalesOrder(db, {
+      context: contextA,
+      companyId: companyA.id,
+      orderId: prepared.orderId,
+      idempotencyKey: randomUUID(),
+    });
+    const third = await rebuildDeliveryNoteForOrder(db, {
+      context: contextA,
+      companyId: companyA.id,
+      salesOrderId: prepared.orderId,
+      expectedRevisionNo: 3,
+      reason: "建立第三版",
+      idempotencyKey: randomUUID(),
+    });
+    expect(third.deliveryNote.replacedDeliveryNote).toMatchObject({
+      id: second.deliveryNote.id,
+      salesOrderRevisionNo: 2,
+      status: "VOIDED",
+    });
+    const first = await getDeliveryNote(db, {
+      context: contextA,
+      companyId: companyA.id,
+      deliveryNoteId: prepared.old.id,
+    });
+    const secondAfter = await getDeliveryNote(db, {
+      context: contextA,
+      companyId: companyA.id,
+      deliveryNoteId: second.deliveryNote.id,
+    });
+    expect(first.replacementDeliveryNote).toMatchObject({
+      id: second.deliveryNote.id,
+    });
+    expect(secondAfter.replacementDeliveryNote).toMatchObject({
+      id: third.deliveryNote.id,
+    });
+  });
+
+  it("rejects invalid rebuild states, company access and concurrent duplicates", async () => {
+    const draft = await createConfirmedOrder(companyA, {
+      status: "DRAFT",
+      revisionNo: 2,
+    });
+    await expect(
+      rebuildDeliveryNoteForOrder(db, {
+        context: contextA,
+        companyId: companyA.id,
+        salesOrderId: draft.id,
+        expectedRevisionNo: 2,
+        reason: "不可重建",
+        idempotencyKey: randomUUID(),
+      }),
+    ).rejects.toBeInstanceOf(DeliveryNoteRebuildNotAllowedError);
+
+    const prepared = await prepareConfirmedRevision();
+    await expect(
+      rebuildDeliveryNoteForOrder(db, {
+        context: noPermissionContext,
+        companyId: companyA.id,
+        salesOrderId: prepared.orderId,
+        expectedRevisionNo: 2,
+        reason: "無權限",
+        idempotencyKey: randomUUID(),
+      }),
+    ).rejects.toBeInstanceOf(DeliveryNoteAccessDeniedError);
+
+    const results = await Promise.allSettled(
+      [randomUUID(), randomUUID()].map((idempotencyKey) =>
+        rebuildDeliveryNoteForOrder(db, {
+          context: contextA,
+          companyId: companyA.id,
+          salesOrderId: prepared.orderId,
+          expectedRevisionNo: 2,
+          reason: "並行重建",
+          idempotencyKey,
+        }),
+      ),
+    );
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(
+      1,
+    );
+    expect(results.filter((result) => result.status === "rejected")).toHaveLength(
+      1,
+    );
+
+    const downstream = await prepareConfirmedRevision();
+    await db.deliveryNote.update({
+      where: { id: downstream.old.id },
+      data: { status: "SHIPPED" },
+    });
+    await expect(
+      rebuildDeliveryNoteForOrder(db, {
+        context: contextA,
+        companyId: companyA.id,
+        salesOrderId: downstream.orderId,
+        expectedRevisionNo: 2,
+        reason: "已出貨不可重建",
+        idempotencyKey: randomUUID(),
+      }),
+    ).rejects.toBeInstanceOf(DeliveryNoteDownstreamLockedError);
+  });
+
+  it("ADMIN direct void is scoped, idempotent and permits a later new number", async () => {
+    const order = await createConfirmedOrder(companyA);
+    const created = await createDeliveryNoteFromOrder(db, {
+      context: adminContext,
+      companyId: companyA.id,
+      salesOrderId: order.id,
+      expectedRevisionNo: 1,
+      idempotencyKey: randomUUID(),
+    });
+    const key = randomUUID();
+    const voided = await adminVoidDeliveryNote(db, {
+      context: adminContext,
+      companyId: companyA.id,
+      deliveryNoteId: created.deliveryNote.id,
+      voidReason: "  管理員例外作廢  ",
+      idempotencyKey: key,
+      now: new Date("2026-07-27T06:00:00.000Z"),
+    });
+    const replay = await adminVoidDeliveryNote(db, {
+      context: adminContext,
+      companyId: companyA.id,
+      deliveryNoteId: created.deliveryNote.id,
+      voidReason: "管理員例外作廢",
+      idempotencyKey: key,
+    });
+    expect(replay).toEqual({ ...voided, replayed: true });
+    expect(voided.deliveryNote).toMatchObject({
+      status: "VOIDED",
+      voidSource: "ADMIN_DIRECT",
+      voidReason: "管理員例外作廢",
+      voidedById: userId,
+    });
+    expect(voided.deliveryNote.voidedBy).toMatchObject({ id: userId });
+    expect(
+      await db.salesOrder.findUniqueOrThrow({ where: { id: order.id } }),
+    ).toMatchObject({ status: "CONFIRMED" });
+    expect(
+      await getCurrentDeliveryNoteForOrder(db, {
+        context: adminContext,
+        companyId: companyA.id,
+        salesOrderId: order.id,
+      }),
+    ).toBeNull();
+    expect(
+      await db.auditLog.count({
+        where: {
+          entityId: created.deliveryNote.id,
+          operation: "delivery_note.voided",
+          reason: "管理員例外作廢",
+        },
+      }),
+    ).toBe(1);
+    const replacement = await createDeliveryNoteFromOrder(db, {
+      context: adminContext,
+      companyId: companyA.id,
+      salesOrderId: order.id,
+      expectedRevisionNo: 1,
+      idempotencyKey: randomUUID(),
+    });
+    expect(replacement.deliveryNote.deliveryNoteNumber).not.toBe(
+      created.deliveryNote.deliveryNoteNumber,
+    );
+  });
+
+  it("rejects unauthorized, blank, conflicting and downstream ADMIN voids", async () => {
+    const order = await createConfirmedOrder(companyA);
+    const created = await createDeliveryNoteFromOrder(db, {
+      context: contextA,
+      companyId: companyA.id,
+      salesOrderId: order.id,
+      expectedRevisionNo: 1,
+      idempotencyKey: randomUUID(),
+    });
+    await expect(
+      adminVoidDeliveryNote(db, {
+        context: contextA,
+        companyId: companyA.id,
+        deliveryNoteId: created.deliveryNote.id,
+        voidReason: "ORDER_ENTRY 不可作廢",
+        idempotencyKey: randomUUID(),
+      }),
+    ).rejects.toBeInstanceOf(DeliveryNoteAccessDeniedError);
+    await expect(
+      adminVoidDeliveryNote(db, {
+        context: noScopeAdminContext,
+        companyId: companyA.id,
+        deliveryNoteId: created.deliveryNote.id,
+        voidReason: "跨公司不可作廢",
+        idempotencyKey: randomUUID(),
+      }),
+    ).rejects.toBeInstanceOf(DeliveryNoteAccessDeniedError);
+    await expect(
+      adminVoidDeliveryNote(db, {
+        context: adminContext,
+        companyId: companyA.id,
+        deliveryNoteId: created.deliveryNote.id,
+        voidReason: "   ",
+        idempotencyKey: randomUUID(),
+      }),
+    ).rejects.toBeInstanceOf(DeliveryNoteVoidReasonRequiredError);
+
+    const key = randomUUID();
+    await adminVoidDeliveryNote(db, {
+      context: adminContext,
+      companyId: companyA.id,
+      deliveryNoteId: created.deliveryNote.id,
+      voidReason: "第一次理由",
+      idempotencyKey: key,
+    });
+    await expect(
+      adminVoidDeliveryNote(db, {
+        context: adminContext,
+        companyId: companyA.id,
+        deliveryNoteId: created.deliveryNote.id,
+        voidReason: "不同理由",
+        idempotencyKey: key,
+      }),
+    ).rejects.toBeInstanceOf(DeliveryNoteIdempotencyConflictError);
+    await expect(
+      adminVoidDeliveryNote(db, {
+        context: adminContext,
+        companyId: companyA.id,
+        deliveryNoteId: created.deliveryNote.id,
+        voidReason: "重複作廢",
+        idempotencyKey: randomUUID(),
+      }),
+    ).rejects.toBeInstanceOf(DeliveryNoteAdminVoidNotAllowedError);
+
+    const shippedOrder = await createConfirmedOrder(companyA);
+    const shipped = await createDeliveryNoteFromOrder(db, {
+      context: adminContext,
+      companyId: companyA.id,
+      salesOrderId: shippedOrder.id,
+      expectedRevisionNo: 1,
+      idempotencyKey: randomUUID(),
+    });
+    await db.deliveryNote.update({
+      where: { id: shipped.deliveryNote.id },
+      data: { status: "SHIPPED" },
+    });
+    await expect(
+      adminVoidDeliveryNote(db, {
+        context: adminContext,
+        companyId: companyA.id,
+        deliveryNoteId: shipped.deliveryNote.id,
+        voidReason: "下游鎖定",
+        idempotencyKey: randomUUID(),
+      }),
+    ).rejects.toBeInstanceOf(DeliveryNoteDownstreamLockedError);
+  });
+
+  it("rolls back every rebuild stage injected by test-only triggers", async () => {
+    const stages = [
+      {
+        name: "header",
+        table: "delivery_notes",
+        timing: "BEFORE INSERT",
+        when: `WHEN (NEW."replaced_delivery_note_id" IS NOT NULL)`,
+      },
+      {
+        name: "line",
+        table: "delivery_note_lines",
+        timing: "BEFORE INSERT",
+        when: "",
+      },
+      {
+        name: "order",
+        table: "sales_orders",
+        timing: "BEFORE UPDATE",
+        when: `WHEN (NEW."status" = 'DELIVERY_CREATED' AND OLD."status" = 'CONFIRMED')`,
+      },
+      {
+        name: "audit",
+        table: "audit_logs",
+        timing: "BEFORE INSERT",
+        when: `WHEN (NEW."operation" IN ('delivery_note.rebuilt', 'sales_order.delivery_rebuilt'))`,
+      },
+    ] as const;
+
+    for (const stage of stages) {
+      const prepared = await prepareConfirmedRevision();
+      const auditCountBefore = await db.auditLog.count({
+        where: {
+          operation: {
+            in: ["delivery_note.rebuilt", "sales_order.delivery_rebuilt"],
+          },
+        },
+      });
+      const sequenceBefore = await db.documentSequence.findUnique({
+        where: {
+          companyId_fiscalYear_fiscalMonth_documentType: {
+            companyId: companyA.id,
+            fiscalYear: 2026,
+            fiscalMonth: 7,
+            documentType: "DELIVERY_NOTE",
+          },
+        },
+      });
+      const functionName = `test_p32c_rebuild_${stage.name}`;
+      await db.$executeRawUnsafe(`
+        CREATE FUNCTION "${functionName}"()
+        RETURNS TRIGGER LANGUAGE plpgsql AS $$
+        BEGIN
+          RAISE EXCEPTION 'P3.2c rebuild ${stage.name} rollback'
+            USING ERRCODE = '23514';
+        END;
+        $$;
+        CREATE TRIGGER "${functionName}"
+        ${stage.timing} ON "${stage.table}"
+        FOR EACH ROW ${stage.when}
+        EXECUTE FUNCTION "${functionName}"();
+      `);
+      const key = randomUUID();
+      try {
+        await expect(
+          rebuildDeliveryNoteForOrder(db, {
+            context: contextA,
+            companyId: companyA.id,
+            salesOrderId: prepared.orderId,
+            expectedRevisionNo: 2,
+            reason: `測試 ${stage.name} rollback`,
+            idempotencyKey: key,
+          }),
+        ).rejects.toThrow(`P3.2c rebuild ${stage.name} rollback`);
+      } finally {
+        await db.$executeRawUnsafe(`
+          DROP TRIGGER IF EXISTS "${functionName}" ON "${stage.table}";
+          DROP FUNCTION IF EXISTS "${functionName}"();
+        `);
+      }
+      expect(
+        await db.deliveryNote.findUniqueOrThrow({
+          where: { id: prepared.old.id },
+        }),
+      ).toMatchObject({
+        status: "ACTIVE",
+        voidSource: null,
+        voidedAt: null,
+        voidedById: null,
+        voidReason: null,
+      });
+      expect(
+        await db.deliveryNote.count({
+          where: { salesOrderId: prepared.orderId },
+        }),
+      ).toBe(1);
+      expect(
+        await db.salesOrder.findUniqueOrThrow({
+          where: { id: prepared.orderId },
+        }),
+      ).toMatchObject({ status: "CONFIRMED", revisionNo: 2 });
+      expect(
+        await db.auditLog.count({
+          where: {
+            operation: {
+              in: ["delivery_note.rebuilt", "sales_order.delivery_rebuilt"],
+            },
+          },
+        }),
+      ).toBe(auditCountBefore);
+      expect(
+        await db.idempotencyKey.findUniqueOrThrow({
+          where: {
+            companyId_operation_idempotencyKey: {
+              companyId: companyA.id,
+              operation: "delivery_note.rebuild",
+              idempotencyKey: key,
+            },
+          },
+        }),
+      ).toMatchObject({ status: "FAILED" });
+      const sequenceAfter = await db.documentSequence.findUnique({
+        where: {
+          companyId_fiscalYear_fiscalMonth_documentType: {
+            companyId: companyA.id,
+            fiscalYear: 2026,
+            fiscalMonth: 7,
+            documentType: "DELIVERY_NOTE",
+          },
+        },
+      });
+      expect(sequenceAfter?.lastValue ?? BigInt(0)).toBe(
+        sequenceBefore?.lastValue ?? BigInt(0),
+      );
+    }
+  });
+
+  it("rolls back ADMIN void note, order and audit failures", async () => {
+    const stages = [
+      {
+        name: "note",
+        table: "delivery_notes",
+        timing: "BEFORE UPDATE",
+        when: `WHEN (NEW."void_source" = 'ADMIN_DIRECT')`,
+      },
+      {
+        name: "order",
+        table: "sales_orders",
+        timing: "BEFORE UPDATE",
+        when: `WHEN (NEW."status" = 'CONFIRMED' AND OLD."status" = 'DELIVERY_CREATED')`,
+      },
+      {
+        name: "audit",
+        table: "audit_logs",
+        timing: "BEFORE INSERT",
+        when: `WHEN (NEW."operation" = 'delivery_note.voided')`,
+      },
+    ] as const;
+
+    for (const stage of stages) {
+      const order = await createConfirmedOrder(companyA);
+      const created = await createDeliveryNoteFromOrder(db, {
+        context: adminContext,
+        companyId: companyA.id,
+        salesOrderId: order.id,
+        expectedRevisionNo: 1,
+        idempotencyKey: randomUUID(),
+      });
+      const functionName = `test_p32c_admin_void_${stage.name}`;
+      await db.$executeRawUnsafe(`
+        CREATE FUNCTION "${functionName}"()
+        RETURNS TRIGGER LANGUAGE plpgsql AS $$
+        BEGIN
+          RAISE EXCEPTION 'P3.2c admin void ${stage.name} rollback'
+            USING ERRCODE = '23514';
+        END;
+        $$;
+        CREATE TRIGGER "${functionName}"
+        ${stage.timing} ON "${stage.table}"
+        FOR EACH ROW ${stage.when}
+        EXECUTE FUNCTION "${functionName}"();
+      `);
+      const key = randomUUID();
+      try {
+        await expect(
+          adminVoidDeliveryNote(db, {
+            context: adminContext,
+            companyId: companyA.id,
+            deliveryNoteId: created.deliveryNote.id,
+            voidReason: `測試 ${stage.name} rollback`,
+            idempotencyKey: key,
+          }),
+        ).rejects.toThrow(`P3.2c admin void ${stage.name} rollback`);
+      } finally {
+        await db.$executeRawUnsafe(`
+          DROP TRIGGER IF EXISTS "${functionName}" ON "${stage.table}";
+          DROP FUNCTION IF EXISTS "${functionName}"();
+        `);
+      }
+      expect(
+        await db.deliveryNote.findUniqueOrThrow({
+          where: { id: created.deliveryNote.id },
+        }),
+      ).toMatchObject({
+        status: "ACTIVE",
+        voidSource: null,
+        voidedAt: null,
+        voidReason: null,
+      });
+      expect(
+        await db.salesOrder.findUniqueOrThrow({ where: { id: order.id } }),
+      ).toMatchObject({ status: "DELIVERY_CREATED" });
+      expect(
+        await db.auditLog.count({
+          where: {
+            entityId: created.deliveryNote.id,
+            operation: "delivery_note.voided",
+          },
+        }),
+      ).toBe(0);
+      expect(
+        await db.idempotencyKey.findUniqueOrThrow({
+          where: {
+            companyId_operation_idempotencyKey: {
+              companyId: companyA.id,
+              operation: "delivery_note.admin_void",
+              idempotencyKey: key,
+            },
+          },
+        }),
+      ).toMatchObject({ status: "FAILED" });
+    }
   });
 });

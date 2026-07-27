@@ -21,6 +21,13 @@ const P32B_TRANSITIONS: ReadonlySet<string> = new Set([
   "DELIVERY_CREATED:VOIDED",
 ]);
 
+const P32C_TRANSITIONS: ReadonlySet<string> = new Set([
+  "CONFIRMED:DRAFT",
+  "DELIVERY_CREATED:DRAFT",
+  "CONFIRMED:DELIVERY_CREATED",
+  "DELIVERY_CREATED:CONFIRMED",
+]);
+
 export function assertP31SalesOrderTransition(
   from: SalesOrderStatus,
   to: SalesOrderStatus,
@@ -43,6 +50,22 @@ export function assertSalesOrderVoidTransition(
 ): void {
   if (!P32B_TRANSITIONS.has(`${from}:VOIDED`)) {
     throw new SalesOrderStatusTransitionError(from, "VOIDED");
+  }
+}
+
+export function assertSalesOrderRevisionStartTransition(
+  from: SalesOrderStatus,
+): void {
+  if (!P32C_TRANSITIONS.has(`${from}:DRAFT`)) {
+    throw new SalesOrderStatusTransitionError(from, "DRAFT");
+  }
+}
+
+export function assertAdminVoidOrderTransition(
+  from: SalesOrderStatus,
+): void {
+  if (!P32C_TRANSITIONS.has(`${from}:CONFIRMED`)) {
+    throw new SalesOrderStatusTransitionError(from, "CONFIRMED");
   }
 }
 

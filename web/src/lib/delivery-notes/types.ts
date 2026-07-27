@@ -19,6 +19,19 @@ export type DeliveryNoteLineDetail = {
   lineAmount: string;
 };
 
+export type DeliveryNoteReferenceSummary = {
+  id: string;
+  deliveryNoteNumber: string;
+  deliveryNoteDate: string;
+  salesOrderRevisionNo: number;
+  status: DeliveryNoteStatus;
+};
+
+export type DeliveryNoteActorSummary = {
+  id: string;
+  username: string;
+};
+
 export type DeliveryNoteSummary = {
   id: string;
   companyId: string;
@@ -47,9 +60,12 @@ export type DeliveryNoteDetail = DeliveryNoteSummary & {
   freightSnapshot: Prisma.JsonValue;
   replacedDeliveryNoteId: string | null;
   replacementDeliveryNoteId: string | null;
+  replacedDeliveryNote: DeliveryNoteReferenceSummary | null;
+  replacementDeliveryNote: DeliveryNoteReferenceSummary | null;
   voidSource: DeliveryNoteVoidSource | null;
   voidedAt: string | null;
   voidedById: string | null;
+  voidedBy: DeliveryNoteActorSummary | null;
   voidReason: string | null;
   lines: DeliveryNoteLineDetail[];
 };
@@ -64,6 +80,32 @@ export type CreateDeliveryNoteInput = {
 };
 
 export type CreateDeliveryNoteResult = {
+  deliveryNote: DeliveryNoteDetail;
+  replayed: boolean;
+};
+
+export type RebuildDeliveryNoteInput = {
+  context: RequestContext;
+  companyId: string;
+  salesOrderId: string;
+  expectedRevisionNo: number;
+  idempotencyKey: string;
+  reason: string;
+  now?: Date;
+};
+
+export type RebuildDeliveryNoteResult = CreateDeliveryNoteResult;
+
+export type AdminVoidDeliveryNoteInput = {
+  context: RequestContext;
+  companyId: string;
+  deliveryNoteId: string;
+  voidReason: string;
+  idempotencyKey: string;
+  now?: Date;
+};
+
+export type AdminVoidDeliveryNoteResult = {
   deliveryNote: DeliveryNoteDetail;
   replayed: boolean;
 };

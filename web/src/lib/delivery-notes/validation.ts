@@ -87,3 +87,14 @@ export function formatDeliveryNoteNumber(input: {
     .toString()
     .padStart(6, "0")}`;
 }
+
+export function normalizeDeliveryNoteVoidReason(value: string): string {
+  const normalized = value.trim();
+  if (!normalized) {
+    throw new Error("作廢理由必填");
+  }
+  if (normalized.length > 1000) {
+    throw new Error("作廢理由不可超過 1000 個字元");
+  }
+  return normalized;
+}

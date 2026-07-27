@@ -2,18 +2,33 @@ import { Prisma } from "../../src/generated/prisma/client";
 import { describe, expect, it } from "vitest";
 import { hasPermission } from "../../src/lib/auth/rbac";
 import {
+  DeliveryNoteAdminVoidNotAllowedError,
+  DeliveryNoteDownstreamLockedError,
   DeliveryNoteInvariantError,
   DeliveryNoteNotFoundError,
+  DeliveryNoteRebuildNotAllowedError,
+  DeliveryNoteRebuildRequiredError,
+  DeliveryNoteReplacementConflictError,
+  DeliveryNoteVoidReasonRequiredError,
 } from "../../src/lib/delivery-notes/errors";
 import { buildDeliveryNoteSnapshotsFromConfirmedOrder } from "../../src/lib/delivery-notes/snapshots";
+import {
+  assertRebuildPrerequisites,
+  buildAdminVoidIdempotencyPayload,
+  buildRebuildIdempotencyPayload,
+  DELIVERY_NOTE_LOCK_ORDER,
+} from "../../src/lib/delivery-notes/service";
 import {
   deliveryNoteListFiltersSchema,
   formatDateOnly,
   formatDeliveryNoteNumber,
+  normalizeDeliveryNoteVoidReason,
   taipeiBusinessDate,
 } from "../../src/lib/delivery-notes/validation";
 import {
+  assertAdminVoidOrderTransition,
   assertDeliveryCreatedTransition,
+  assertSalesOrderRevisionStartTransition,
   assertSalesOrderVoidTransition,
   SalesOrderStatusTransitionError,
 } from "../../src/lib/sales-orders/state-machine";
@@ -71,6 +86,24 @@ describe("delivery-note RBAC and errors", () => {
     );
     expect(new DeliveryNoteInvariantError("test").code).toBe(
       "DELIVERY_NOTE_INVARIANT_VIOLATION",
+    );
+    expect(new DeliveryNoteRebuildRequiredError().code).toBe(
+      "DELIVERY_NOTE_REBUILD_REQUIRED",
+    );
+    expect(new DeliveryNoteRebuildNotAllowedError().code).toBe(
+      "DELIVERY_NOTE_REBUILD_NOT_ALLOWED",
+    );
+    expect(new DeliveryNoteReplacementConflictError().code).toBe(
+      "DELIVERY_NOTE_REPLACEMENT_CONFLICT",
+    );
+    expect(new DeliveryNoteAdminVoidNotAllowedError().code).toBe(
+      "DELIVERY_NOTE_ADMIN_VOID_NOT_ALLOWED",
+    );
+    expect(new DeliveryNoteVoidReasonRequiredError().code).toBe(
+      "DELIVERY_NOTE_VOID_REASON_REQUIRED",
+    );
+    expect(new DeliveryNoteDownstreamLockedError().code).toBe(
+      "DELIVERY_NOTE_DOWNSTREAM_LOCKED",
     );
   });
 });
@@ -161,5 +194,98 @@ describe("delivery-note query and state validation", () => {
     expect(() => assertSalesOrderVoidTransition("SHIPPED")).toThrow(
       SalesOrderStatusTransitionError,
     );
+    expect(() =>
+      assertSalesOrderRevisionStartTransition("DELIVERY_CREATED"),
+    ).not.toThrow();
+    expect(() => assertSalesOrderRevisionStartTransition("SHIPPED")).toThrow(
+      SalesOrderStatusTransitionError,
+    );
+    expect(() =>
+      assertAdminVoidOrderTransition("DELIVERY_CREATED"),
+    ).not.toThrow();
+    expect(() => assertAdminVoidOrderTransition("CONFIRMED")).toThrow(
+      SalesOrderStatusTransitionError,
+    );
+  });
+});
+
+describe("P3.2c rebuild and ADMIN void contracts", () => {
+  it("validates the rebuild prerequisite matrix", () => {
+    expect(() =>
+      assertRebuildPrerequisites({
+        orderStatus: "CONFIRMED",
+        orderRevisionNo: 2,
+        current: { status: "ACTIVE", salesOrderRevisionNo: 1 },
+      }),
+    ).not.toThrow();
+    expect(() =>
+      assertRebuildPrerequisites({
+        orderStatus: "DRAFT",
+        orderRevisionNo: 2,
+        current: { status: "ACTIVE", salesOrderRevisionNo: 1 },
+      }),
+    ).toThrow(DeliveryNoteRebuildNotAllowedError);
+    expect(() =>
+      assertRebuildPrerequisites({
+        orderStatus: "CONFIRMED",
+        orderRevisionNo: 2,
+        current: { status: "ACTIVE", salesOrderRevisionNo: 2 },
+      }),
+    ).toThrow(DeliveryNoteRebuildNotAllowedError);
+    expect(() =>
+      assertRebuildPrerequisites({
+        orderStatus: "CONFIRMED",
+        orderRevisionNo: 2,
+        current: { status: "SHIPPED", salesOrderRevisionNo: 1 },
+      }),
+    ).toThrow(DeliveryNoteDownstreamLockedError);
+  });
+
+  it("builds stable idempotency fingerprints without generated values", () => {
+    expect(
+      buildRebuildIdempotencyPayload({
+        companyId: "company",
+        salesOrderId: "order",
+        expectedRevisionNo: 2,
+        oldDeliveryNoteReference: "old-note",
+        actorUserId: "actor",
+        reason: "revision",
+      }),
+    ).toEqual({
+      companyId: "company",
+      salesOrderId: "order",
+      expectedRevisionNo: 2,
+      oldDeliveryNoteReference: "old-note",
+      actorUserId: "actor",
+      reason: "revision",
+    });
+    expect(
+      buildAdminVoidIdempotencyPayload({
+        companyId: "company",
+        deliveryNoteId: "note",
+        voidReason: "trimmed",
+        actorUserId: "actor",
+      }),
+    ).toEqual({
+      companyId: "company",
+      deliveryNoteId: "note",
+      voidReason: "trimmed",
+      actorUserId: "actor",
+    });
+  });
+
+  it("normalizes void reasons and declares one lock order", () => {
+    expect(normalizeDeliveryNoteVoidReason("  管理員作廢  ")).toBe(
+      "管理員作廢",
+    );
+    expect(() => normalizeDeliveryNoteVoidReason("   ")).toThrow();
+    expect(DELIVERY_NOTE_LOCK_ORDER).toEqual([
+      "idempotency",
+      "sales_order",
+      "current_delivery_note",
+      "document_sequence",
+      "lines",
+      "audit",
+    ]);
   });
 });

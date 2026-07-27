@@ -38,6 +38,54 @@ export class DeliveryNoteRevisionMismatchError extends Error {
   }
 }
 
+export class DeliveryNoteRebuildRequiredError extends Error {
+  readonly code = "DELIVERY_NOTE_REBUILD_REQUIRED";
+
+  constructor() {
+    super("訂單已有前一版銷貨單，必須執行正式重建流程");
+  }
+}
+
+export class DeliveryNoteRebuildNotAllowedError extends Error {
+  readonly code = "DELIVERY_NOTE_REBUILD_NOT_ALLOWED";
+
+  constructor(message = "目前狀態不可重建銷貨單") {
+    super(message);
+  }
+}
+
+export class DeliveryNoteReplacementConflictError extends Error {
+  readonly code = "DELIVERY_NOTE_REPLACEMENT_CONFLICT";
+
+  constructor() {
+    super("銷貨單取代關係已存在或不一致");
+  }
+}
+
+export class DeliveryNoteAdminVoidNotAllowedError extends Error {
+  readonly code = "DELIVERY_NOTE_ADMIN_VOID_NOT_ALLOWED";
+
+  constructor(message = "目前狀態不可由管理員直接作廢銷貨單") {
+    super(message);
+  }
+}
+
+export class DeliveryNoteVoidReasonRequiredError extends Error {
+  readonly code = "DELIVERY_NOTE_VOID_REASON_REQUIRED";
+
+  constructor() {
+    super("作廢理由必填");
+  }
+}
+
+export class DeliveryNoteDownstreamLockedError extends Error {
+  readonly code = "DELIVERY_NOTE_DOWNSTREAM_LOCKED";
+
+  constructor() {
+    super("銷貨單已出貨或已建立應收，不可執行此操作");
+  }
+}
+
 export class DeliveryNoteIdempotencyConflictError extends Error {
   readonly code = "DELIVERY_NOTE_IDEMPOTENCY_CONFLICT";
 

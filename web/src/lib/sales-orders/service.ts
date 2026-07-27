@@ -26,10 +26,14 @@ import {
 } from "@/lib/sales-orders/money";
 import {
   assertP31SalesOrderTransition,
+  assertSalesOrderRevisionStartTransition,
   assertSalesOrderVoidTransition,
   canEditSalesOrderDraft,
 } from "@/lib/sales-orders/state-machine";
-import { voidDeliveryNoteForOrderVoid } from "@/lib/delivery-notes/service";
+import {
+  validateDeliveryNoteForRevisionStart,
+  voidDeliveryNoteForOrderVoid,
+} from "@/lib/delivery-notes/service";
 import {
   formatDateOnly,
   parseDateOnly,
@@ -1120,7 +1124,14 @@ export async function startSalesOrderRevision(
           where: { id: input.orderId },
           include: { lines: true },
         });
-        assertP31SalesOrderTransition(before.status, "DRAFT");
+        assertSalesOrderRevisionStartTransition(before.status);
+        if (before.status === "DELIVERY_CREATED") {
+          await validateDeliveryNoteForRevisionStart(tx, {
+            companyId: input.companyId,
+            salesOrderId: before.id,
+            orderRevisionNo: before.revisionNo,
+          });
+        }
         const updated = await tx.salesOrder.update({
           where: { id: before.id },
           data: {

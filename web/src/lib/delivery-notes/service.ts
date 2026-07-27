@@ -11,18 +11,26 @@ import type { RequestContext } from "@/lib/auth/session";
 import { getCompanyLegalSettings } from "@/lib/company-settings/service";
 import {
   DeliveryNoteAccessDeniedError,
+  DeliveryNoteAdminVoidNotAllowedError,
   DeliveryNoteAlreadyExistsError,
+  DeliveryNoteDownstreamLockedError,
   DeliveryNoteIdempotencyConflictError,
   DeliveryNoteInvariantError,
   DeliveryNoteNotFoundError,
   DeliveryNotePrerequisiteError,
+  DeliveryNoteRebuildNotAllowedError,
+  DeliveryNoteRebuildRequiredError,
+  DeliveryNoteReplacementConflictError,
   DeliveryNoteRevisionMismatchError,
+  DeliveryNoteVoidReasonRequiredError,
 } from "@/lib/delivery-notes/errors";
 import {
   buildDeliveryNoteSnapshotsFromConfirmedOrder,
   type ConfirmedOrderForDeliveryNote,
 } from "@/lib/delivery-notes/snapshots";
 import type {
+  AdminVoidDeliveryNoteInput,
+  AdminVoidDeliveryNoteResult,
   CreateDeliveryNoteInput,
   CreateDeliveryNoteResult,
   CurrentDeliveryNoteResult,
@@ -30,11 +38,14 @@ import type {
   DeliveryNoteListFilters,
   DeliveryNoteListResult,
   DeliveryNoteSummary,
+  RebuildDeliveryNoteInput,
+  RebuildDeliveryNoteResult,
 } from "@/lib/delivery-notes/types";
 import {
   deliveryNoteListFiltersSchema,
   formatDateOnly,
   formatDeliveryNoteNumber,
+  normalizeDeliveryNoteVoidReason,
   parseDateOnly,
   taipeiBusinessDate,
 } from "@/lib/delivery-notes/validation";
@@ -42,18 +53,77 @@ import {
   executeIdempotent,
   IdempotencyConflictError,
 } from "@/lib/idempotency";
-import { assertDeliveryCreatedTransition } from "@/lib/sales-orders/state-machine";
+import {
+  assertAdminVoidOrderTransition,
+  assertDeliveryCreatedTransition,
+} from "@/lib/sales-orders/state-machine";
 
 const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
 const DELIVERY_NOTE_DOCUMENT_TYPE = "DELIVERY_NOTE";
 const ORDER_VOID_REASON = "Sales order voided";
+const REBUILD_VOID_REASON = "Sales order revision rebuilt";
+
+export const DELIVERY_NOTE_LOCK_ORDER = [
+  "idempotency",
+  "sales_order",
+  "current_delivery_note",
+  "document_sequence",
+  "lines",
+  "audit",
+] as const;
+
+export function buildRebuildIdempotencyPayload(input: {
+  companyId: string;
+  salesOrderId: string;
+  expectedRevisionNo: number;
+  oldDeliveryNoteReference: string | null;
+  actorUserId: string;
+  reason: string;
+}) {
+  return {
+    companyId: input.companyId,
+    salesOrderId: input.salesOrderId,
+    expectedRevisionNo: input.expectedRevisionNo,
+    oldDeliveryNoteReference: input.oldDeliveryNoteReference ?? "missing",
+    actorUserId: input.actorUserId,
+    reason: input.reason,
+  };
+}
+
+export function buildAdminVoidIdempotencyPayload(input: {
+  companyId: string;
+  deliveryNoteId: string;
+  voidReason: string;
+  actorUserId: string;
+}) {
+  return {
+    companyId: input.companyId,
+    deliveryNoteId: input.deliveryNoteId,
+    voidReason: input.voidReason,
+    actorUserId: input.actorUserId,
+  };
+}
 
 export type DeliveryNoteTransaction = Prisma.TransactionClient;
 
 type LoadedDeliveryNote = DeliveryNote & {
   lines: DeliveryNoteLine[];
   salesOrder: { orderNumber: string };
-  replacementDeliveryNote: { id: string } | null;
+  replacedDeliveryNote: {
+    id: string;
+    deliveryNoteNumber: string;
+    deliveryNoteDate: Date;
+    salesOrderRevisionNo: number;
+    status: DeliveryNote["status"];
+  } | null;
+  replacementDeliveryNote: {
+    id: string;
+    deliveryNoteNumber: string;
+    deliveryNoteDate: Date;
+    salesOrderRevisionNo: number;
+    status: DeliveryNote["status"];
+  } | null;
+  voidedBy: { id: string; username: string } | null;
 };
 
 function auditContext(context: RequestContext, companyId: string) {
@@ -70,7 +140,9 @@ function assertAccess(
   companyId: string,
   permission: Extract<
     Permission,
-    "delivery_notes.read" | "delivery_notes.manage"
+    | "delivery_notes.read"
+    | "delivery_notes.manage"
+    | "delivery_notes.admin_void"
   >,
 ): void {
   const allowedCompany = hasCompanyAccess(
@@ -111,6 +183,18 @@ function serializeSummary(note: LoadedDeliveryNote): DeliveryNoteSummary {
 }
 
 function serializeDetail(note: LoadedDeliveryNote): DeliveryNoteDetail {
+  const serializeReference = (
+    reference: LoadedDeliveryNote["replacedDeliveryNote"],
+  ) =>
+    reference
+      ? {
+          id: reference.id,
+          deliveryNoteNumber: reference.deliveryNoteNumber,
+          deliveryNoteDate: formatDateOnly(reference.deliveryNoteDate),
+          salesOrderRevisionNo: reference.salesOrderRevisionNo,
+          status: reference.status,
+        }
+      : null;
   return {
     ...serializeSummary(note),
     companySnapshot: note.companySnapshot,
@@ -122,9 +206,14 @@ function serializeDetail(note: LoadedDeliveryNote): DeliveryNoteDetail {
     freightSnapshot: note.freightSnapshot,
     replacedDeliveryNoteId: note.replacedDeliveryNoteId,
     replacementDeliveryNoteId: note.replacementDeliveryNote?.id ?? null,
+    replacedDeliveryNote: serializeReference(note.replacedDeliveryNote),
+    replacementDeliveryNote: serializeReference(
+      note.replacementDeliveryNote,
+    ),
     voidSource: note.voidSource,
     voidedAt: note.voidedAt?.toISOString() ?? null,
     voidedById: note.voidedById,
+    voidedBy: note.voidedBy,
     voidReason: note.voidReason,
     lines: note.lines.map((line) => ({
       id: line.id,
@@ -150,7 +239,25 @@ async function loadDeliveryNote(
     include: {
       lines: { orderBy: { lineNumber: "asc" } },
       salesOrder: { select: { orderNumber: true } },
-      replacementDeliveryNote: { select: { id: true } },
+      replacedDeliveryNote: {
+        select: {
+          id: true,
+          deliveryNoteNumber: true,
+          deliveryNoteDate: true,
+          salesOrderRevisionNo: true,
+          status: true,
+        },
+      },
+      replacementDeliveryNote: {
+        select: {
+          id: true,
+          deliveryNoteNumber: true,
+          deliveryNoteDate: true,
+          salesOrderRevisionNo: true,
+          status: true,
+        },
+      },
+      voidedBy: { select: { id: true, username: true } },
     },
   });
 }
@@ -199,6 +306,112 @@ async function lockCurrentDeliveryNote(
     );
   }
   return rows[0] ?? null;
+}
+
+export function assertRebuildPrerequisites(input: {
+  orderStatus: string;
+  orderRevisionNo: number;
+  current:
+    | {
+        status: "ACTIVE" | "SHIPPED" | "RECEIVABLE_CREATED";
+        salesOrderRevisionNo: number;
+      }
+    | null;
+}): void {
+  if (input.orderStatus !== "CONFIRMED") {
+    throw new DeliveryNoteRebuildNotAllowedError(
+      "只有重新確認的訂單可以重建銷貨單",
+    );
+  }
+  if (!input.current) {
+    throw new DeliveryNoteRebuildNotAllowedError(
+      "找不到可供重建的目前銷貨單",
+    );
+  }
+  if (
+    input.current.status === "SHIPPED" ||
+    input.current.status === "RECEIVABLE_CREATED"
+  ) {
+    throw new DeliveryNoteDownstreamLockedError();
+  }
+  if (input.current.status !== "ACTIVE") {
+    throw new DeliveryNoteRebuildNotAllowedError();
+  }
+  if (input.current.salesOrderRevisionNo === input.orderRevisionNo) {
+    throw new DeliveryNoteRebuildNotAllowedError(
+      "目前銷貨單已屬於相同訂單版次",
+    );
+  }
+  if (input.current.salesOrderRevisionNo > input.orderRevisionNo) {
+    throw new DeliveryNoteRebuildNotAllowedError(
+      "銷貨單版次不得高於訂單版次",
+    );
+  }
+}
+
+export async function validateDeliveryNoteForRevisionStart(
+  tx: DeliveryNoteTransaction,
+  input: {
+    companyId: string;
+    salesOrderId: string;
+    orderRevisionNo: number;
+  },
+): Promise<void> {
+  const current = await lockCurrentDeliveryNote(
+    tx,
+    input.companyId,
+    input.salesOrderId,
+  );
+  if (!current) {
+    throw new DeliveryNoteRebuildNotAllowedError(
+      "已建立銷貨單的訂單缺少目前有效銷貨單",
+    );
+  }
+  if (
+    current.status === "SHIPPED" ||
+    current.status === "RECEIVABLE_CREATED"
+  ) {
+    throw new DeliveryNoteDownstreamLockedError();
+  }
+  if (
+    current.status !== "ACTIVE" ||
+    current.sales_order_revision_no !== input.orderRevisionNo
+  ) {
+    throw new DeliveryNoteRebuildNotAllowedError(
+      "目前銷貨單狀態或版次不允許開始修訂",
+    );
+  }
+}
+
+async function resolveRebuildOldReference(
+  db: PrismaClient,
+  input: {
+    companyId: string;
+    salesOrderId: string;
+    expectedRevisionNo: number;
+  },
+): Promise<string | null> {
+  const current = await db.deliveryNote.findFirst({
+    where: {
+      companyId: input.companyId,
+      salesOrderId: input.salesOrderId,
+      status: { not: "VOIDED" },
+      salesOrderRevisionNo: { lt: input.expectedRevisionNo },
+    },
+    select: { id: true },
+  });
+  if (current) return current.id;
+
+  const replacement = await db.deliveryNote.findFirst({
+    where: {
+      companyId: input.companyId,
+      salesOrderId: input.salesOrderId,
+      salesOrderRevisionNo: input.expectedRevisionNo,
+      replacedDeliveryNoteId: { not: null },
+    },
+    select: { replacedDeliveryNoteId: true },
+  });
+  return replacement?.replacedDeliveryNoteId ?? null;
 }
 
 export async function allocateDeliveryNoteNumber(
@@ -296,7 +509,10 @@ export async function createDeliveryNoteFromOrder(
         });
         if (!order) throw new DeliveryNoteNotFoundError();
         if (current) {
-          if (current.sales_order_revision_no !== order.revisionNo) {
+          if (current.sales_order_revision_no < order.revisionNo) {
+            throw new DeliveryNoteRebuildRequiredError();
+          }
+          if (current.sales_order_revision_no > order.revisionNo) {
             throw new DeliveryNoteRevisionMismatchError();
           }
           throw new DeliveryNoteAlreadyExistsError();
@@ -448,6 +664,406 @@ export async function createDeliveryNoteFromOrder(
   }
 }
 
+export async function rebuildDeliveryNoteForOrder(
+  db: PrismaClient,
+  input: RebuildDeliveryNoteInput,
+): Promise<RebuildDeliveryNoteResult> {
+  assertAccess(input.context, input.companyId, "delivery_notes.manage");
+  if (
+    !Number.isInteger(input.expectedRevisionNo) ||
+    input.expectedRevisionNo < 2
+  ) {
+    throw new DeliveryNoteRevisionMismatchError();
+  }
+  const reason = input.reason.trim();
+  if (!reason) {
+    throw new DeliveryNoteRebuildNotAllowedError("重建理由必填");
+  }
+  const now = input.now ?? new Date();
+  const oldDeliveryNoteReference = await resolveRebuildOldReference(db, {
+    companyId: input.companyId,
+    salesOrderId: input.salesOrderId,
+    expectedRevisionNo: input.expectedRevisionNo,
+  });
+
+  try {
+    const result = await executeIdempotent(
+      db,
+      {
+        companyId: input.companyId,
+        userId: input.context.actor.userId,
+        operation: "delivery_note.rebuild",
+        key: input.idempotencyKey,
+        payload: buildRebuildIdempotencyPayload({
+          companyId: input.companyId,
+          salesOrderId: input.salesOrderId,
+          expectedRevisionNo: input.expectedRevisionNo,
+          oldDeliveryNoteReference,
+          actorUserId: input.context.actor.userId,
+          reason,
+        }),
+        expiresAt: new Date(now.getTime() + IDEMPOTENCY_TTL_MS),
+        now,
+      },
+      async (tx) => {
+        await lockSalesOrder(tx, input.companyId, input.salesOrderId);
+        const current = await lockCurrentDeliveryNote(
+          tx,
+          input.companyId,
+          input.salesOrderId,
+        );
+        const order = await tx.salesOrder.findFirst({
+          where: {
+            id: input.salesOrderId,
+            companyId: input.companyId,
+          },
+          include: {
+            lines: {
+              where: { isActive: true },
+              orderBy: { lineNumber: "asc" },
+            },
+          },
+        });
+        if (!order) throw new DeliveryNoteNotFoundError();
+        if (order.revisionNo !== input.expectedRevisionNo) {
+          throw new DeliveryNoteRevisionMismatchError();
+        }
+        assertRebuildPrerequisites({
+          orderStatus: order.status,
+          orderRevisionNo: order.revisionNo,
+          current: current
+            ? {
+                status: current.status,
+                salesOrderRevisionNo: current.sales_order_revision_no,
+              }
+            : null,
+        });
+        if (
+          oldDeliveryNoteReference &&
+          current?.id !== oldDeliveryNoteReference
+        ) {
+          throw new DeliveryNoteReplacementConflictError();
+        }
+        const oldDeliveryNote = await tx.deliveryNote.findUniqueOrThrow({
+          where: { id: current!.id },
+          include: {
+            replacementDeliveryNote: { select: { id: true } },
+          },
+        });
+        if (oldDeliveryNote.replacementDeliveryNote) {
+          throw new DeliveryNoteReplacementConflictError();
+        }
+
+        const snapshots = buildDeliveryNoteSnapshotsFromConfirmedOrder(
+          order as ConfirmedOrderForDeliveryNote,
+        );
+        assertDeliveryCreatedTransition(order.status);
+        const deliveryNoteDate = taipeiBusinessDate(now);
+        const legalSettings = await getCompanyLegalSettings(
+          tx,
+          input.companyId,
+          deliveryNoteDate,
+        );
+        const deliveryNoteNumber = await allocateDeliveryNoteNumber(tx, {
+          companyId: input.companyId,
+          deliveryNoteDate,
+          documentCompanyCode: legalSettings.documentCompanyCode,
+        });
+
+        const voidedOld = await tx.deliveryNote.update({
+          where: { id: oldDeliveryNote.id },
+          data: {
+            status: "VOIDED",
+            voidSource: "ORDER_REVISION_REBUILD",
+            voidReason: REBUILD_VOID_REASON,
+            voidedAt: now,
+            voidedById: input.context.actor.userId,
+            updatedById: input.context.actor.userId,
+          },
+        });
+        const replacement = await tx.deliveryNote.create({
+          data: {
+            companyId: input.companyId,
+            deliveryNoteNumber,
+            deliveryNoteDate,
+            fiscalYear: deliveryNoteDate.getUTCFullYear(),
+            fiscalMonth: deliveryNoteDate.getUTCMonth() + 1,
+            salesOrderId: order.id,
+            status: "ACTIVE",
+            replacedDeliveryNoteId: oldDeliveryNote.id,
+            ...snapshots.header,
+            contactSnapshot:
+              snapshots.header.contactSnapshot ?? Prisma.DbNull,
+            createdById: input.context.actor.userId,
+            updatedById: input.context.actor.userId,
+          },
+        });
+        for (const line of [...snapshots.lines].sort(
+          (left, right) => left.lineNumber - right.lineNumber,
+        )) {
+          await tx.deliveryNoteLine.create({
+            data: {
+              deliveryNoteId: replacement.id,
+              companyId: input.companyId,
+              ...line,
+              createdById: input.context.actor.userId,
+            },
+          });
+        }
+        const updatedOrder = await tx.salesOrder.update({
+          where: { id: order.id },
+          data: {
+            status: "DELIVERY_CREATED",
+            updatedById: input.context.actor.userId,
+          },
+        });
+        const metadata = {
+          companyId: input.companyId,
+          salesOrderId: order.id,
+          salesOrderNumber: order.orderNumber,
+          oldRevisionNo: oldDeliveryNote.salesOrderRevisionNo,
+          newRevisionNo: order.revisionNo,
+          oldDeliveryNoteId: oldDeliveryNote.id,
+          oldDeliveryNoteNumber: oldDeliveryNote.deliveryNoteNumber,
+          newDeliveryNoteId: replacement.id,
+          newDeliveryNoteNumber: replacement.deliveryNoteNumber,
+          newDeliveryNoteDate: formatDateOnly(deliveryNoteDate),
+          voidSource: "ORDER_REVISION_REBUILD",
+          actorUserId: input.context.actor.userId,
+          correlationId: input.context.requestId,
+          reason,
+        };
+        await writeAudit(tx, {
+          ...auditContext(input.context, input.companyId),
+          entityType: "delivery_note",
+          entityId: replacement.id,
+          operation: "delivery_note.rebuilt",
+          reason,
+          beforeJson: {
+            id: oldDeliveryNote.id,
+            deliveryNoteNumber: oldDeliveryNote.deliveryNoteNumber,
+            status: oldDeliveryNote.status,
+            salesOrderRevisionNo: oldDeliveryNote.salesOrderRevisionNo,
+          },
+          afterJson: {
+            id: replacement.id,
+            deliveryNoteNumber: replacement.deliveryNoteNumber,
+            status: replacement.status,
+            salesOrderRevisionNo: replacement.salesOrderRevisionNo,
+            replacedDeliveryNoteId: replacement.replacedDeliveryNoteId,
+            oldStatus: voidedOld.status,
+          },
+          metadata,
+        });
+        await writeAudit(tx, {
+          ...auditContext(input.context, input.companyId),
+          entityType: "sales_order",
+          entityId: order.id,
+          operation: "sales_order.delivery_rebuilt",
+          reason,
+          beforeJson: {
+            status: order.status,
+            revisionNo: order.revisionNo,
+            deliveryNoteId: oldDeliveryNote.id,
+          },
+          afterJson: {
+            status: updatedOrder.status,
+            revisionNo: updatedOrder.revisionNo,
+            deliveryNoteId: replacement.id,
+          },
+          metadata,
+        });
+        return {
+          value: { id: replacement.id },
+          responseStatus: 200,
+          responseMetadata: {
+            id: replacement.id,
+            deliveryNoteNumber: replacement.deliveryNoteNumber,
+            deliveryNoteDate: formatDateOnly(deliveryNoteDate),
+          },
+          resultReference: replacement.id,
+        };
+      },
+    );
+    const deliveryNoteId = result.replayed
+      ? result.resultReference
+      : result.value.id;
+    if (!deliveryNoteId) {
+      throw new DeliveryNoteInvariantError("冪等重建結果缺少銷貨單識別碼");
+    }
+    const deliveryNote = await loadDeliveryNote(
+      db,
+      input.companyId,
+      deliveryNoteId,
+    );
+    if (!deliveryNote) {
+      throw new DeliveryNoteInvariantError("冪等重建結果指向不存在的銷貨單");
+    }
+    return {
+      deliveryNote: serializeDetail(deliveryNote),
+      replayed: result.replayed,
+    };
+  } catch (error) {
+    if (error instanceof IdempotencyConflictError) {
+      throw new DeliveryNoteIdempotencyConflictError();
+    }
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      throw new DeliveryNoteReplacementConflictError();
+    }
+    throw error;
+  }
+}
+
+export async function adminVoidDeliveryNote(
+  db: PrismaClient,
+  input: AdminVoidDeliveryNoteInput,
+): Promise<AdminVoidDeliveryNoteResult> {
+  assertAccess(input.context, input.companyId, "delivery_notes.admin_void");
+  let voidReason: string;
+  try {
+    voidReason = normalizeDeliveryNoteVoidReason(input.voidReason);
+  } catch {
+    throw new DeliveryNoteVoidReasonRequiredError();
+  }
+  const target = await db.deliveryNote.findFirst({
+    where: { id: input.deliveryNoteId, companyId: input.companyId },
+    select: { salesOrderId: true },
+  });
+  if (!target) throw new DeliveryNoteNotFoundError();
+  const now = input.now ?? new Date();
+
+  try {
+    const result = await executeIdempotent(
+      db,
+      {
+        companyId: input.companyId,
+        userId: input.context.actor.userId,
+        operation: "delivery_note.admin_void",
+        key: input.idempotencyKey,
+        payload: buildAdminVoidIdempotencyPayload({
+          companyId: input.companyId,
+          deliveryNoteId: input.deliveryNoteId,
+          voidReason,
+          actorUserId: input.context.actor.userId,
+        }),
+        expiresAt: new Date(now.getTime() + IDEMPOTENCY_TTL_MS),
+        now,
+      },
+      async (tx) => {
+        await lockSalesOrder(tx, input.companyId, target.salesOrderId);
+        const current = await lockCurrentDeliveryNote(
+          tx,
+          input.companyId,
+          target.salesOrderId,
+        );
+        if (!current || current.id !== input.deliveryNoteId) {
+          throw new DeliveryNoteAdminVoidNotAllowedError(
+            "指定銷貨單不是目前有效銷貨單",
+          );
+        }
+        if (
+          current.status === "SHIPPED" ||
+          current.status === "RECEIVABLE_CREATED"
+        ) {
+          throw new DeliveryNoteDownstreamLockedError();
+        }
+        if (current.status !== "ACTIVE") {
+          throw new DeliveryNoteAdminVoidNotAllowedError();
+        }
+        const order = await tx.salesOrder.findUniqueOrThrow({
+          where: { id: target.salesOrderId },
+        });
+        assertAdminVoidOrderTransition(order.status);
+        const before = await tx.deliveryNote.findUniqueOrThrow({
+          where: { id: current.id },
+        });
+        const voided = await tx.deliveryNote.update({
+          where: { id: current.id },
+          data: {
+            status: "VOIDED",
+            voidSource: "ADMIN_DIRECT",
+            voidReason,
+            voidedAt: now,
+            voidedById: input.context.actor.userId,
+            updatedById: input.context.actor.userId,
+          },
+        });
+        const updatedOrder = await tx.salesOrder.update({
+          where: { id: order.id },
+          data: {
+            status: "CONFIRMED",
+            updatedById: input.context.actor.userId,
+          },
+        });
+        const metadata = {
+          companyId: input.companyId,
+          salesOrderId: order.id,
+          salesOrderNumber: order.orderNumber,
+          deliveryNoteId: voided.id,
+          deliveryNoteNumber: voided.deliveryNoteNumber,
+          voidSource: "ADMIN_DIRECT",
+          voidReason,
+          actorUserId: input.context.actor.userId,
+          correlationId: input.context.requestId,
+          orderPreviousStatus: order.status,
+          orderNewStatus: updatedOrder.status,
+        };
+        await writeAudit(tx, {
+          ...auditContext(input.context, input.companyId),
+          entityType: "delivery_note",
+          entityId: voided.id,
+          operation: "delivery_note.voided",
+          reason: voidReason,
+          beforeJson: {
+            status: before.status,
+            orderStatus: order.status,
+          },
+          afterJson: {
+            status: voided.status,
+            voidSource: voided.voidSource,
+            voidedAt: voided.voidedAt?.toISOString() ?? null,
+            voidedById: voided.voidedById,
+            orderStatus: updatedOrder.status,
+          },
+          metadata,
+        });
+        return {
+          value: { id: voided.id },
+          responseStatus: 200,
+          responseMetadata: { id: voided.id },
+          resultReference: voided.id,
+        };
+      },
+    );
+    const deliveryNoteId = result.replayed
+      ? result.resultReference
+      : result.value.id;
+    if (!deliveryNoteId) {
+      throw new DeliveryNoteInvariantError("冪等作廢結果缺少銷貨單識別碼");
+    }
+    const deliveryNote = await loadDeliveryNote(
+      db,
+      input.companyId,
+      deliveryNoteId,
+    );
+    if (!deliveryNote) {
+      throw new DeliveryNoteInvariantError("冪等作廢結果指向不存在的銷貨單");
+    }
+    return {
+      deliveryNote: serializeDetail(deliveryNote),
+      replayed: result.replayed,
+    };
+  } catch (error) {
+    if (error instanceof IdempotencyConflictError) {
+      throw new DeliveryNoteIdempotencyConflictError();
+    }
+    throw error;
+  }
+}
+
 export async function voidDeliveryNoteForOrderVoid(
   tx: DeliveryNoteTransaction,
   input: {
@@ -575,7 +1191,25 @@ export async function listDeliveryNotes(
       include: {
         lines: { orderBy: { lineNumber: "asc" } },
         salesOrder: { select: { orderNumber: true } },
-        replacementDeliveryNote: { select: { id: true } },
+        replacedDeliveryNote: {
+          select: {
+            id: true,
+            deliveryNoteNumber: true,
+            deliveryNoteDate: true,
+            salesOrderRevisionNo: true,
+            status: true,
+          },
+        },
+        replacementDeliveryNote: {
+          select: {
+            id: true,
+            deliveryNoteNumber: true,
+            deliveryNoteDate: true,
+            salesOrderRevisionNo: true,
+            status: true,
+          },
+        },
+        voidedBy: { select: { id: true, username: true } },
       },
       orderBy: [
         { deliveryNoteDate: "desc" },
@@ -620,7 +1254,25 @@ export async function getCurrentDeliveryNoteForOrder(
     include: {
       lines: { orderBy: { lineNumber: "asc" } },
       salesOrder: { select: { orderNumber: true } },
-      replacementDeliveryNote: { select: { id: true } },
+      replacedDeliveryNote: {
+        select: {
+          id: true,
+          deliveryNoteNumber: true,
+          deliveryNoteDate: true,
+          salesOrderRevisionNo: true,
+          status: true,
+        },
+      },
+      replacementDeliveryNote: {
+        select: {
+          id: true,
+          deliveryNoteNumber: true,
+          deliveryNoteDate: true,
+          salesOrderRevisionNo: true,
+          status: true,
+        },
+      },
+      voidedBy: { select: { id: true, username: true } },
     },
     take: 2,
   });
