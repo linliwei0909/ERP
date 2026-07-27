@@ -1,9 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getPageRequestContext } from "@/lib/auth/request-context";
+import { hasPermission } from "@/lib/auth/rbac";
 import { requirePermission } from "@/lib/auth/authorization";
+import { mapDeliveryNoteSummary } from "@/lib/delivery-notes/api";
+import { listDeliveryNotes } from "@/lib/delivery-notes/service";
 import { getSalesOrder } from "@/lib/sales-orders/service";
 import { prisma } from "@/lib/prisma";
+import { DeliveryNoteOrderActions } from "../delivery-note-order-actions";
 import { SalesOrderEditor } from "../sales-order-editor";
 
 export default async function SalesOrderDetailPage({
@@ -16,11 +20,13 @@ export default async function SalesOrderDetailPage({
     const context = await getPageRequestContext();
     requirePermission(context, "sales_orders.read");
     const companyId = context.selectedCompany.id;
-    const [order, customerRelations, itemRelations] = await Promise.all([
+    const orderId = (await params).id;
+    const [order, customerRelations, itemRelations, deliveryNoteResult] =
+      await Promise.all([
       getSalesOrder(prisma, {
         context,
         companyId,
-        orderId: (await params).id,
+        orderId,
       }),
       prisma.customerCompany.findMany({
         where: {
@@ -45,6 +51,16 @@ export default async function SalesOrderDetailPage({
           item: { status: "ACTIVE", salesEnabled: true },
         },
         include: { item: true },
+      }),
+      listDeliveryNotes(prisma, {
+        context,
+        companyId,
+        filters: {
+          salesOrderId: orderId,
+          status: "ALL",
+          page: 1,
+          pageSize: 100,
+        },
       }),
     ]);
     data = {
@@ -105,6 +121,13 @@ export default async function SalesOrderDetailPage({
           })),
         },
       },
+      deliveryNotes: deliveryNoteResult.deliveryNotes.map(
+        mapDeliveryNoteSummary,
+      ),
+      canManageDeliveryNotes: hasPermission(
+        context.roleCodes,
+        "delivery_notes.manage",
+      ),
     };
   } catch {
     redirect("/sales-orders");
@@ -118,7 +141,20 @@ export default async function SalesOrderDetailPage({
           返回清單
         </Link>
       </div>
-      <SalesOrderEditor {...data} />
+      <div className="mt-8 space-y-6">
+        <DeliveryNoteOrderActions
+          salesOrderId={data.initial.id}
+          orderStatus={data.initial.status}
+          revisionNo={data.initial.revisionNo}
+          notes={data.deliveryNotes}
+          canManage={data.canManageDeliveryNotes}
+        />
+        <SalesOrderEditor
+          customers={data.customers}
+          items={data.items}
+          initial={data.initial}
+        />
+      </div>
     </main>
   );
 }

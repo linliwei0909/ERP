@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getPageRequestContext } from "@/lib/auth/request-context";
-import { hasRole } from "@/lib/auth/rbac";
+import { hasPermission, hasRole } from "@/lib/auth/rbac";
 import { CompanyAccessError } from "@/lib/auth/company-scope";
 
 export default async function Home() {
@@ -62,7 +62,7 @@ export default async function Home() {
           </form>
         ) : null}
 
-        <div className="mt-8 flex gap-3">
+        <div className="mt-8 flex flex-wrap gap-3">
           <Link
             href="/sales-orders"
             className="rounded-lg bg-teal-700 px-4 py-2 text-white"
@@ -75,6 +75,14 @@ export default async function Home() {
           >
             客戶查詢
           </Link>
+          {hasPermission(context.roleCodes, "delivery_notes.read") ? (
+            <Link
+              href="/delivery-notes"
+              className="rounded-lg bg-cyan-800 px-4 py-2 text-white"
+            >
+              銷貨單
+            </Link>
+          ) : null}
           <Link
             href="/items"
             className="rounded-lg border border-teal-700 px-4 py-2 text-teal-800"

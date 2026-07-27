@@ -1,6 +1,6 @@
 # Ragic 本地端系統技術架構
 
-文件狀態：P1、P2、P3.1 已完成；P3.2a schema、P3.2b 核心 service、P3.2c rebuild／ADMIN direct void 與 P3.2d1 API 已完成，P3.2d2 UI 尚未開始
+文件狀態：P1、P2、P3.1 已完成；P3.2a schema、P3.2b 核心 service、P3.2c rebuild／ADMIN direct void、P3.2d1 API 與 P3.2d2 UI 已完成
 同步基線：`DECISIONS.md` V0.10
 版本日期：2026-07-27
 
@@ -245,10 +245,13 @@ P3.2a 已完成 Prisma schema、`0010_p3_delivery_notes`、custom SQL、fresh DB
 - P3.2d1 route 只負責 session/context、strict validation、idempotency header、correlation ID、service dispatch、error mapping 與 DTO serialization；不得在 route 重複 business rule 或直接組合 Prisma mutation。Client 不得指定 company、actor、status、number、date、snapshot 或 amount。
 - API response 的 Decimal 使用固定精度十進位字串、PostgreSQL `date` 使用 `YYYY-MM-DD`、timestamp 使用 ISO-8601 UTC；錯誤 envelope 不洩漏 SQL、Prisma、stack 或帳號存在性。
 - Delivery-note detail serializer 在原查詢一併 select `createdBy.id`／`createdBy.username`，以不可為空的 `createdById` 與最小 actor summary 回傳；不進行額外逐筆查詢，不暴露 password hash、session、token、角色或公司 scope。List serializer 使用明確欄位白名單，維持既有 summary contract。
+- P3.2d2 使用 server-rendered list/detail 頁面與小範圍 client mutation components；頁面依既有 permission gate 控制 read／manage／ADMIN void。List API contract 不增加建立者欄位，清單頁以單一 company-scoped bulk query補齊目前頁面的 actor summary，避免 N+1。
+- Client mutation adapter 統一加入 `Idempotency-Key`、保留 typed error message，並以 pending state 及同步 busy guard 防止重複送出；成功後導向明細或 refresh，不在 client 重作 business rule。
 - DB test files 目前共用單一 disposable `DATABASE_URL`，且會建立固定共享角色，因此正式 `test:db` 採 `--maxWorkers=1`。Unit suite 保持平行；這是測試資料庫生命週期限制，不是 production concurrency 限制。若未來改為每個 test file 獨立 DB／schema，可重新評估平行執行。
 
 ## 19. 變更紀錄
 
+- V0.10（2026-07-27，P3.2d2 工程同步）：完成 server-rendered list/detail、order linkage、permission-gated create/rebuild／ADMIN void 與 client mutation boundary；無 schema、migration、package 或 API contract 變更。
 - V0.10（2026-07-27，P3.2d1 工程同步）：完成 API route／DTO／security boundary、真實 PostgreSQL API workflow 與 DB-only single-worker runner；UI 尚未開始。
 - V0.10（2026-07-27，P3.2c 工程同步）：完成 revision start/re-confirm controlled state、原子 replacement rebuild、ADMIN direct void、固定 lock 順序、typed errors、audit、idempotency 與 rollback；API／UI 未開始。
 - V0.10（2026-07-27，P3.2b 工程同步）：完成 delivery-note 核心建立／查詢 service、company scope／RBAC、order／current-note row lock、Asia/Taipei 月流水、confirmed snapshot copy、Decimal invariant、audit、idempotency 與 ORDER_VOID 整合；API／UI／rebuild／ADMIN direct void 未開始。

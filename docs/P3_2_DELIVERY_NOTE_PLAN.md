@@ -1,12 +1,12 @@
 # P3.2 銷貨單規格盤點與實作規劃
 
-文件狀態：P3.2a schema／migration、P3.2b 核心 service、P3.2c revision rebuild／ADMIN direct void 與 P3.2d1 API 已完成工程驗證；P3.2d2 UI 尚未開始
+文件狀態：P3.2a schema／migration、P3.2b 核心 service、P3.2c revision rebuild／ADMIN direct void、P3.2d1 API 與 P3.2d2 UI 已完成工程驗證
 規劃日期：2026-07-27
 規格基線：`DECISIONS.md` V0.10／DEC-057
 適用範圍：P3.2 銷貨單與銷貨單明細
 明確排除：列印／PDF、實際出貨日正式流程、紙本回收確認、應收、庫存與 P3.3／P3.4
 
-> OQ-046～OQ-050 已由 DEC-057 正式決議。P3.2a～P3.2d1 已完成 DB contract、核心 service、revision rebuild、replacement chain、ADMIN direct void 與 API 驗證；UI、列印、PDF、出貨、回收確認與應收仍未開始。
+> OQ-046～OQ-050 已由 DEC-057 正式決議。P3.2a～P3.2d2 已完成 DB contract、核心 service、revision rebuild、replacement chain、ADMIN direct void、API 與 UI 驗證；列印、PDF、出貨、回收確認與應收仍未開始。
 
 ## 1. 現況盤點
 
@@ -405,7 +405,7 @@ Revision start 沒有 delivery-note mutation，沿用既有 sales-order revision
 - List 維持原 summary DTO，不增加建立者欄位，也不回傳 password hash、session、token、角色或公司 scope。
 - 本補件不變更 schema、migration、transaction、狀態機或 UI。
 
-## 15. UI plan
+## 15. UI plan（P3.2d2 已完成）
 
 - 訂單明細：
   - `CONFIRMED` 且無非作廢單時顯示「建立銷貨單」；建立一律由使用者明確觸發。
@@ -519,7 +519,7 @@ P3.2 實作取得另案授權後，建議拆成：
 2. **P3.2b 建立與查詢（完成）**：number、snapshot copy、create/get/list、order `DELIVERY_CREATED`。
 3. **P3.2c 修訂／作廢／重建（完成）**：原子 workflow、replacement history、admin void。
 4. **P3.2d1 API（完成）**：order linkage、delivery list/detail、strict DTO、session、RBAC、company scope、idempotency、correlation ID 與 typed error。
-5. **P3.2d2 UI（尚未開始）**：order linkage、delivery list/detail、permission-gated actions。
+5. **P3.2d2 UI（完成）**：order linkage、delivery list/detail、permission-gated actions、client mutation error 與 duplicate-submit handling。
 6. **P3.2e 整合驗收**：concurrency、rollback、idempotency、company isolation、fresh chain、health、smoke、validation 文件。
 
 ## 21. P3.2b 工程狀態
@@ -528,7 +528,7 @@ P3.2 實作取得另案授權後，建議拆成：
 
 已完成 `createDeliveryNoteFromOrder`、`getDeliveryNote`、`listDeliveryNotes`、`getCurrentDeliveryNoteForOrder`、RBAC／company scope、row lock、Asia/Taipei 取號、confirmed snapshot copy、Decimal invariant、audit、idempotency、order `DELIVERY_CREATED` 與 order void 的 `ORDER_VOID` 內部 helper。`erp_p3_2b_test_run_20260727_03` 完成 0001～0010、diff 0、單獨 9 項及完整 114 項 DB tests；unit、lint、typecheck、build 與 health 均通過。
 
-P3.2c 的 revision rebuild、replacement chain 與 ADMIN direct void 已完成工程驗證。P3.2d1 API 亦已完成；P3.2d2 UI 仍須另案授權。
+P3.2c 的 revision rebuild、replacement chain 與 ADMIN direct void 已完成工程驗證。P3.2d1 API 與 P3.2d2 UI 亦已完成；列印、PDF、出貨、回收確認與應收仍未開始。
 
 ## 22. P3.2c 工程狀態
 

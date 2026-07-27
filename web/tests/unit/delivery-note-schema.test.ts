@@ -35,17 +35,21 @@ describe("P3.2a delivery-note schema contract", () => {
     expect(schema).not.toContain("currentDeliveryNoteId");
   });
 
-  it("keeps the approved service path and still excludes P3.2 UI files", () => {
-    const forbiddenPaths = [
-      "src/lib/delivery-note-service.ts",
-      "src/app/delivery-notes",
+  it("keeps the approved service path and P3.2d2 UI boundaries", () => {
+    expect(
+      existsSync(
+        resolve(process.cwd(), "src/lib/delivery-note-service.ts"),
+      ),
+    ).toBe(false);
+    const requiredPaths = [
+      "src/app/api/delivery-notes",
+      "src/app/delivery-notes/page.tsx",
+      "src/app/delivery-notes/[id]/page.tsx",
+      "src/lib/delivery-notes/client.ts",
     ];
 
-    for (const forbiddenPath of forbiddenPaths) {
-      expect(existsSync(resolve(process.cwd(), forbiddenPath))).toBe(false);
+    for (const requiredPath of requiredPaths) {
+      expect(existsSync(resolve(process.cwd(), requiredPath))).toBe(true);
     }
-    expect(
-      existsSync(resolve(process.cwd(), "src/app/api/delivery-notes")),
-    ).toBe(true);
   });
 });
