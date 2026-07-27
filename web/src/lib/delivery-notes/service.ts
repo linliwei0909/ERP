@@ -178,6 +178,9 @@ function serializeSummary(note: LoadedDeliveryNote): DeliveryNoteSummary {
     subtotal: note.subtotal.toFixed(0),
     freightAmount: note.freightAmount.toFixed(0),
     totalAmount: note.totalAmount.toFixed(0),
+    voidSource: note.voidSource,
+    voidedAt: note.voidedAt?.toISOString() ?? null,
+    voidReason: note.voidReason,
     createdAt: note.createdAt.toISOString(),
   };
 }
@@ -210,11 +213,8 @@ function serializeDetail(note: LoadedDeliveryNote): DeliveryNoteDetail {
     replacementDeliveryNote: serializeReference(
       note.replacementDeliveryNote,
     ),
-    voidSource: note.voidSource,
-    voidedAt: note.voidedAt?.toISOString() ?? null,
     voidedById: note.voidedById,
     voidedBy: note.voidedBy,
-    voidReason: note.voidReason,
     lines: note.lines.map((line) => ({
       id: line.id,
       lineNumber: line.lineNumber,

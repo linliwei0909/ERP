@@ -1,6 +1,6 @@
 # Ragic 本地端系統技術架構
 
-文件狀態：P1、P2、P3.1 已完成；P3.2a schema、P3.2b 核心 service 與 P3.2c rebuild／ADMIN direct void 已完成，P3.2d API／UI 尚未開始
+文件狀態：P1、P2、P3.1 已完成；P3.2a schema、P3.2b 核心 service、P3.2c rebuild／ADMIN direct void 與 P3.2d1 API 已完成，P3.2d2 UI 尚未開始
 同步基線：`DECISIONS.md` V0.10
 版本日期：2026-07-27
 
@@ -228,7 +228,7 @@ P2.1～P2.6 已完成公司參數、客戶、品項、價格、運費的主檔�
 
 ## 18. P3.2 銷貨單架構決議
 
-P3.2a 已完成 Prisma schema、`0010_p3_delivery_notes`、custom SQL、fresh DB 驗證及本機 `erp` 受控部署。P3.2b 已完成建立／查詢 service；P3.2c 已完成 revision start/re-confirm controlled state、原子 rebuild、replacement chain、ADMIN direct void、typed errors、固定 row lock、audit、idempotency 與 rollback。API 與 UI 尚未建立。
+P3.2a 已完成 Prisma schema、`0010_p3_delivery_notes`、custom SQL、fresh DB 驗證及本機 `erp` 受控部署。P3.2b 已完成建立／查詢 service；P3.2c 已完成 revision start/re-confirm controlled state、原子 rebuild、replacement chain、ADMIN direct void、typed errors、固定 row lock、audit、idempotency 與 rollback。P3.2d1 已完成 API；UI 尚未建立。
 
 - 公開 command 為 `createDeliveryNoteFromOrder`、`rebuildDeliveryNoteForOrder`、`adminVoidDeliveryNote`；查詢為 `getDeliveryNote`、`listDeliveryNotes`、`getCurrentDeliveryNoteForOrder`。Order 作廢使用內部 `voidDeliveryNoteForOrderVoid` helper，revision start 不操作 delivery note。
 - 初次建立由使用者明確觸發。Server 驗證 order=`CONFIRMED`、permission、company scope 及不存在非 `VOIDED` 銷貨單，才在 transaction 內配置 `DELIVERY_NOTE` 號碼並建立完整快照。
@@ -242,9 +242,13 @@ P3.2a 已完成 Prisma schema、`0010_p3_delivery_notes`、custom SQL、fresh DB
 - Idempotency operations 為 `delivery_note.create`、`delivery_note.rebuild`、`delivery_note.admin_void`、`sales_order.void_with_delivery_note`。P3.2 全部保持同步 transaction，不使用 background job。
 - P3.2b 建立流程先在 transaction 內建立 header，再依 line number 逐筆建立含明確 `delivery_note_id`／`company_id` 的 lines；line failure 會 rollback header、sequence、order status、audit 與 idempotency completion。
 - `0010_p3_delivery_notes` 已建立兩表及 enum，custom SQL 實作 `WHERE status <> 'VOIDED'` partial unique、composite FK、複雜 CHECK、replacement chain 與 ADDITION graph trigger；0001～0009 未修改。兩個 fresh DB 均由零套用 0001～0010 且 schema diff=0，本機 `erp` 亦已套用 0010，production live／ready／worker health 均通過。
+- P3.2d1 route 只負責 session/context、strict validation、idempotency header、correlation ID、service dispatch、error mapping 與 DTO serialization；不得在 route 重複 business rule 或直接組合 Prisma mutation。Client 不得指定 company、actor、status、number、date、snapshot 或 amount。
+- API response 的 Decimal 使用固定精度十進位字串、PostgreSQL `date` 使用 `YYYY-MM-DD`、timestamp 使用 ISO-8601 UTC；錯誤 envelope 不洩漏 SQL、Prisma、stack 或帳號存在性。
+- DB test files 目前共用單一 disposable `DATABASE_URL`，且會建立固定共享角色，因此正式 `test:db` 採 `--maxWorkers=1`。Unit suite 保持平行；這是測試資料庫生命週期限制，不是 production concurrency 限制。若未來改為每個 test file 獨立 DB／schema，可重新評估平行執行。
 
 ## 19. 變更紀錄
 
+- V0.10（2026-07-27，P3.2d1 工程同步）：完成 API route／DTO／security boundary、真實 PostgreSQL API workflow 與 DB-only single-worker runner；UI 尚未開始。
 - V0.10（2026-07-27，P3.2c 工程同步）：完成 revision start/re-confirm controlled state、原子 replacement rebuild、ADMIN direct void、固定 lock 順序、typed errors、audit、idempotency 與 rollback；API／UI 未開始。
 - V0.10（2026-07-27，P3.2b 工程同步）：完成 delivery-note 核心建立／查詢 service、company scope／RBAC、order／current-note row lock、Asia/Taipei 月流水、confirmed snapshot copy、Decimal invariant、audit、idempotency 與 ORDER_VOID 整合；API／UI／rebuild／ADMIN direct void 未開始。
 - V0.10（2026-07-27，P3.2a 工程同步）：完成 Prisma model、`0010_p3_delivery_notes`、partial unique、composite FK、replacement／ADDITION constraint trigger、兩個 fresh DB、本機部署及 health 驗證；service／API／UI 未開始。

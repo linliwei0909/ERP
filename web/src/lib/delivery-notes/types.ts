@@ -47,6 +47,9 @@ export type DeliveryNoteSummary = {
   subtotal: string;
   freightAmount: string;
   totalAmount: string;
+  voidSource: DeliveryNoteVoidSource | null;
+  voidedAt: string | null;
+  voidReason: string | null;
   createdAt: string;
 };
 
@@ -62,11 +65,8 @@ export type DeliveryNoteDetail = DeliveryNoteSummary & {
   replacementDeliveryNoteId: string | null;
   replacedDeliveryNote: DeliveryNoteReferenceSummary | null;
   replacementDeliveryNote: DeliveryNoteReferenceSummary | null;
-  voidSource: DeliveryNoteVoidSource | null;
-  voidedAt: string | null;
   voidedById: string | null;
   voidedBy: DeliveryNoteActorSummary | null;
-  voidReason: string | null;
   lines: DeliveryNoteLineDetail[];
 };
 

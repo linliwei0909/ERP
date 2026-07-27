@@ -141,6 +141,7 @@
 - 銷貨單複製已確認 order 的 typed 快照與凍結金額，不重新讀取目前主檔、查價或重算運費。
 - P3.2b 建立服務已依上述規則實作：鎖定 order 與目前非作廢銷貨單，在單一 transaction 內完成月流水取號、header、lines、order `DELIVERY_CREATED`、audit 與 idempotency completion；任一明細失敗全部 rollback。
 - P3.2c 已實作 revision start 保留舊 `ACTIVE` 單、re-confirm controlled state、`ORDER_REVISION_REBUILD` 原子重建與 `ADMIN_DIRECT` 例外作廢。重建固定使用新號並向前延伸 replacement chain；所有 order／note／sequence／lines／audit／idempotency 異動位於同一 transaction，失敗不得留下中間狀態。
+- P3.2d1 API 已實作 create／rebuild／ADMIN void 與 list／detail／current；所有寫入沿用正式 transaction service，必須通過 session、後端 RBAC、selected-company scope、strict body、`Idempotency-Key` 與 correlation ID，不接受 client 指定 company、actor、狀態、單號、日期、快照或金額。
 - 銷貨單狀態為 `ACTIVE`、`SHIPPED`、`RECEIVABLE_CREATED`、`VOIDED`。P3.2 只實作建立為 `ACTIVE` 及三種 `ACTIVE -> VOIDED`；實際出貨與應收狀態由後續階段處理，紙本回收確認不是 status。
 - 實際出貨日預設為首次列印銷貨單的日期；只在欄位尚未填寫時帶入，後續重印不得覆蓋。使用者可修改，第一階段不要求修改原因，另記首次列印時間。
 - 填入實際出貨日後，訂單與銷貨單更新為已出貨。
@@ -280,6 +281,7 @@
 
 ## 17. 變更紀錄
 
+- V0.10（2026-07-27，P3.2d1 工程同步）：完成 Delivery-note API security boundary、strict DTO、idempotency、correlation ID、error mapping 與 serialization；不包含 UI、出貨、列印、回收確認或應收。
 - V0.10（2026-07-27，P3.2c 工程同步）：完成 revision rebuild、replacement chain、ADMIN direct void、typed errors、audit、idempotency 與 atomic rollback；不包含 API／UI、出貨、列印或應收。
 - V0.10（2026-07-27，P3.2b 工程同步）：完成銷貨單初次建立、查詢、confirmed snapshot copy、月流水、RBAC／company scope、idempotency、audit、order 狀態與 ORDER_VOID 內部連動；不包含 API／UI／rebuild／ADMIN direct void。
 - V0.10（2026-07-27）：同步 DEC-057，正式化銷貨單手動建立、revision 原子重建、追加訂單 root 關聯且不聚合、ADMIN 直接作廢、`delivery_note_date` 月流水、非作廢唯一、快照、audit 與 idempotency；P3.2 尚未開始實作。

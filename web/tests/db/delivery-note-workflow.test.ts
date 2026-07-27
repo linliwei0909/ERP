@@ -1,7 +1,26 @@
 import { randomUUID } from "node:crypto";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { NextRequest } from "next/server";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PrismaClient } from "../../src/generated/prisma/client";
+import {
+  GET as getDeliveryNoteRoute,
+} from "../../src/app/api/delivery-notes/[id]/route";
+import {
+  POST as adminVoidDeliveryNoteRoute,
+} from "../../src/app/api/delivery-notes/[id]/void/route";
+import {
+  GET as listDeliveryNotesRoute,
+} from "../../src/app/api/delivery-notes/route";
+import {
+  GET as getCurrentDeliveryNoteRoute,
+  POST as createDeliveryNoteRoute,
+} from "../../src/app/api/sales-orders/[id]/delivery-note/route";
+import {
+  POST as rebuildDeliveryNoteRoute,
+} from "../../src/app/api/sales-orders/[id]/delivery-note/rebuild/route";
+import { SESSION_COOKIE_NAME } from "../../src/lib/auth/constants";
+import { hashSessionToken } from "../../src/lib/auth/session-token";
 import type { RequestContext } from "../../src/lib/auth/session";
 import {
   adminVoidDeliveryNote,
@@ -51,6 +70,8 @@ describeDatabase("P3.2b/P3.2c delivery-note workflows", () => {
   let orderCounter = 0;
   let documentCodeA: string;
   let documentCodeB: string;
+  let adminSessionToken: string;
+  let orderEntrySessionToken: string;
 
   beforeAll(async () => {
     [companyA, companyB] = await Promise.all([
@@ -66,6 +87,11 @@ describeDatabase("P3.2b/P3.2c delivery-note workflows", () => {
       update: {},
       create: { code: "ORDER_ENTRY", name: "訂單輸入人員" },
     });
+    const adminRole = await db.role.upsert({
+      where: { code: "ADMIN" },
+      update: {},
+      create: { code: "ADMIN", name: "系統管理員" },
+    });
     const user = await db.user.create({
       data: {
         username: `delivery-note-${suffix}`,
@@ -77,6 +103,7 @@ describeDatabase("P3.2b/P3.2c delivery-note workflows", () => {
     userId = user.id;
     await Promise.all([
       db.userRole.create({ data: { userId, roleId: role.id } }),
+      db.userRole.create({ data: { userId, roleId: adminRole.id } }),
       db.userCompanyScope.create({
         data: { userId, companyId: companyA.id },
       }),
@@ -84,13 +111,38 @@ describeDatabase("P3.2b/P3.2c delivery-note workflows", () => {
         data: { userId, companyId: companyB.id },
       }),
     ]);
+    adminSessionToken = `delivery-note-admin-${randomUUID()}`;
     const session = await db.userSession.create({
       data: {
         userId,
-        tokenHash: `delivery-note-${randomUUID()}`,
+        tokenHash: hashSessionToken(adminSessionToken),
         selectedCompanyId: companyA.id,
       },
     });
+    const orderEntryUser = await db.user.create({
+      data: {
+        username: `delivery-note-order-entry-${suffix}`,
+        normalizedUsername: `delivery-note-order-entry-${suffix}`,
+        passwordHash: "test",
+        defaultCompanyId: companyA.id,
+      },
+    });
+    orderEntrySessionToken = `delivery-note-order-entry-${randomUUID()}`;
+    await Promise.all([
+      db.userRole.create({
+        data: { userId: orderEntryUser.id, roleId: role.id },
+      }),
+      db.userCompanyScope.create({
+        data: { userId: orderEntryUser.id, companyId: companyA.id },
+      }),
+      db.userSession.create({
+        data: {
+          userId: orderEntryUser.id,
+          tokenHash: hashSessionToken(orderEntrySessionToken),
+          selectedCompanyId: companyA.id,
+        },
+      }),
+    ]);
     const baseContext = {
       actor: { userId, username: user.username },
       session: { sessionId: session.id },
@@ -266,6 +318,39 @@ describeDatabase("P3.2b/P3.2c delivery-note workflows", () => {
       settingValue,
       effectiveFrom,
     }));
+  }
+
+  function apiRequest(
+    path: string,
+    sessionToken?: string,
+    options: {
+      method?: string;
+      body?: unknown;
+      idempotencyKey?: string;
+      requestId?: string;
+    } = {},
+  ) {
+    return new NextRequest(`http://localhost${path}`, {
+      method: options.method ?? "GET",
+      headers: {
+        origin: "http://localhost",
+        "x-request-id": options.requestId ?? `api-${randomUUID()}`,
+        ...(sessionToken
+          ? {
+              cookie: `${SESSION_COOKIE_NAME}=${sessionToken}`,
+            }
+          : {}),
+        ...(options.idempotencyKey
+          ? { "idempotency-key": options.idempotencyKey }
+          : {}),
+        ...(options.body === undefined
+          ? {}
+          : { "content-type": "application/json" }),
+      },
+      ...(options.body === undefined
+        ? {}
+        : { body: JSON.stringify(options.body) }),
+    });
   }
 
   async function createConfirmedOrder(
@@ -1428,5 +1513,361 @@ describeDatabase("P3.2b/P3.2c delivery-note workflows", () => {
         }),
       ).toMatchObject({ status: "FAILED" });
     }
+  });
+
+  it("exposes create, replay, current, detail and list through the real API boundary", async () => {
+    const order = await createConfirmedOrder(companyA);
+    const idempotencyKey = randomUUID();
+    const requestId = `api-create-${randomUUID()}`;
+    const create = await createDeliveryNoteRoute(
+      apiRequest(
+        `/api/sales-orders/${order.id}/delivery-note`,
+        adminSessionToken,
+        {
+          method: "POST",
+          body: { expectedRevisionNo: 1 },
+          idempotencyKey,
+          requestId,
+        },
+      ),
+      { params: Promise.resolve({ id: order.id }) },
+    );
+    expect(create.status).toBe(201);
+    expect(create.headers.get("x-request-id")).toBe(requestId);
+    const createBody = (await create.json()) as {
+      deliveryNote: {
+        id: string;
+        deliveryNoteNumber: string;
+        subtotal: string;
+        freightAmount: string;
+        totalAmount: string;
+        deliveryNoteDate: string;
+        lines: Array<{
+          quantity: string;
+          unitPrice: string;
+          lineAmount: string;
+        }>;
+      };
+      replayed: boolean;
+      correlationId: string;
+    };
+    expect(createBody).toMatchObject({
+      replayed: false,
+      correlationId: requestId,
+      deliveryNote: {
+        subtotal: "10",
+        freightAmount: "2",
+        totalAmount: "12",
+      },
+    });
+    expect(createBody.deliveryNote.deliveryNoteNumber).toMatch(
+      new RegExp(`^DN-${documentCodeA}-202607-\\d{6}$`),
+    );
+    expect(createBody.deliveryNote.deliveryNoteDate).toMatch(
+      /^\d{4}-\d{2}-\d{2}$/,
+    );
+    expect(createBody.deliveryNote.lines[0]).toMatchObject({
+      quantity: "1.0000",
+      unitPrice: "10.00000",
+      lineAmount: "10",
+    });
+
+    const replay = await createDeliveryNoteRoute(
+      apiRequest(
+        `/api/sales-orders/${order.id}/delivery-note`,
+        adminSessionToken,
+        {
+          method: "POST",
+          body: { expectedRevisionNo: 1 },
+          idempotencyKey,
+        },
+      ),
+      { params: Promise.resolve({ id: order.id }) },
+    );
+    expect(replay.status).toBe(200);
+    await expect(replay.json()).resolves.toMatchObject({
+      replayed: true,
+      deliveryNote: { id: createBody.deliveryNote.id },
+    });
+
+    const current = await getCurrentDeliveryNoteRoute(
+      apiRequest(
+        `/api/sales-orders/${order.id}/delivery-note`,
+        adminSessionToken,
+      ),
+      { params: Promise.resolve({ id: order.id }) },
+    );
+    expect(current.status).toBe(200);
+    await expect(current.json()).resolves.toMatchObject({
+      deliveryNote: { id: createBody.deliveryNote.id },
+    });
+
+    const detail = await getDeliveryNoteRoute(
+      apiRequest(
+        `/api/delivery-notes/${createBody.deliveryNote.id}`,
+        adminSessionToken,
+      ),
+      { params: Promise.resolve({ id: createBody.deliveryNote.id }) },
+    );
+    expect(detail.status).toBe(200);
+    await expect(detail.json()).resolves.toMatchObject({
+      deliveryNote: {
+        id: createBody.deliveryNote.id,
+        customer: { name: "確認時客戶" },
+      },
+    });
+
+    const list = await listDeliveryNotesRoute(
+      apiRequest(
+        `/api/delivery-notes?salesOrderId=${order.id}&status=ACTIVE&page=1&pageSize=10`,
+        adminSessionToken,
+      ),
+    );
+    expect(list.status).toBe(200);
+    await expect(list.json()).resolves.toMatchObject({
+      items: [
+        {
+          id: createBody.deliveryNote.id,
+          customer: { name: "確認時客戶" },
+          voidSource: null,
+          voidedAt: null,
+          voidReason: null,
+        },
+      ],
+      page: 1,
+      pageSize: 10,
+      total: 1,
+    });
+  });
+
+  it("enforces API auth, strict input, company scope and concurrent uniqueness", async () => {
+    const order = await createConfirmedOrder(companyA);
+    const unauthenticated = await createDeliveryNoteRoute(
+      apiRequest(`/api/sales-orders/${order.id}/delivery-note`, undefined, {
+        method: "POST",
+        body: { expectedRevisionNo: 1 },
+        idempotencyKey: randomUUID(),
+      }),
+      { params: Promise.resolve({ id: order.id }) },
+    );
+    expect(unauthenticated.status).toBe(401);
+
+    const injected = await createDeliveryNoteRoute(
+      apiRequest(
+        `/api/sales-orders/${order.id}/delivery-note`,
+        adminSessionToken,
+        {
+          method: "POST",
+          body: {
+            expectedRevisionNo: 1,
+            companyId: companyB.id,
+            status: "VOIDED",
+          },
+          idempotencyKey: randomUUID(),
+        },
+      ),
+      { params: Promise.resolve({ id: order.id }) },
+    );
+    expect(injected.status).toBe(400);
+
+    const missingKey = await createDeliveryNoteRoute(
+      apiRequest(
+        `/api/sales-orders/${order.id}/delivery-note`,
+        adminSessionToken,
+        {
+          method: "POST",
+          body: { expectedRevisionNo: 1 },
+        },
+      ),
+      { params: Promise.resolve({ id: order.id }) },
+    );
+    expect(missingKey.status).toBe(400);
+
+    const concurrent = await Promise.all(
+      [randomUUID(), randomUUID()].map((idempotencyKey) =>
+        createDeliveryNoteRoute(
+          apiRequest(
+            `/api/sales-orders/${order.id}/delivery-note`,
+            adminSessionToken,
+            {
+              method: "POST",
+              body: { expectedRevisionNo: 1 },
+              idempotencyKey,
+            },
+          ),
+          { params: Promise.resolve({ id: order.id }) },
+        ),
+      ),
+    );
+    expect(concurrent.map((response) => response.status).sort()).toEqual([
+      201,
+      409,
+    ]);
+    expect(
+      await db.deliveryNote.count({
+        where: {
+          salesOrderId: order.id,
+          status: { not: "VOIDED" },
+        },
+      }),
+    ).toBe(1);
+
+    const companyBOrder = await createConfirmedOrder(companyB);
+    const crossCompany = await getCurrentDeliveryNoteRoute(
+      apiRequest(
+        `/api/sales-orders/${companyBOrder.id}/delivery-note`,
+        orderEntrySessionToken,
+      ),
+      { params: Promise.resolve({ id: companyBOrder.id }) },
+    );
+    expect(crossCompany.status).toBe(404);
+  });
+
+  it("rebuilds and ADMIN-voids through the API with stable replay and role enforcement", async () => {
+    const order = await createConfirmedOrder(companyA);
+    const initial = await createDeliveryNoteRoute(
+      apiRequest(
+        `/api/sales-orders/${order.id}/delivery-note`,
+        adminSessionToken,
+        {
+          method: "POST",
+          body: { expectedRevisionNo: 1 },
+          idempotencyKey: randomUUID(),
+        },
+      ),
+      { params: Promise.resolve({ id: order.id }) },
+    );
+    const initialBody = (await initial.json()) as {
+      deliveryNote: { id: string };
+    };
+    await startSalesOrderRevision(db, {
+      context: adminContext,
+      companyId: companyA.id,
+      orderId: order.id,
+      idempotencyKey: randomUUID(),
+    });
+    await confirmSalesOrder(db, {
+      context: adminContext,
+      companyId: companyA.id,
+      orderId: order.id,
+      idempotencyKey: randomUUID(),
+    });
+
+    const rebuildKey = randomUUID();
+    const rebuild = await rebuildDeliveryNoteRoute(
+      apiRequest(
+        `/api/sales-orders/${order.id}/delivery-note/rebuild`,
+        adminSessionToken,
+        {
+          method: "POST",
+          body: {
+            expectedRevisionNo: 2,
+            reason: "API 修訂後重建",
+          },
+          idempotencyKey: rebuildKey,
+        },
+      ),
+      { params: Promise.resolve({ id: order.id }) },
+    );
+    expect(rebuild.status).toBe(200);
+    const rebuildBody = (await rebuild.json()) as {
+      deliveryNote: {
+        id: string;
+        replacedDeliveryNoteId: string | null;
+      };
+      replayed: boolean;
+    };
+    expect(rebuildBody).toMatchObject({
+      replayed: false,
+      deliveryNote: {
+        replacedDeliveryNoteId: initialBody.deliveryNote.id,
+      },
+    });
+    const rebuildReplay = await rebuildDeliveryNoteRoute(
+      apiRequest(
+        `/api/sales-orders/${order.id}/delivery-note/rebuild`,
+        adminSessionToken,
+        {
+          method: "POST",
+          body: {
+            expectedRevisionNo: 2,
+            reason: "API 修訂後重建",
+          },
+          idempotencyKey: rebuildKey,
+        },
+      ),
+      { params: Promise.resolve({ id: order.id }) },
+    );
+    expect(rebuildReplay.status).toBe(200);
+    await expect(rebuildReplay.json()).resolves.toMatchObject({
+      replayed: true,
+      deliveryNote: { id: rebuildBody.deliveryNote.id },
+    });
+
+    const forbiddenVoid = await adminVoidDeliveryNoteRoute(
+      apiRequest(
+        `/api/delivery-notes/${rebuildBody.deliveryNote.id}/void`,
+        orderEntrySessionToken,
+        {
+          method: "POST",
+          body: { reason: "ORDER_ENTRY 不可作廢" },
+          idempotencyKey: randomUUID(),
+        },
+      ),
+      { params: Promise.resolve({ id: rebuildBody.deliveryNote.id }) },
+    );
+    expect(forbiddenVoid.status).toBe(403);
+
+    const voidKey = randomUUID();
+    const voided = await adminVoidDeliveryNoteRoute(
+      apiRequest(
+        `/api/delivery-notes/${rebuildBody.deliveryNote.id}/void`,
+        adminSessionToken,
+        {
+          method: "POST",
+          body: { reason: "API 管理員直接作廢" },
+          idempotencyKey: voidKey,
+        },
+      ),
+      { params: Promise.resolve({ id: rebuildBody.deliveryNote.id }) },
+    );
+    expect(voided.status).toBe(200);
+    await expect(voided.json()).resolves.toMatchObject({
+      replayed: false,
+      deliveryNote: {
+        id: rebuildBody.deliveryNote.id,
+        status: "VOIDED",
+        voidSource: "ADMIN_DIRECT",
+        voidReason: "API 管理員直接作廢",
+      },
+    });
+    const voidReplay = await adminVoidDeliveryNoteRoute(
+      apiRequest(
+        `/api/delivery-notes/${rebuildBody.deliveryNote.id}/void`,
+        adminSessionToken,
+        {
+          method: "POST",
+          body: { reason: "API 管理員直接作廢" },
+          idempotencyKey: voidKey,
+        },
+      ),
+      { params: Promise.resolve({ id: rebuildBody.deliveryNote.id }) },
+    );
+    expect(voidReplay.status).toBe(200);
+    await expect(voidReplay.json()).resolves.toMatchObject({
+      replayed: true,
+      deliveryNote: { id: rebuildBody.deliveryNote.id },
+    });
+
+    const current = await getCurrentDeliveryNoteRoute(
+      apiRequest(
+        `/api/sales-orders/${order.id}/delivery-note`,
+        adminSessionToken,
+      ),
+      { params: Promise.resolve({ id: order.id }) },
+    );
+    await expect(current.json()).resolves.toMatchObject({
+      deliveryNote: null,
+    });
   });
 });

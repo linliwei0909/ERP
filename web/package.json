@@ -10,7 +10,7 @@
     "lint": "eslint",
     "typecheck": "next typegen && tsc --project tsconfig.typecheck.json",
     "test": "vitest run tests/unit",
-    "test:db": "vitest run tests/db",
+    "test:db": "vitest run tests/db --maxWorkers=1",
     "prisma:validate": "prisma validate",
     "prisma:generate": "prisma generate",
     "db:create-only": "prisma migrate dev --create-only",

@@ -35,15 +35,17 @@ describe("P3.2a delivery-note schema contract", () => {
     expect(schema).not.toContain("currentDeliveryNoteId");
   });
 
-  it("does not introduce P3.2 service, API, or UI files", () => {
+  it("keeps the approved service path and still excludes P3.2 UI files", () => {
     const forbiddenPaths = [
       "src/lib/delivery-note-service.ts",
-      "src/app/api/delivery-notes",
       "src/app/delivery-notes",
     ];
 
     for (const forbiddenPath of forbiddenPaths) {
       expect(existsSync(resolve(process.cwd(), forbiddenPath))).toBe(false);
     }
+    expect(
+      existsSync(resolve(process.cwd(), "src/app/api/delivery-notes")),
+    ).toBe(true);
   });
 });
