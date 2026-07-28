@@ -558,6 +558,7 @@ export async function createDeliveryNoteFromOrder(
             fiscalMonth: deliveryNoteDate.getUTCMonth() + 1,
             salesOrderId: order.id,
             status: "ACTIVE",
+            snapshotVersion: snapshots.snapshotVersion,
             ...snapshots.header,
             contactSnapshot:
               snapshots.header.contactSnapshot ?? Prisma.DbNull,
@@ -800,6 +801,7 @@ export async function rebuildDeliveryNoteForOrder(
             salesOrderId: order.id,
             status: "ACTIVE",
             replacedDeliveryNoteId: oldDeliveryNote.id,
+            snapshotVersion: snapshots.snapshotVersion,
             ...snapshots.header,
             contactSnapshot:
               snapshots.header.contactSnapshot ?? Prisma.DbNull,

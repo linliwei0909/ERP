@@ -1,6 +1,9 @@
 import { Prisma, type SalesOrderStatus } from "@/generated/prisma/client";
 import { DeliveryNoteInvariantError } from "@/lib/delivery-notes/errors";
 
+export const DELIVERY_NOTE_SNAPSHOT_VERSION =
+  "delivery-note-snapshot-v1" as const;
+
 export type ConfirmedOrderForDeliveryNote = {
   id: string;
   companyId: string;
@@ -90,6 +93,7 @@ export function buildDeliveryNoteSnapshotsFromConfirmedOrder(
   }
 
   return {
+    snapshotVersion: DELIVERY_NOTE_SNAPSHOT_VERSION,
     header: {
       companySnapshot: cloneJson(order.companySnapshot),
       customerSnapshot: cloneJson(order.customerSnapshot),

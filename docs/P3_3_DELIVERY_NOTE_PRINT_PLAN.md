@@ -1,6 +1,6 @@
 # P3.3 銷貨單正式列印與出貨計畫
 
-文件狀態：P3.3a 規格閉合完成；P3.3b schema／migration 已完成；P3.3c～P3.3f 尚未授權
+文件狀態：P3.3a 規格閉合、P3.3b storage 與 P3.3b2 version contract 已完成；P3.3c 以後尚未授權
 同步基線：`DECISIONS.md` V0.12／DEC-058
 版本日期：2026-07-28
 
@@ -25,6 +25,7 @@ P3.3 必須沿用下列已結案基準：
 - `sales_orders` 狀態 enum 已有 `DELIVERY_CREATED`、`SHIPPED`。
 - `delivery_notes` 狀態 enum 已有 `ACTIVE`、`SHIPPED`、`RECEIVABLE_CREATED`、`VOIDED`。
 - `delivery_notes` 保存公司、客戶、客戶公司、nullable 聯絡人、送貨地點、運費、付款條件快照及凍結金額。
+- 現行 frozen snapshot contract 為 `delivery-note-snapshot-v1`，由 `delivery_notes.snapshot_version` 獨立保存；既有 JSON 不因補版本而改寫。
 - `delivery_note_lines` 保存品項、價格快照、數量、單價及明細金額。
 - 銷貨單只由訂單建立；同一訂單最多一張 `status <> 'VOIDED'` 銷貨單。
 - replacement 以新單的 `replaced_delivery_note_id` 指向同公司、同訂單舊單。
@@ -204,8 +205,11 @@ P3.4 不得提供未經首次正式列印而直接建立實際出貨日或將單
 - 每張銷貨單最多一個正式版本。
 - 第一版 `document_version` 固定為 `1`，並以 `(delivery_note_id, document_version)` 唯一；不存在第二個正式版本號。
 - Metadata 至少保存：
-  - `template_version`
   - `document_version`
+  - `renderer_version`
+  - `template_version`
+  - `font_version`
+  - `snapshot_version`
   - `generated_at`
   - `generated_by`
   - SHA-256 `content_hash`
@@ -217,6 +221,7 @@ P3.4 不得提供未經首次正式列印而直接建立實際出貨日或將單
 - 單一正式 PDF 上限 20 MiB；超過時首次正式列印完整 rollback，不截斷 PDF。
 - 重印及 read-only 下載直接回傳保存的 bytes。
 - 後續主檔、公司設定、程式版型、renderer、dependency 或字型變動不得影響舊單。
+- 四種版本語意保持獨立：renderer 是輸出 implementation contract、template 是版型、font 是固定字型資產 identity、snapshot 是實際輸入 frozen contract。首次建立 print version 時，`snapshot_version` 複製來源 Delivery Note 的值。
 
 ## 10. 版型版本策略
 
@@ -226,9 +231,9 @@ P3.4 不得提供未經首次正式列印而直接建立實際出貨日或將單
 - 版型更新使用新識別碼，只影響之後首次正式列印的銷貨單。
 - 舊單永遠下載保存的 PDF，不重新載入舊 template render。
 - 版型更新不修改交易資料，不要求交易 migration。
-- 中文字型必須：
-  - 允許商業或內部部署。
-  - 能由部署環境穩定取得。
+- 正式中文字型固定為 **Noto Sans CJK TC Regular**，來源限官方 Noto Fonts／Noto CJK 發布。
+- P3.3c 必須固定明確 release 或 commit，保存 upstream version、原始檔名、SHA-256、SIL Open Font License 與 font manifest，以受控 server-only asset 載入並嵌入 PDF。
+- 缺檔、checksum 不符或 glyph 不足時 fail fast；禁止 runtime download、CDN、system font fallback 或靜默替代。
   - 嵌入 PDF，避免 client 缺字。
   - 通過繁體中文、數字、標點與長字串視覺測試。
 - P3.3a 不選定或安裝字型、PDF dependency 或 renderer。
@@ -673,32 +678,37 @@ Body: {}
 - Fresh DB、catalog、schema diff。
 - 不安裝 renderer，不新增 API/UI。
 
+### P3.3b2 Version contract supplement
+
+- `DeliveryNote.snapshotVersion` required，現行唯一 domain constant 為 `delivery-note-snapshot-v1`。
+- 0012 只回填 scalar discriminator，不重寫任何既有 frozen JSON，且最終無 database default。
+- `DeliveryNotePrintVersion` 新增 required `rendererVersion`、`fontVersion`、`snapshotVersion`，與既有 template/document version 各自獨立。
+- Migration 在新增 required print version 欄位前檢查既有 rows；非零即回報筆數並 fail fast，不猜測、不刪除。
+- 0011 append-only triggers 自動保護新欄位；0012 不重建 trigger。
+- 本切片只固定 Noto Sans CJK TC Regular 策略，不加入 font binary、PDF dependency、font resolver 或 renderer。
+
 ### P3.3c 正式列印 service／renderer
 
-- Print model。
-- Renderer 與合法嵌入字型。
+- 驗證 `delivery-note-snapshot-v1` 並建立 Print model。
+- 固定 `delivery-note-pdf-renderer-v1` 等 domain renderer contract。
+- 依 font manifest 載入、驗證並嵌入 Noto Sans CJK TC Regular。
+- 從來源 Delivery Note 複製 `snapshotVersion` 至 immutable print version。
 - DB binary。
 - First formal print transaction。
 - Reprint transaction。
 - State machine、audit、idempotency、concurrency。
 - Service／DB tests。
 
-### P3.3d API
+### P3.3d API／UI／下載
 
 - Formal-print command。
 - Read-only formal PDF download。
 - Reprint command。
 - Strict DTO、headers、typed errors、company scope。
 - API contract tests。
+- Detail actions、警告、列印摘要與歷程、busy guard 與 PDF 視覺 QA。
 
-### P3.3e UI／版型
-
-- 正式版型。
-- Detail actions、警告、列印摘要與歷程。
-- Busy guard、typed client errors。
-- PDF 視覺 QA。
-
-### P3.3f 整合驗收
+### P3.3e 整合驗收
 
 - Fresh migration chain。
 - 完整 unit／DB／API／UI tests。
@@ -707,9 +717,9 @@ Body: {}
 - Concurrency、rollback、hash consistency、公司切換及 refresh。
 - Validation 文件與 P3.3 工程結案。
 
-## 22. 進入 P3.3b 前置條件
+## 22. P3.3c handoff 條件
 
-P3.3a 已完成下列規格條件：
+P3.3c 可依賴下列已完成條件：
 
 - DEC-017 與 P3.3／P3.4 切分已一致。
 - OQ-051 第一版已裁定排除。
@@ -718,12 +728,17 @@ P3.3a 已完成下列規格條件：
 - DB immutable PDF 與混合資料模型已裁定。
 - 作廢、replacement、版型、audit、冪等及併發已固定。
 - 現有獨立稅額缺口已明確處理為「稅額：未分列」，不阻塞 P3.3b。
+- `DeliveryNote.snapshotVersion` 與 `delivery-note-snapshot-v1` domain constant 已可持久化。
+- Print Version 的 renderer、template、font、snapshot、document version 均有獨立欄位。
+- 既有 snapshot JSON 未重寫；既有 print version row 由 fail-fast migration guard 保護。
+- 正式字型已決為 Noto Sans CJK TC Regular。
 
-進入 P3.3b 仍需另行使用者授權，且實作前必須：
+進入 P3.3c 仍需另行使用者授權，且實作時必須：
 
-1. 確認 migration 名稱及 create-only 範圍。
-2. 固定候選欄位的最終英文名稱、型別、FK、CHECK、index 與 append-only SQL。
-3. 明確確認既有本機資料是否需 backfill；未經授權不得 mutation `erp`。
-4. 保持 P4 blueprint 完全隔離。
+1. 建立 frozen snapshot validator、print model 與 deterministic renderer。
+2. 固定 renderer version 與 font manifest identity。
+3. 納入官方字型資產、SIL OFL、checksum、embedding 與 glyph fail-fast。
+4. 完成 formal-print／reprint transaction、狀態、audit、idempotency、concurrency 與 DB tests。
+5. 保持 API、UI、下載端點與 P4 blueprint 完全隔離。
 
-P3.3a 完成不等於授權 P3.3b，也不代表任何 schema 或 application capability 已存在。
+P3.3b2 完成不等於授權 P3.3c；renderer、正式列印／重印 service、API、UI 與下載 capability 仍不存在。

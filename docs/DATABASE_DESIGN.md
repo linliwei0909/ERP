@@ -228,10 +228,10 @@ P2.3 正式欄位與限制：
 | `sales_orders` | `company_id -> companies.id`, `(customer_id, company_id) -> customer_companies`, `(delivery_location_id, customer_id) -> delivery_locations`, `customer_contact_id`, `freight_rule_id` nullable | `(company_id, fiscal_year, fiscal_month, order_number)`；supporting UQ `(id, company_id)` | `(company_id, status, order_date desc)`, `(company_id, customer_id, order_date desc)` |
 | `sales_order_lines` | `(sales_order_id, company_id) -> sales_orders`, `(item_id, company_id) -> item_companies`, `price_list_id`, `item_price_id` nullable；所有 actor FK 均 RESTRICT | `(sales_order_id, line_number)`；0010 supporting UQ `(id, company_id)` | `(company_id, item_id, sales_order_id)`, `(price_list_id, item_price_id)` |
 | `sales_order_relations` | `source_order_id -> sales_orders.id`, `related_order_id -> sales_orders.id` | `(source_order_id, related_order_id, relation_type)` | `(related_order_id, relation_type)` |
-| `delivery_notes`（0010 已部署 `erp`） | `company_id -> companies.id`, `(sales_order_id, company_id) -> sales_orders(id, company_id)`, actor FK；`(replaced_delivery_note_id, sales_order_id, company_id)` 為同公司、同 order 的 self-reference | `delivery_note_number`；partial UQ `(sales_order_id) WHERE status <> 'VOIDED'`；supporting UQ `(id, company_id)`, `(id, sales_order_id, company_id)`；一張舊單最多一個直接 replacement | `(sales_order_id, status)`, `(company_id, delivery_note_date desc)`, `(company_id, status, delivery_note_date desc)` |
+| `delivery_notes`（0010；0012 補版本契約） | `company_id -> companies.id`, `(sales_order_id, company_id) -> sales_orders(id, company_id)`, actor FK；`(replaced_delivery_note_id, sales_order_id, company_id)` 為同公司、同 order 的 self-reference | `delivery_note_number`；partial UQ `(sales_order_id) WHERE status <> 'VOIDED'`；supporting UQ `(id, company_id)`, `(id, sales_order_id, company_id)`；一張舊單最多一個直接 replacement；`snapshot_version` 必填且 non-blank | `(sales_order_id, status)`, `(company_id, delivery_note_date desc)`, `(company_id, status, delivery_note_date desc)` |
 | `delivery_note_lines`（0010 已部署 `erp`） | `(delivery_note_id, company_id) -> delivery_notes`, `(sales_order_line_id, company_id) -> sales_order_lines`, `item_id -> items.id`, `(item_id, company_id) -> item_companies`, `created_by -> users.id` | `(delivery_note_id, line_number)` | `sales_order_line_id`, `(company_id, item_id, delivery_note_id)` |
-| `delivery_note_print_versions`（P3.3b 計畫，尚未建立） | `(delivery_note_id, company_id) -> delivery_notes`, `generated_by -> users.id`；正式版本須與來源銷貨單同公司 | 每張 `delivery_note_id` 最多一筆；`content_hash` 使用 SHA-256；正式資料禁止 update/delete | `(company_id, generated_at desc)`, `content_hash` |
-| `delivery_note_print_events`（P3.3b 計畫，尚未建立） | `(delivery_note_id, company_id) -> delivery_notes`, `print_version_id -> delivery_note_print_versions.id`, `actor_id -> users.id` | 建議以公司、operation、idempotency reference 保護 replay；事件 append-only | `(delivery_note_id, occurred_at desc)`, `(company_id, occurred_at desc)` |
+| `delivery_note_print_versions`（0011；0012 補版本契約） | `(delivery_note_id, company_id) -> delivery_notes`, `generated_by -> users.id`；正式版本須與來源銷貨單同公司 | 每張 `delivery_note_id` 最多一筆；renderer、template、font、snapshot、document version 各自獨立且必填；`content_hash` 使用 SHA-256；trigger 禁止 update/delete/truncate | `(company_id, generated_at desc)`, `generated_by` |
+| `delivery_note_print_events`（0011） | `(delivery_note_id, company_id) -> delivery_notes`, composite FK 指向同 note/company print version，actor 與 session FK | 每張銷貨單最多一個 `FORMAL_PRINT`；事件 trigger 禁止 update/delete/truncate | `(delivery_note_id, occurred_at desc)`, `(company_id, occurred_at desc)` |
 
 P3.1 的 `sales_orders` 保存客戶、客戶公司、聯絡人、送貨地點、公司法定資訊、運費及付款條件快照；`sales_order_lines` 保存品項與價格 typed snapshot，以及標準價、成交價、價格來源、價格表與價格版本參照。所有 JSON Decimal 使用字串、date 使用 ISO date、timestamp 使用 ISO-8601 UTC。
 
@@ -244,7 +244,7 @@ P3.2a 已建立 `DeliveryNoteStatus`、`DeliveryNoteVoidSource`、`DeliveryNote`
 P3.2a `delivery_notes` 正式 schema：
 
 - 識別與來源：`id`, `company_id`, `delivery_note_number`, `delivery_note_date`, `fiscal_year`, `fiscal_month`, `sales_order_id`, `sales_order_revision_no`, `status`。
-- 凍結快照：`company_snapshot`, `customer_snapshot`, `customer_company_snapshot`, nullable `contact_snapshot`, `delivery_snapshot`, `freight_snapshot`, nullable `payment_terms_text`。
+- 凍結快照：`company_snapshot`, `customer_snapshot`, `customer_company_snapshot`, nullable `contact_snapshot`, `delivery_snapshot`, `freight_snapshot`, nullable `payment_terms_text`；0012 新增 required `snapshot_version varchar(100)`，目前值為 `delivery-note-snapshot-v1`。
 - 金額：`subtotal`, `freight_amount`, `total_amount`，均為 `numeric(18,0)` 且沿用已確認 order，不重新計算。
 - Replacement：nullable `replaced_delivery_note_id` 指向被取代的同公司、同 order 舊單；不保存 `superseded_by`，不可 self-reference。
 - 作廢：nullable `void_source`, `voided_at`, `voided_by`, `void_reason`；`VOIDED` 時必須完整，其他狀態必須為 null。正式來源為 `ADMIN_DIRECT`, `ORDER_REVISION_REBUILD`, `ORDER_VOID`。
@@ -266,12 +266,13 @@ P3.2c 沿用 0010 的非 `VOIDED` partial unique 與 replacement constraints，�
 
 銷貨單號使用既有 `document_sequences`，`document_type = 'DELIVERY_NOTE'`。`delivery_note_date` 是 server 依 `Asia/Taipei` 產生的 PostgreSQL `date`；取號 scope 為公司、該日期年月及 document type，格式 `DN-{document_company_code}-{YYYYMM}-{sequence6}`。公司縮寫有效版本亦依 `delivery_note_date` 解析，不使用 `order_date`、`actual_delivery_date` 或 client 日期。
 
-P3.3a 已決資料模型方向如下；本段是 P3.3b schema contract，尚未建立 Prisma model、migration 或 SQL：
+P3.3b／P3.3b2 已完成的正式資料模型如下：
 
-- 採混合模式。`delivery_notes` 預計增加 `actual_delivery_date date`、`first_printed_at timestamptz(3)`、`first_printed_by uuid`、`formal_print_version_id uuid`、`reprint_count integer default 0`。欄位名稱與 constraint 最終 SQL 由 P3.3b catalog review 固定。
-- `delivery_note_print_versions` 保存唯一不可變正式 PDF；至少包含 `id`, `delivery_note_id`, `company_id`, `template_version`, `document_version`, `generated_at`, `generated_by`, `content_hash`, `mime_type`, `byte_size`, `filename`, `pdf_bytes bytea`, `created_at`。第一版 `document_version = 1`，並以 `(delivery_note_id, document_version)` 唯一。
-- 每張銷貨單最多一筆正式版本。建議以 `(id, delivery_note_id, company_id)` supporting unique 配合 `delivery_notes(formal_print_version_id, id, company_id)` composite FK，保證 summary reference 指向同一張、同公司的正式版本。
-- `delivery_note_print_events` 為 append-only，至少包含 `id`, `delivery_note_id`, `company_id`, `print_version_id`, `event_type`, `actor_id`, `occurred_at`, `idempotency_key_id` 或等效 reference、`correlation_id`。`event_type` 第一版只有 `FORMAL_PRINT` 與 `REPRINT`。
+- 採混合模式。0011 在 `delivery_notes` 增加 `actual_delivery_date date`、`first_printed_at timestamptz(3)`、`first_printed_by uuid`、`reprint_count integer default 0`；不建立 `formal_print_version_id` 或循環 FK。
+- `delivery_note_print_versions` 保存唯一不可變正式 PDF，包含 `renderer_version`, `template_version`, `font_version`, `snapshot_version`, `document_version`, `generated_at`, `generated_by`, `content_hash`, `mime_type`, `byte_size`, `filename`, `pdf_bytes bytea`。第一版 `document_version = 1`，並以 `(delivery_note_id, document_version)` 唯一。
+- 0012 先確認 print version table 為空；若已有任何 row，migration 回報實際筆數並 fail fast，不猜測、不刪除。三個新增版本欄位均為 `varchar(100) NOT NULL`、non-blank 且沒有 database default。
+- 0012 對既有 Delivery Note 回填 `delivery-note-snapshot-v1` 後驗證 non-null/non-blank 再設 `NOT NULL`；回填只辨識既有 contract，不讀主檔且不修改任何 snapshot JSON，最終沒有 database default。
+- 0011 的 row-level 與 statement-level `ENABLE ALWAYS` append-only triggers 自動涵蓋 0012 新欄位；0012 不需重建 trigger。
 - `ACTIVE` 必須沒有實際出貨日、首次列印摘要或正式版本；`SHIPPED` 與 `RECEIVABLE_CREATED` 必須具有完整實際出貨日、首次列印摘要及正式版本；`reprint_count >= 0`。跨表完整性需以 FK、CHECK、constraint trigger 或等效 DB constraint 加 service transaction 雙層保護，P3.3b 必須用 fresh DB 與 catalog tests 證明。
 - PDF bytes 保存於 PostgreSQL，讓正式 PDF、`ACTIVE -> SHIPPED`、order `DELIVERY_CREATED -> SHIPPED`、摘要、event、audit 與 idempotency completion 可在單一 transaction rollback。第一版不使用 filesystem／object storage，也不在重印時重新 render。
 - `byte_size` 必須大於 0 且不超過 20 MiB（20 × 1024 × 1024 bytes），並與 `octet_length(pdf_bytes)` 一致；`content_hash` 使用 64 碼小寫 SHA-256 hex，`mime_type` 固定為 `application/pdf`。正式 CHECK／trigger 由 P3.3b 固定。

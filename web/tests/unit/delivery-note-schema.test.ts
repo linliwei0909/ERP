@@ -9,6 +9,11 @@ const migrationPath = resolve(
   "prisma/migrations/0011_p3_delivery_note_print_storage/migration.sql",
 );
 const migration = readFileSync(migrationPath, "utf8");
+const contractMigrationPath = resolve(
+  process.cwd(),
+  "prisma/migrations/0012_p3_delivery_note_print_version_contract/migration.sql",
+);
+const contractMigration = readFileSync(contractMigrationPath, "utf8");
 
 describe("P3.2a delivery-note schema contract", () => {
   it("defines only the approved delivery-note enum values", () => {
@@ -114,5 +119,66 @@ describe("P3.3b delivery-note print-storage schema contract", () => {
     expect(migration).toContain(
       'CREATE TRIGGER "delivery_note_print_events_reject_truncate"',
     );
+  });
+});
+
+describe("P3.3b2 formal print version contract supplement", () => {
+  it("stores the required snapshot and independent print version identities", () => {
+    expect(schema).toMatch(
+      /snapshotVersion\s+String\s+@map\("snapshot_version"\) @db\.VarChar\(100\)/,
+    );
+    expect(schema).toMatch(
+      /rendererVersion\s+String\s+@map\("renderer_version"\) @db\.VarChar\(100\)/,
+    );
+    expect(schema).toMatch(
+      /fontVersion\s+String\s+@map\("font_version"\) @db\.VarChar\(100\)/,
+    );
+    expect(schema.match(/snapshotVersion\s+String/g)).toHaveLength(2);
+    expect(schema).toMatch(
+      /documentVersion\s+Int\s+@default\(1\) @map\("document_version"\)/,
+    );
+    expect(schema).toMatch(
+      /templateVersion\s+String\s+@map\("template_version"\) @db\.VarChar\(100\)/,
+    );
+    expect(schema).not.toContain("formalPrintVersionId");
+  });
+
+  it("backfills only the scalar discriminator and fails on existing print versions", () => {
+    expect(contractMigration.trimStart()).toMatch(/^BEGIN;/);
+    expect(contractMigration.trimEnd()).toMatch(/COMMIT;$/);
+    expect(contractMigration).toContain(
+      "SET \"snapshot_version\" = 'delivery-note-snapshot-v1'",
+    );
+    expect(contractMigration).not.toMatch(
+      /UPDATE\s+"delivery_notes"[\s\S]*?(company_snapshot|customer_snapshot|delivery_snapshot|freight_snapshot)/,
+    );
+    expect(contractMigration).toContain(
+      'FROM "delivery_note_print_versions"',
+    );
+    expect(contractMigration).toContain(
+      "contains % existing row(s); renderer, font, and snapshot versions require source verification",
+    );
+    expect(contractMigration).not.toMatch(/\bDEFAULT\b/i);
+    expect(contractMigration.match(/SET NOT NULL/g)).toHaveLength(1);
+    expect(contractMigration.match(/VARCHAR\(100\) NOT NULL/g)).toHaveLength(
+      3,
+    );
+  });
+
+  it("keeps the existing uniqueness, company relations, and append-only triggers", () => {
+    expect(schema).toContain(
+      '@unique(map: "delivery_note_print_versions_delivery_note_key")',
+    );
+    expect(schema).toContain(
+      '@@unique([deliveryNoteId, documentVersion], map: "delivery_note_print_versions_note_document_version_key")',
+    );
+    expect(schema).not.toMatch(
+      /model DeliveryNote \{[\s\S]*?formalPrintVersion[\s\S]*?\n\}/,
+    );
+    expect(migration).toContain(
+      'CREATE TRIGGER "delivery_note_print_versions_reject_update_delete"',
+    );
+    expect(contractMigration).not.toContain("CREATE TRIGGER");
+    expect(contractMigration).not.toContain("DROP TRIGGER");
   });
 });

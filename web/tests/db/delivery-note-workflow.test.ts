@@ -560,6 +560,12 @@ describeDatabase("P3.2b/P3.2c delivery-note workflows", () => {
     });
     expect(first.deliveryNote.freightAmount).toBe("2");
     expect(
+      await db.deliveryNote.findUniqueOrThrow({
+        where: { id: first.deliveryNote.id },
+        select: { snapshotVersion: true },
+      }),
+    ).toEqual({ snapshotVersion: "delivery-note-snapshot-v1" });
+    expect(
       await db.salesOrder.findUniqueOrThrow({ where: { id: order.id } }),
     ).toMatchObject({ status: "DELIVERY_CREATED", revisionNo: 1 });
     expect(
@@ -768,6 +774,12 @@ describeDatabase("P3.2b/P3.2c delivery-note workflows", () => {
       expectedRevisionNo: 1,
       idempotencyKey: randomUUID(),
     });
+    const snapshotVersionBeforeVoid = (
+      await db.deliveryNote.findUniqueOrThrow({
+        where: { id: created.deliveryNote.id },
+        select: { snapshotVersion: true },
+      })
+    ).snapshotVersion;
     await voidSalesOrder(db, {
       context: contextA,
       companyId: companyA.id,
@@ -787,6 +799,7 @@ describeDatabase("P3.2b/P3.2c delivery-note workflows", () => {
       voidSource: "ORDER_VOID",
       voidReason: "Sales order voided",
       voidedById: userId,
+      snapshotVersion: snapshotVersionBeforeVoid,
     });
     expect(
       await getCurrentDeliveryNoteForOrder(db, {
@@ -988,6 +1001,22 @@ describeDatabase("P3.2b/P3.2c delivery-note workflows", () => {
     });
     expect(rebuilt.deliveryNote.deliveryNoteNumber).not.toBe(
       prepared.old.deliveryNoteNumber,
+    );
+    expect(
+      await db.deliveryNote.findMany({
+        where: {
+          id: { in: [prepared.old.id, rebuilt.deliveryNote.id] },
+        },
+        select: { id: true, snapshotVersion: true },
+        orderBy: { id: "asc" },
+      }),
+    ).toEqual(
+      [prepared.old.id, rebuilt.deliveryNote.id]
+        .sort()
+        .map((id) => ({
+          id,
+          snapshotVersion: "delivery-note-snapshot-v1",
+        })),
     );
     const oldAfter = await getDeliveryNote(db, {
       context: contextA,

@@ -95,6 +95,7 @@ describe("delivery-note API validation and serialization", () => {
       createDeliveryNoteRequestSchema.parse({
         expectedRevisionNo: 1,
         companyId: ids.company,
+        snapshotVersion: "attacker-version",
       }),
     ).toThrow();
   });
@@ -437,6 +438,7 @@ describe("delivery-note route boundaries", () => {
           expectedRevisionNo: 2,
           companyId: "attacker",
           status: "VOIDED",
+          snapshotVersion: "attacker-version",
         },
         idempotencyKey: "injected",
       }),

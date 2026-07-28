@@ -11,7 +11,10 @@ import {
   DeliveryNoteReplacementConflictError,
   DeliveryNoteVoidReasonRequiredError,
 } from "../../src/lib/delivery-notes/errors";
-import { buildDeliveryNoteSnapshotsFromConfirmedOrder } from "../../src/lib/delivery-notes/snapshots";
+import {
+  buildDeliveryNoteSnapshotsFromConfirmedOrder,
+  DELIVERY_NOTE_SNAPSHOT_VERSION,
+} from "../../src/lib/delivery-notes/snapshots";
 import {
   assertRebuildPrerequisites,
   buildAdminVoidIdempotencyPayload,
@@ -140,6 +143,10 @@ describe("delivery-note snapshots and amounts", () => {
     const result = buildDeliveryNoteSnapshotsFromConfirmedOrder(
       confirmedOrder(),
     );
+    expect(DELIVERY_NOTE_SNAPSHOT_VERSION).toBe(
+      "delivery-note-snapshot-v1",
+    );
+    expect(result.snapshotVersion).toBe(DELIVERY_NOTE_SNAPSHOT_VERSION);
     expect(result.header.customerSnapshot).toEqual({ name: "快照客戶" });
     expect(result.header.freightSnapshot).toEqual({
       mode: "FIXED",

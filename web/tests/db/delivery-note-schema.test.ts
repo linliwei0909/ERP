@@ -166,7 +166,7 @@ describeDatabase("P3.2a delivery-note database contract", () => {
          fiscal_year, fiscal_month, sales_order_id, sales_order_revision_no,
          status, void_source, company_snapshot, customer_snapshot,
          customer_company_snapshot, contact_snapshot, delivery_snapshot,
-         freight_snapshot, subtotal, freight_amount, total_amount,
+         freight_snapshot, snapshot_version, subtotal, freight_amount, total_amount,
          replaced_delivery_note_id, actual_delivery_date, first_printed_at,
          first_printed_by, reprint_count, created_by, updated_by, updated_at,
          voided_at, voided_by, void_reason
@@ -174,7 +174,7 @@ describeDatabase("P3.2a delivery-note database contract", () => {
          $1, $2, DATE '2026-07-27', 2026, 7, $3, 1,
          $4, $5, $6::jsonb, '{"name":"customer"}'::jsonb,
          '{"code":"customer"}'::jsonb, NULL, '{"address":"delivery"}'::jsonb,
-         '{"mode":"NO_CHARGE"}'::jsonb, $7, $8, $9,
+         '{"mode":"NO_CHARGE"}'::jsonb, 'delivery-note-snapshot-v1', $7, $8, $9,
          $10, $11, $12, $13, 0, $14, $14, now(), $15, $16, $17
        )
        RETURNING id`,
@@ -230,8 +230,13 @@ describeDatabase("P3.2a delivery-note database contract", () => {
     const result = await client.query<{ id: string }>(
       `INSERT INTO delivery_note_print_versions (
          company_id, delivery_note_id, document_version, template_version,
-         generated_by, content_hash, mime_type, byte_size, filename, pdf_bytes
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         renderer_version, font_version, snapshot_version, generated_by,
+         content_hash, mime_type, byte_size, filename, pdf_bytes
+       ) VALUES (
+         $1, $2, $3, $4, 'delivery-note-pdf-renderer-test-v1',
+         'noto-sans-cjk-tc-regular-test-v1', 'delivery-note-snapshot-v1',
+         $5, $6, $7, $8, $9, $10
+       )
        RETURNING id`,
       [
         overrides.companyId ?? fixture.companyId,
@@ -408,13 +413,14 @@ describeDatabase("P3.2a delivery-note database contract", () => {
            fiscal_year, fiscal_month, sales_order_id, sales_order_revision_no,
            status, company_snapshot, customer_snapshot,
            customer_company_snapshot, delivery_snapshot, freight_snapshot,
-           subtotal, freight_amount, total_amount,
+           snapshot_version, subtotal, freight_amount, total_amount,
            created_by, updated_by, updated_at
          ) VALUES (
            $1, $2, DATE '2026-07-27', 2026, 7, $3, 1,
            'VOIDED', '{"name":"company"}', '{"name":"customer"}',
            '{"code":"customer"}', '{"address":"delivery"}',
-           '{"mode":"NO_CHARGE"}', 10, 0, 10, $4, $4, now()
+           '{"mode":"NO_CHARGE"}', 'delivery-note-snapshot-v1',
+           10, 0, 10, $4, $4, now()
          )`,
         [
           fixture.companyId,
@@ -604,7 +610,7 @@ describeDatabase("P3.2a delivery-note database contract", () => {
           AND table_name = 'delivery_notes'
           AND column_name IN (
             'actual_delivery_date', 'first_printed_at',
-            'first_printed_by', 'reprint_count'
+            'first_printed_by', 'reprint_count', 'snapshot_version'
           )
         ORDER BY column_name`,
     );
@@ -613,6 +619,7 @@ describeDatabase("P3.2a delivery-note database contract", () => {
       "first_printed_at",
       "first_printed_by",
       "reprint_count",
+      "snapshot_version",
     ]);
 
     const objects = await client.query<{ object_name: string }>(
@@ -620,8 +627,12 @@ describeDatabase("P3.2a delivery-note database contract", () => {
          FROM pg_constraint
         WHERE conname IN (
           'delivery_notes_print_summary_check',
+          'delivery_notes_snapshot_version_check',
           'delivery_note_print_versions_document_version_check',
           'delivery_note_print_versions_template_version_check',
+          'delivery_note_print_versions_renderer_version_check',
+          'delivery_note_print_versions_font_version_check',
+          'delivery_note_print_versions_snapshot_version_check',
           'delivery_note_print_versions_content_hash_check',
           'delivery_note_print_versions_mime_type_check',
           'delivery_note_print_versions_byte_size_check',
@@ -663,12 +674,16 @@ describeDatabase("P3.2a delivery-note database contract", () => {
       "delivery_note_print_versions_delivery_note_key",
       "delivery_note_print_versions_document_version_check",
       "delivery_note_print_versions_filename_check",
+      "delivery_note_print_versions_font_version_check",
       "delivery_note_print_versions_mime_type_check",
       "delivery_note_print_versions_note_document_version_key",
       "delivery_note_print_versions_reject_truncate",
       "delivery_note_print_versions_reject_update_delete",
+      "delivery_note_print_versions_renderer_version_check",
+      "delivery_note_print_versions_snapshot_version_check",
       "delivery_note_print_versions_template_version_check",
       "delivery_notes_print_summary_check",
+      "delivery_notes_snapshot_version_check",
     ]);
 
     const validated = await client.query<{ convalidated: boolean }>(
@@ -759,7 +774,7 @@ describeDatabase("P3.2a delivery-note database contract", () => {
     for (const [sql, message] of [
       [
         `UPDATE delivery_note_print_versions
-            SET filename = filename
+            SET renderer_version = renderer_version
           WHERE id = '${versionId}'`,
         "delivery_note_print_versions is append-only: UPDATE is not allowed",
       ],

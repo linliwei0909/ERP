@@ -83,6 +83,7 @@ describeDatabase("formal schema baseline", () => {
       "0009_p3_sales_orders",
       "0010_p3_delivery_notes",
       "0011_p3_delivery_note_print_storage",
+      "0012_p3_delivery_note_print_version_contract",
     ]);
   });
 

@@ -139,6 +139,7 @@
 - 尚未建立應收前可修改銷貨單的 DEC-016 原則維持；P3.2 的訂單／價格／運費快照不得直接 PATCH，只能透過 order revision 與原子 rebuild 形成 replacement。P3.3 首次正式列印自動建立實際出貨日；P3.4 才提供已存在實際出貨日的受控更正及回收確認後鎖定。
 - 銷貨單號為 `DN-{document_company_code}-{YYYYMM}-{六碼流水}`，document type 為 `DELIVERY_NOTE`。`YYYYMM` 與公司縮寫版本依 server 產生的 `Asia/Taipei` `delivery_note_date` 判斷，不得使用 `order_date`、`actual_delivery_date` 或 client 日期。重建使用重建當日並取得新號；作廢號碼不回收。
 - 銷貨單複製已確認 order 的 typed 快照與凍結金額，不重新讀取目前主檔、查價或重算運費。
+- 現行銷貨單凍結快照契約為 `delivery-note-snapshot-v1`；每張銷貨單必須保存由 server contract 層決定的 snapshot version。既有 frozen JSON 不因補版本而重寫，作廢不得改版，replacement 依新單實際 contract 另存版本。
 - P3.2b 建立服務已依上述規則實作：鎖定 order 與目前非作廢銷貨單，在單一 transaction 內完成月流水取號、header、lines、order `DELIVERY_CREATED`、audit 與 idempotency completion；任一明細失敗全部 rollback。
 - P3.2c 已實作 revision start 保留舊 `ACTIVE` 單、re-confirm controlled state、`ORDER_REVISION_REBUILD` 原子重建與 `ADMIN_DIRECT` 例外作廢。重建固定使用新號並向前延伸 replacement chain；所有 order／note／sequence／lines／audit／idempotency 異動位於同一 transaction，失敗不得留下中間狀態。
 - P3.2d1 API 已實作 create／rebuild／ADMIN void 與 list／detail／current；所有寫入沿用正式 transaction service，必須通過 session、後端 RBAC、selected-company scope、strict body、`Idempotency-Key` 與 correlation ID，不接受 client 指定 company、actor、狀態、單號、日期、快照或金額。
@@ -147,7 +148,8 @@
 - 首次正式列印時，如實際出貨日尚未填寫，以 `Asia/Taipei` 當地日期帶入；同一 transaction 建立唯一不可變正式 PDF、首次列印摘要與事件，並將訂單及銷貨單更新為 `SHIPPED`。任何一步失敗全部 rollback。
 - `SHIPPED` 或 `RECEIVABLE_CREATED` 只能重印或下載既有正式 PDF，不得再次產生正式版本。重印不得覆蓋實際出貨日、首次列印時間、正式 PDF 或版型版本。
 - 使用者明確執行重印才新增 append-only 重印事件及計數；一般查閱／下載既有正式 PDF 及內部 hash 驗證不算重印。
-- 正式 PDF 保存於 PostgreSQL immutable binary version，包含 template version、產生時間／人、SHA-256、MIME type、byte size 與 filename。後續主檔、公司設定、版型、renderer 或字型變更不得使舊單重印內容漂移。
+- 正式 PDF 保存於 PostgreSQL immutable binary version，並獨立保存 renderer、template、font、snapshot 與 document version，以及產生時間／人、SHA-256、MIME type、byte size 與 filename；不得把多種版本塞入 template version。後續主檔、公司設定、版型、renderer 或字型變更不得使舊單重印內容漂移。
+- P3.3c 正式中文字型固定為 Noto Sans CJK TC Regular，須固定官方來源、上游版本與 checksum，以受控 server-side asset 嵌入。缺檔、checksum 不符或 glyph 不足必須 fail fast；禁止 runtime download、CDN 或 system font fallback。
 - `VOIDED` 不得建立正式版本或執行重印；若歷史資料已有正式 PDF，仍保留供具 `delivery_notes.read` 及公司 scope 者查閱。不得覆寫原 PDF 或動態加作廢浮水印。
 - Replacement 銷貨單各自建立自己的正式 PDF、首次列印摘要、事件與重印計數，不得沿用舊單資料。
 - `delivery_notes.read` 可查看列印資訊及下載既有正式 PDF；`delivery_notes.manage` 可首次正式列印及重印。ADMIN 仍須通過 selected company 與 company scope，不新增 `delivery_notes.print`。

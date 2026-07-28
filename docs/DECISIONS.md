@@ -1145,6 +1145,15 @@
 - 第一版只使用銷貨單 frozen snapshots、既有 typed 金額及首次正式列印 transaction 產生的欄位：公司名稱、統編、地址、電話及單據公司碼；銷貨單號與銷售訂單號；客戶名稱與統編；送貨地點、收件人、電話及地址；nullable 聯絡人；品項代碼、公司品號、名稱、規格、單位；數量、單價、明細金額、小計、運費、總額；付款條件；實際出貨日；正式列印時間；文件版本及版型版本。
 - 現有 P3.2 銷貨單沒有獨立 `tax_amount`，且 `total_amount = subtotal + freight_amount`；P3.3 不得由總額反推或臆造稅額。第一版金額區固定顯示「稅額：未分列」，不保存數值、不建立 placeholder。若未來需列印數值稅額，必須先完成交易稅額來源、計算、凍結與 migration 的獨立決議。
 
+## DEC-059 銷貨單凍結快照與正式 PDF 版本契約
+
+- 現有 P3.2 銷貨單凍結快照契約正式命名為 `delivery-note-snapshot-v1`。它涵蓋 `delivery_notes` 與 `delivery_note_lines` 既有分散 typed JSON、付款條件及凍結金額結構；實際欄位仍以正式 schema 為準。
+- `delivery_notes.snapshot_version` 必填且由 server snapshot contract 層明確寫入。既有銷貨單只回填 scalar discriminator；不得重建、包裝、補寫或變更既有 frozen JSON。作廢不得修改版本，replacement 必須依新單實際建立的 contract 寫入版本。
+- `delivery_note_print_versions` 必須分別保存 `renderer_version`、`template_version`、`font_version` 與 `snapshot_version`；`document_version` 仍維持獨立語意。不得把 renderer、font、snapshot 或 document version 編碼或串接進 `template_version`。
+- 首次建立正式 PDF 時，print version 的 `snapshot_version` 必須複製來源銷貨單的 `snapshot_version`，不得重新推測或寫死。已存在 print version 的各版本值均不可修改。
+- P3.3c 正式中文字型採 **Noto Sans CJK TC Regular**，只能取自官方 Noto Fonts／Noto CJK 發布來源，固定明確 release 或 commit，保存原始檔名、上游版本、SHA-256、SIL Open Font License 與 font manifest，並以受控 server-only asset 載入及嵌入 PDF。
+- 正式字型缺少、checksum 不符或 glyph 不足時必須 fail fast。禁止 runtime download、CDN、作業系統字型 fallback、靜默替代或只記錄模糊 family 名稱。
+
 ## 3. 尚未定案且應保留於 OPEN_QUESTIONS.md 的事項
 
 - `OQ-005`：第二階段是否實作正式電子簽收，以及簽收狀態、簽收人、附件、撤銷與例外更正流程如何設計。（不阻塞第一階段）
@@ -1155,6 +1164,7 @@
 
 ## 4. 變更紀錄
 
+- V0.13（2026-07-28）：新增 DEC-059，固定 `delivery-note-snapshot-v1`、Delivery Note scalar discriminator、正式 PDF 四種獨立版本語意，以及 Noto Sans CJK TC Regular 的來源固定、checksum、授權、server-side embedding 與 fail-fast 契約。
 - V0.12（2026-07-28）：完成 P3.3b schema 契約裁定；`delivery_notes` 不新增 `formal_print_version_id` 或循環 FK，唯一正式 PDF 改由 print version 的 `delivery_note_id` unique constraint 保證。本決議只固定 schema 契約，不代表 renderer、首次正式列印／重印 service、API 或 UI 已完成。
 - V0.11（2026-07-28）：修訂 DEC-017 並新增 DEC-058，正式化首次正式列印即出貨、P3.3／P3.4 責任切分、不可變 DB PDF、預覽／重印語意、版型版本、權限、作廢／replacement、audit、冪等、併發及 OQ-051 第一版排除；不代表 schema、migration、renderer、API 或 UI 已實作。
 - V0.10（2026-07-27）：新增 DEC-057，裁定 P3.2 銷貨單手動建立、revision 保留舊單及原子重建、追加單直接關聯 root 且不聚合、ADMIN 直接作廢、非 `VOIDED` 唯一限制、`delivery_note_date` 與月流水取號、快照、replacement、audit 及 idempotency；P3.2 尚未開始實作。

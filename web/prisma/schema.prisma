@@ -838,6 +838,7 @@ model DeliveryNote {
   deliverySnapshot        Json                    @map("delivery_snapshot")
   paymentTermsText        String?                 @map("payment_terms_text")
   freightSnapshot         Json                    @map("freight_snapshot")
+  snapshotVersion         String                  @map("snapshot_version") @db.VarChar(100)
   subtotal                Decimal                 @db.Decimal(18, 0)
   freightAmount           Decimal                 @map("freight_amount") @db.Decimal(18, 0)
   totalAmount             Decimal                 @map("total_amount") @db.Decimal(18, 0)
@@ -881,6 +882,9 @@ model DeliveryNotePrintVersion {
   deliveryNoteId  String   @unique(map: "delivery_note_print_versions_delivery_note_key") @map("delivery_note_id") @db.Uuid
   documentVersion Int      @default(1) @map("document_version")
   templateVersion String   @map("template_version") @db.VarChar(100)
+  rendererVersion String   @map("renderer_version") @db.VarChar(100)
+  fontVersion     String   @map("font_version") @db.VarChar(100)
+  snapshotVersion String   @map("snapshot_version") @db.VarChar(100)
   generatedAt     DateTime @default(now()) @map("generated_at") @db.Timestamptz(3)
   generatedById   String   @map("generated_by") @db.Uuid
   contentHash     String   @map("content_hash") @db.VarChar(64)
