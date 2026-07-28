@@ -319,9 +319,9 @@ idempotency claim → sales_order FOR UPDATE
 
 固定順序可降低 deadlock；DB partial unique 是最後一道競爭保護。
 
-## 10. 追加訂單流程
+## 10. 追加訂單流程（已決策、建立能力延後）
 
-依 `DEC-013`，已出貨後追加的正式基線是：
+依 `DEC-013`／`DEC-057`，已出貨後追加的正式基線如下；目前只完成規格與資料庫關聯防護，建立能力須待後續獨立授權：
 
 1. 原訂單與原銷貨單保持不變。
 2. 建立一張有獨立 order number 的新追加訂單。
@@ -331,7 +331,7 @@ idempotency claim → sales_order FOR UPDATE
 
 這個模型天然避免原數量重複計入，也符合「一 order 一張有效 delivery note」。不應把銷貨單綁 root order，也不應用 `source_order_ids` JSON 彙整。
 
-所有追加單直接指向 root original order，不允許 Original→Addition 1→Addition 2 chain。Service 建立時解析並固定 root，DB／service 阻擋 self、duplicate、cycle 與 addition-as-source；P3.2 不新增 `root_order_id`。追加訂單作廢只處理自己的有效銷貨單，原始訂單作廢不連動全部追加單。
+所有追加單直接指向 root original order，不允許 Original→Addition 1→Addition 2 chain。現有 DB 防護阻擋 self、duplicate、cycle 與 addition-as-source；未來另行授權實作時，Service 應解析並固定 root。P3.2 不新增 `root_order_id`。追加訂單作廢只處理自己的有效銷貨單，原始訂單作廢不連動全部追加單。
 
 ## 11. 權限
 
@@ -430,7 +430,7 @@ Revision start 沒有 delivery-note mutation，沿用既有 sales-order revision
 4. Custom SQL partial unique、composite FK、supporting unique、複雜 CHECK。
 5. Custom SQL constraint trigger／function 強制 `sales_order_relations.ADDITION` 同公司、source 為 root、不得 cycle 或 addition-as-source；保留既有 self CHECK 與 duplicate unique。
 6. `delivery_note_date`／fiscal period、號碼 regex、void lifecycle、replacement、snapshot 與金額 CHECK。
-7. Migration-health 精確 chain 已加入 `0010_p3_delivery_notes`；P3.2b／P3.2c service 與 P3.2d1 API 已實作後端 RBAC 與 company scope，P3.2d2 UI 尚未開始。
+7. Migration-health 精確 chain 已加入 `0010_p3_delivery_notes`；P3.2b／P3.2c service、P3.2d1 API、P3.2d2 UI 與 P3.2e 整合驗收均已完成。
 8. 不修改 `0001`～`0009`。
 
 驗證流程：
@@ -520,7 +520,7 @@ P3.2 實作取得另案授權後，建議拆成：
 3. **P3.2c 修訂／作廢／重建（完成）**：原子 workflow、replacement history、admin void。
 4. **P3.2d1 API（完成）**：order linkage、delivery list/detail、strict DTO、session、RBAC、company scope、idempotency、correlation ID 與 typed error。
 5. **P3.2d2 UI（完成）**：order linkage、delivery list/detail、permission-gated actions、client mutation error 與 duplicate-submit handling。
-6. **P3.2e 整合驗收**：concurrency、rollback、idempotency、company isolation、fresh chain、health、smoke、validation 文件。
+6. **P3.2e 整合驗收（完成）**：concurrency、rollback、idempotency、company isolation、fresh chain、production browser smoke、refresh consistency 與 validation 文件。
 
 ## 21. P3.2b 工程狀態
 
@@ -542,8 +542,19 @@ P3.2c 的 revision rebuild、replacement chain 與 ADMIN direct void 已完成�
 
 已完成 create／rebuild／ADMIN void、list／detail／current routes，採 strict request DTO、穩定 response DTO、server session context、後端 RBAC、selected-company scope、`Idempotency-Key`、correlation ID 與 typed error mapping。真實 PostgreSQL route workflow 19 項及完整 DB suite 13 files／124 tests 通過；詳細結果見 `P3_2D1_DELIVERY_NOTE_API_VALIDATION.md`。本階段沒有建立 UI、PDF、列印、實際送貨日、回收確認、應收或庫存功能。
 
-## 24. 變更紀錄
+## 24. P3.2e 整合驗收與結案狀態
 
+**P3.2e 已完成，P3.2 銷貨單主流程可正式結案。**
+
+`erp_p3_2e_test_run_20260728_01` 由空白 public schema 套用 0001～0010 並完成 initial DB gate 與 production browser smoke；修改後再以全新 `erp_p3_2e_test_run_20260728_02` 完成最終 clean gate。兩者 migration 均 up to date、Prisma validate／generate 成功、schema diff 0；最終完整 DB suite 13 files／124 tests 全數執行且 0 skipped，完整 unit／UI 為 20 files／130 tests。Lint、typecheck、production build、ADMIN／ORDER_ENTRY production browser smoke 亦通過。
+
+驗收發現 P3.1 UI 未隨 P3.2c transition 擴充，導致 `DELIVERY_CREATED` order 沒有 revision／void actions；已以最小 UI eligibility 修正並增加 unit、DB refresh consistency 與 browser regression。沒有變更 API、RBAC、schema、migration、package 或 lockfile。
+
+DEC-057 的追加訂單規格維持有效：追加單是獨立 sales order，各自建立自己的銷貨單，不屬於既有 order revision rebuild。`ADDITION` 訂單建立 capability 尚未實作，列為後續獨立授權，不在 P3.2e 暗中補做，也不阻止本次 create／revision rebuild／ADMIN void 主流程結案。完整證據見 `P3_2E_DELIVERY_NOTE_INTEGRATION_VALIDATION.md`。
+
+## 25. 變更紀錄
+
+- V0.10（2026-07-28，P3.2e 結案）：完成 fresh migration／Prisma／unit／DB／build、ADMIN／ORDER_ENTRY production browser smoke、refresh consistency 與 RBAC 驗收；修正 `DELIVERY_CREATED` order revision／void UI eligibility。追加訂單 capability 依 DEC-057 保留為後續獨立授權。
 - V0.10（2026-07-27，P3.2d1 工程同步）：完成 Delivery-note API、strict DTO、authentication、RBAC、company scope、idempotency、correlation ID、error mapping、serialization 與真實 API workflow；DB suite 因共享 disposable DB 固定採單 worker。UI 尚未開始。
 - V0.10（2026-07-27，P3.2c 工程同步）：完成 revision start/re-confirm controlled state、原子 rebuild、replacement chain、ADMIN direct void、固定 lock 順序、audit、idempotency、typed errors 與 rollback；API／UI 仍未開始。
 - V0.10（2026-07-27，P3.2b 工程同步）：完成初次建立與三個 query service、row lock、RBAC、月流水、snapshot、Decimal、audit、idempotency、ORDER_VOID 內部整合及 atomic rollback；API／UI／rebuild／ADMIN direct void 未開始。

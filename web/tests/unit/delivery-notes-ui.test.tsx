@@ -5,6 +5,7 @@ import {
   DeliveryNoteListView,
   type DeliveryNoteListItemView,
 } from "../../src/app/delivery-notes/delivery-note-view";
+import DeliveryNotesLoading from "../../src/app/delivery-notes/loading";
 import { deliveryNoteOrderAction } from "../../src/app/sales-orders/delivery-note-order-actions";
 import type {
   DeliveryNoteDetailDto,
@@ -14,6 +15,7 @@ import type {
 import {
   createDeliveryNote,
   DeliveryNoteClientError,
+  rebuildDeliveryNote,
   singleFlight,
   voidDeliveryNote,
 } from "../../src/lib/delivery-notes/client";
@@ -183,6 +185,12 @@ describe("delivery-note UI rendering", () => {
     expect(html).toContain("資料錯誤");
     expect(html).toContain("admin");
   });
+
+  it("renders an accessible loading state", () => {
+    const html = renderToStaticMarkup(<DeliveryNotesLoading />);
+    expect(html).toContain("animate-pulse");
+    expect(html).toContain("正在載入銷貨單");
+  });
 });
 
 describe("delivery-note order action permission and state", () => {
@@ -272,6 +280,62 @@ describe("delivery-note UI mutation client", () => {
       code: "DELIVERY_NOTE_ALREADY_EXISTS",
       message: "訂單已有有效銷貨單",
     });
+  });
+
+  it("rebuilds with a trimmed reason and preserves the detail response", async () => {
+    const fetcher = vi.fn(async () =>
+      Response.json(mutationResponse(), { status: 200 }),
+    );
+    await expect(
+      rebuildDeliveryNote(ids.order, 2, "  修訂後重建  ", fetcher),
+    ).resolves.toMatchObject({
+      deliveryNote: { id: ids.note },
+      correlationId: "request-1",
+    });
+    expect(fetcher).toHaveBeenCalledWith(
+      `/api/sales-orders/${ids.order}/delivery-note/rebuild`,
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          "idempotency-key": expect.any(String),
+        }),
+        body: JSON.stringify({
+          expectedRevisionNo: 2,
+          reason: "修訂後重建",
+        }),
+      }),
+    );
+  });
+
+  it("preserves rebuild typed errors, correlation ID and message", async () => {
+    const fetcher = vi.fn(async () =>
+      Response.json(
+        {
+          error: {
+            code: "DELIVERY_NOTE_REPLACEMENT_CONFLICT",
+            message: "銷貨單已由其他操作重建",
+          },
+          correlationId: "request-rebuild-conflict",
+        },
+        { status: 409 },
+      ),
+    );
+    await expect(
+      rebuildDeliveryNote(ids.order, 2, "重新建立", fetcher),
+    ).rejects.toMatchObject({
+      status: 409,
+      code: "DELIVERY_NOTE_REPLACEMENT_CONFLICT",
+      message: "銷貨單已由其他操作重建",
+      correlationId: "request-rebuild-conflict",
+    });
+  });
+
+  it("validates rebuild reason before calling the API", () => {
+    const fetcher = vi.fn();
+    expect(() => rebuildDeliveryNote(ids.order, 2, "   ", fetcher)).toThrow(
+      DeliveryNoteClientError,
+    );
+    expect(fetcher).not.toHaveBeenCalled();
   });
 
   it("voids successfully with a normalized reason and idempotency key", async () => {

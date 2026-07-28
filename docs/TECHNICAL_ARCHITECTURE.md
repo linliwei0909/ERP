@@ -1,8 +1,8 @@
 # Ragic 本地端系統技術架構
 
-文件狀態：P1、P2、P3.1 已完成；P3.2a schema、P3.2b 核心 service、P3.2c rebuild／ADMIN direct void、P3.2d1 API 與 P3.2d2 UI 已完成
+文件狀態：P1、P2、P3.1 已完成；P3.2a～P3.2e 已完成，P3.2 銷貨單主流程正式結案
 同步基線：`DECISIONS.md` V0.10
-版本日期：2026-07-27
+版本日期：2026-07-28
 
 ## 1. 規格依據與範圍
 
@@ -228,14 +228,14 @@ P2.1～P2.6 已完成公司參數、客戶、品項、價格、運費的主檔�
 
 ## 18. P3.2 銷貨單架構決議
 
-P3.2a 已完成 Prisma schema、`0010_p3_delivery_notes`、custom SQL、fresh DB 驗證及本機 `erp` 受控部署。P3.2b 已完成建立／查詢 service；P3.2c 已完成 revision start/re-confirm controlled state、原子 rebuild、replacement chain、ADMIN direct void、typed errors、固定 row lock、audit、idempotency 與 rollback。P3.2d1 已完成 API；UI 尚未建立。
+P3.2a 已完成 Prisma schema、`0010_p3_delivery_notes`、custom SQL、fresh DB 驗證及本機 `erp` 受控部署。P3.2b 已完成建立／查詢 service；P3.2c 已完成 revision start/re-confirm controlled state、原子 rebuild、replacement chain、ADMIN direct void、typed errors、固定 row lock、audit、idempotency 與 rollback。P3.2d1 API、P3.2d2 UI 與 P3.2e 正式整合驗收均已完成。
 
 - 公開 command 為 `createDeliveryNoteFromOrder`、`rebuildDeliveryNoteForOrder`、`adminVoidDeliveryNote`；查詢為 `getDeliveryNote`、`listDeliveryNotes`、`getCurrentDeliveryNoteForOrder`。Order 作廢使用內部 `voidDeliveryNoteForOrderVoid` helper，revision start 不操作 delivery note。
 - 初次建立由使用者明確觸發。Server 驗證 order=`CONFIRMED`、permission、company scope 及不存在非 `VOIDED` 銷貨單，才在 transaction 內配置 `DELIVERY_NOTE` 號碼並建立完整快照。
 - Rebuild 是不可拆分的 server command。Lock 順序固定為 idempotency claim、order、目前非 `VOIDED` delivery note、document sequence；為符合 partial unique，同一 transaction 先將舊單改為 `VOIDED`，再建立新 `ACTIVE` header／lines、更新 order、寫 audit 並完成 idempotency。任一步失敗會完整 rollback。
 - 銷貨單 header／lines 只複製新 revision 已確認的 typed snapshots 與凍結金額，不重新查詢 customer／item／price／freight master，也不接受 client snapshot、金額、單號、日期或 current delivery note。
 - `delivery_note_date` 由 server 以 `Asia/Taipei` business date 產生並保存為 PostgreSQL `date`。號碼年月與 `document_company_code` 有效版本都依此日期；禁止用 UTC 日期切割、client today、`order_date` 或 `actual_delivery_date`。
-- 每張追加訂單直接以 `ADDITION` 指向 root original order，並建立自己的銷貨單；不形成 chain、aggregate delivery note 或跨 order 合併。Service 解析 root 並防 self、duplicate、cycle 及 addition-as-source。
+- DEC-057 規定每張追加訂單直接以 `ADDITION` 指向 root original order，並建立自己的銷貨單；不形成 chain、aggregate delivery note 或跨 order 合併。`ADDITION` 訂單建立 capability 尚未實作，未來獨立授權的 application transaction 必須解析 root 並防 self、duplicate、cycle 及 addition-as-source；此延後不屬於既有 order revision rebuild。
 - 0010 已以 PostgreSQL custom constraint trigger／function、transaction advisory lock 與 recursive query 在 DB 層再次檢查 ADDITION 同公司、source 為 root、無 cycle 且 source 不是另一張 addition；未來 application transaction 仍須先行驗證並固定 lock order。
 - 權限分為 `delivery_notes.read`、`delivery_notes.manage`、`delivery_notes.admin_void`。ADMIN 與 ORDER_ENTRY 可在授權公司 read／manage；只有 ADMIN 有 direct void。內部 order workflow 的自動作廢不要求 admin void。
 - Audit 使用 `delivery_note.created`、`delivery_note.voided`、`delivery_note.rebuilt`、`sales_order.delivery_created`、`sales_order.delivery_rebuilt`，並以 `ADMIN_DIRECT`、`ORDER_REVISION_REBUILD`、`ORDER_VOID` 表達 void source。
@@ -247,10 +247,12 @@ P3.2a 已完成 Prisma schema、`0010_p3_delivery_notes`、custom SQL、fresh DB
 - Delivery-note detail serializer 在原查詢一併 select `createdBy.id`／`createdBy.username`，以不可為空的 `createdById` 與最小 actor summary 回傳；不進行額外逐筆查詢，不暴露 password hash、session、token、角色或公司 scope。List serializer 使用明確欄位白名單，維持既有 summary contract。
 - P3.2d2 使用 server-rendered list/detail 頁面與小範圍 client mutation components；頁面依既有 permission gate 控制 read／manage／ADMIN void。List API contract 不增加建立者欄位，清單頁以單一 company-scoped bulk query補齊目前頁面的 actor summary，避免 N+1。
 - Client mutation adapter 統一加入 `Idempotency-Key`、保留 typed error message，並以 pending state 及同步 busy guard 防止重複送出；成功後導向明細或 refresh，不在 client 重作 business rule。
+- P3.2e 以全新 `erp_p3_2e_test_run_20260728_01` 完成 initial DB gate 與 ADMIN／ORDER_ENTRY production browser smoke，再以未重用的 `erp_p3_2e_test_run_20260728_02` 完成修改後 clean gate：0001～0010、schema diff 0、13 files／124 DB tests、20 files／130 unit/UI tests、lint、typecheck 與 production build。驗收修正 `DELIVERY_CREATED` order 遺漏 revision／void UI actions；後端 transition、API、RBAC 與資料模型不變。
 - DB test files 目前共用單一 disposable `DATABASE_URL`，且會建立固定共享角色，因此正式 `test:db` 採 `--maxWorkers=1`。Unit suite 保持平行；這是測試資料庫生命週期限制，不是 production concurrency 限制。若未來改為每個 test file 獨立 DB／schema，可重新評估平行執行。
 
 ## 19. 變更紀錄
 
+- V0.10（2026-07-28，P3.2e 結案）：完成 fresh migration／Prisma／unit／DB／build、refresh consistency 與 ADMIN／ORDER_ENTRY production browser smoke；修正 `DELIVERY_CREATED` order revision／void UI eligibility，未變更 API、RBAC、schema、migration 或 dependency。
 - V0.10（2026-07-27，P3.2d2 工程同步）：完成 server-rendered list/detail、order linkage、permission-gated create/rebuild／ADMIN void 與 client mutation boundary；無 schema、migration、package 或 API contract 變更。
 - V0.10（2026-07-27，P3.2d1 工程同步）：完成 API route／DTO／security boundary、真實 PostgreSQL API workflow 與 DB-only single-worker runner；UI 尚未開始。
 - V0.10（2026-07-27，P3.2c 工程同步）：完成 revision start/re-confirm controlled state、原子 replacement rebuild、ADMIN direct void、固定 lock 順序、typed errors、audit、idempotency 與 rollback；API／UI 未開始。

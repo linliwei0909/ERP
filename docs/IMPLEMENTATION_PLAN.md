@@ -1,8 +1,8 @@
 # Ragic 本地端系統開發階段與任務拆分
 
-文件狀態：P1、P2、P3.1 已完成工程驗收；P3.2a schema／migration、P3.2b 核心 service、P3.2c rebuild／ADMIN direct void、P3.2d1 API 與 P3.2d2 UI 已完成
+文件狀態：P1、P2、P3.1 已完成工程驗收；P3.2a～P3.2e 已完成，P3.2 銷貨單主流程正式結案
 同步基線：`DECISIONS.md` V0.10
-版本日期：2026-07-27
+版本日期：2026-07-28
 
 ## 1. 執行原則
 
@@ -11,7 +11,7 @@
 - 新決議先更新 `DECISIONS.md`，再同步規格、資料庫設計、計畫與程式。
 - 所有跨單據操作使用資料庫 transaction；核心規則必須有測試；重要狀態異動保留 audit log。
 - 每次只實作指定模組，不提前實作後續模組。
-- 本輪完成至 P3.2d2 Delivery-note UI 與驗證；不建立列印、PDF、實際送貨日、回收確認、應收或其他後續模組。
+- 本輪完成 P3.2e Delivery-note 整合驗收與 P3.2 主流程結案；不建立列印、PDF、實際送貨日、回收確認、應收、追加訂單 capability 或其他後續模組。
 
 ## 2. 開發階段
 
@@ -189,15 +189,16 @@ P2.6 完成狀態：
 - [P3.2d1 完成] Delivery-note create／rebuild／ADMIN void 與 list／detail／current API 已完成；所有 route 使用 session context、後端 RBAC、selected-company scope、strict DTO、`Idempotency-Key`、correlation ID、typed error 與穩定 Decimal／date serialization。
 - [P3.2d1a 完成] Detail、current 與 mutation response 已補上不可為空的 `createdById` 及只含 `id`／`username` 的建立者摘要；list summary contract 不變，沒有擴張敏感帳號資料。
 - [P3.2d2 完成] Delivery-note 清單、明細、order linkage create／rebuild、ADMIN direct void、RBAC 導覽、typed client error 與 duplicate-submit handling 已完成。
-- [P3.2 規格完成／實作待授權] 追加訂單各自有單號、revision、snapshot、金額及銷貨單，全部直接關聯 root original order；不形成 chain、不 aggregate、不重複原單數量。
-- [P3.2 規格完成／實作待授權] `DN-{document_company_code}-{YYYYMM}-{sequence6}` 使用 `DELIVERY_NOTE` 與 server `Asia/Taipei` `delivery_note_date` 月 scope；重建取新號，作廢不回收。
+- [P3.2e 完成／P3.2 結案] Fresh 0001～0010、schema diff 0、完整 unit／DB／build、ADMIN／ORDER_ENTRY production browser smoke、refresh consistency 與 RBAC 驗收通過；並修正 `DELIVERY_CREATED` 訂單遺漏 revision／void UI actions。
+- [DEC-057 規格完成／後續獨立授權] 追加訂單各自有單號、revision、snapshot、金額及銷貨單，全部直接關聯 root original order；不形成 chain、不 aggregate、不重複原單數量。`ADDITION` 訂單建立 capability 尚未實作，不屬於 P3.2e 補做範圍，也不阻止本次銷貨單主流程結案。
+- [P3.2a～P3.2e 完成] `DN-{document_company_code}-{YYYYMM}-{sequence6}` 使用 `DELIVERY_NOTE` 與 server `Asia/Taipei` `delivery_note_date` 月 scope；重建取新號，作廢不回收。
 - [P3.2a／P3.2b 完成] `0010_p3_delivery_notes`、兩個 enum、兩張表、composite FK、CHECK、replacement 與 ADDITION graph trigger 已完成；建立與查詢 service 已驗證只複製 confirmed order typed snapshots 與凍結金額，不重查主檔、價格或運費。
 - [P3.3 待授權] 首次列印、PDF、版型與重印控制。
 - [P3.4 待授權] 實際出貨日、`returned_confirmed` 人工回收確認、鎖定與整合驗收。
 - 銷貨單只能由訂單建立；partial unique index 保證同一 `sales_order_id` 在 `status <> 'VOIDED'` 時最多一張。
 - 明確不建立批號、庫存、出庫或分批出貨功能。
 
-P3.1 完成條件已達成：訂單取號、草稿、確認、修訂、作廢、價格、缺運費拒絕、快照、公司隔離、rollback、並行與重複請求測試通過；兩個 fresh DB、獨立 disposable DB 95 項 DB tests、`erp` smoke 與最終 gate 全部通過，且 schema 不包含銷貨單或後續表。P3 全階段完成條件仍為單一有效銷貨單、作廢重建、追加、首次列印、人工回收確認及整合測試全部通過。
+P3.1 完成條件已達成：訂單取號、草稿、確認、修訂、作廢、價格、缺運費拒絕、快照、公司隔離、rollback、並行與重複請求測試通過；兩個 fresh DB、獨立 disposable DB 95 項 DB tests、`erp` smoke 與最終 gate 全部通過。P3.2 銷貨單 create／revision rebuild／ADMIN void 主流程亦已完成 P3.2e 整合驗收並正式結案。追加訂單建立 capability、首次列印與人工回收確認仍是後續獨立授權項目，不得因 P3.2 結案而視為已實作。
 
 ### P4：應收、正式統一發票與應收調整
 

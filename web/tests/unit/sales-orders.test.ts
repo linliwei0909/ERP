@@ -16,6 +16,10 @@ import {
   COMPANY_SETTING_KEYS,
   validateCompanySetting,
 } from "../../src/lib/company-settings/registry";
+import {
+  canStartSalesOrderRevision,
+  canVoidSalesOrder,
+} from "../../src/app/sales-orders/sales-order-editor";
 
 describe("P3.1 sales-order rules", () => {
   it("normalizes quantity and unit price without JavaScript floating point", () => {
@@ -51,6 +55,20 @@ describe("P3.1 sales-order rules", () => {
     expect(hasPermission(["ADMIN"], "sales_orders.manage")).toBe(true);
     expect(hasPermission(["ORDER_ENTRY"], "sales_orders.read")).toBe(true);
     expect(hasPermission(["ORDER_ENTRY"], "sales_orders.manage")).toBe(true);
+  });
+
+  it("exposes revision and void actions for delivery-created orders", () => {
+    expect(canStartSalesOrderRevision("CONFIRMED")).toBe(true);
+    expect(canStartSalesOrderRevision("DELIVERY_CREATED")).toBe(true);
+    expect(canStartSalesOrderRevision("DRAFT")).toBe(false);
+    expect(canStartSalesOrderRevision("SHIPPED")).toBe(false);
+
+    expect(canVoidSalesOrder("DRAFT")).toBe(true);
+    expect(canVoidSalesOrder("CONFIRMED")).toBe(true);
+    expect(canVoidSalesOrder("DELIVERY_CREATED")).toBe(true);
+    expect(canVoidSalesOrder("SHIPPED")).toBe(false);
+    expect(canVoidSalesOrder("RECEIVABLE_CREATED")).toBe(false);
+    expect(canVoidSalesOrder("VOIDED")).toBe(false);
   });
 
   it("validates the draft contract and rejects client-owned fields", () => {

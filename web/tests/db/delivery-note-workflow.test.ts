@@ -1862,6 +1862,61 @@ describeDatabase("P3.2b/P3.2c delivery-note workflows", () => {
       replayed: true,
       deliveryNote: { id: rebuildBody.deliveryNote.id },
     });
+    const rebuiltCurrent = await getCurrentDeliveryNoteRoute(
+      apiRequest(
+        `/api/sales-orders/${order.id}/delivery-note`,
+        adminSessionToken,
+      ),
+      { params: Promise.resolve({ id: order.id }) },
+    );
+    await expect(rebuiltCurrent.json()).resolves.toMatchObject({
+      deliveryNote: {
+        id: rebuildBody.deliveryNote.id,
+        status: "ACTIVE",
+        replacedDeliveryNoteId: initialBody.deliveryNote.id,
+      },
+    });
+    const rebuiltDetail = await getDeliveryNoteRoute(
+      apiRequest(
+        `/api/delivery-notes/${rebuildBody.deliveryNote.id}`,
+        adminSessionToken,
+      ),
+      { params: Promise.resolve({ id: rebuildBody.deliveryNote.id }) },
+    );
+    await expect(rebuiltDetail.json()).resolves.toMatchObject({
+      deliveryNote: {
+        id: rebuildBody.deliveryNote.id,
+        status: "ACTIVE",
+        replacedDeliveryNoteId: initialBody.deliveryNote.id,
+      },
+    });
+    const rebuiltList = await listDeliveryNotesRoute(
+      apiRequest(
+        `/api/delivery-notes?salesOrderId=${order.id}&status=ALL`,
+        adminSessionToken,
+      ),
+    );
+    const rebuiltListBody = (await rebuiltList.json()) as {
+      items: Array<{ id: string; status: string }>;
+    };
+    expect(rebuiltListBody.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: rebuildBody.deliveryNote.id,
+          status: "ACTIVE",
+        }),
+        expect.objectContaining({
+          id: initialBody.deliveryNote.id,
+          status: "VOIDED",
+        }),
+      ]),
+    );
+    await expect(
+      db.salesOrder.findUniqueOrThrow({ where: { id: order.id } }),
+    ).resolves.toMatchObject({
+      status: "DELIVERY_CREATED",
+      revisionNo: 2,
+    });
 
     const forbiddenVoid = await adminVoidDeliveryNoteRoute(
       apiRequest(
@@ -1929,6 +1984,43 @@ describeDatabase("P3.2b/P3.2c delivery-note workflows", () => {
     );
     await expect(current.json()).resolves.toMatchObject({
       deliveryNote: null,
+    });
+    const voidedDetail = await getDeliveryNoteRoute(
+      apiRequest(
+        `/api/delivery-notes/${rebuildBody.deliveryNote.id}`,
+        adminSessionToken,
+      ),
+      { params: Promise.resolve({ id: rebuildBody.deliveryNote.id }) },
+    );
+    await expect(voidedDetail.json()).resolves.toMatchObject({
+      deliveryNote: {
+        id: rebuildBody.deliveryNote.id,
+        status: "VOIDED",
+        voidSource: "ADMIN_DIRECT",
+      },
+    });
+    const voidedList = await listDeliveryNotesRoute(
+      apiRequest(
+        `/api/delivery-notes?salesOrderId=${order.id}&status=ALL`,
+        adminSessionToken,
+      ),
+    );
+    const voidedListBody = (await voidedList.json()) as {
+      items: Array<{ id: string; status: string }>;
+    };
+    expect(voidedListBody.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: rebuildBody.deliveryNote.id,
+          status: "VOIDED",
+        }),
+      ]),
+    );
+    await expect(
+      db.salesOrder.findUniqueOrThrow({ where: { id: order.id } }),
+    ).resolves.toMatchObject({
+      status: "CONFIRMED",
+      revisionNo: 2,
     });
   });
 });

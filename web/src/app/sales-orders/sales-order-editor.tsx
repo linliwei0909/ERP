@@ -49,6 +49,15 @@ function idempotencyHeaders() {
     "idempotency-key": crypto.randomUUID(),
   };
 }
+
+export function canStartSalesOrderRevision(status: string): boolean {
+  return status === "CONFIRMED" || status === "DELIVERY_CREATED";
+}
+
+export function canVoidSalesOrder(status: string): boolean {
+  return ["DRAFT", "CONFIRMED", "DELIVERY_CREATED"].includes(status);
+}
+
 export function SalesOrderEditor({
   customers,
   items,
@@ -404,7 +413,7 @@ export function SalesOrderEditor({
             確認訂單
           </button>
         ) : null}
-        {initial?.status === "CONFIRMED" ? (
+        {initial && canStartSalesOrderRevision(initial.status) ? (
           <button
             type="button"
             onClick={() => action("revision")}
@@ -413,7 +422,7 @@ export function SalesOrderEditor({
             開始修訂
           </button>
         ) : null}
-        {initial && ["DRAFT", "CONFIRMED"].includes(initial.status) ? (
+        {initial && canVoidSalesOrder(initial.status) ? (
           <button
             type="button"
             onClick={() => action("void")}
