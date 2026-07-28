@@ -1141,7 +1141,12 @@ describeDatabase("P3.2b/P3.2c delivery-note workflows", () => {
     const downstream = await prepareConfirmedRevision();
     await db.deliveryNote.update({
       where: { id: downstream.old.id },
-      data: { status: "SHIPPED" },
+      data: {
+        status: "SHIPPED",
+        actualDeliveryDate: new Date("2026-07-28T00:00:00.000Z"),
+        firstPrintedAt: new Date(),
+        firstPrintedById: contextA.actor.userId,
+      },
     });
     await expect(
       rebuildDeliveryNoteForOrder(db, {
@@ -1295,7 +1300,12 @@ describeDatabase("P3.2b/P3.2c delivery-note workflows", () => {
     });
     await db.deliveryNote.update({
       where: { id: shipped.deliveryNote.id },
-      data: { status: "SHIPPED" },
+      data: {
+        status: "SHIPPED",
+        actualDeliveryDate: new Date("2026-07-28T00:00:00.000Z"),
+        firstPrintedAt: new Date(),
+        firstPrintedById: adminContext.actor.userId,
+      },
     });
     await expect(
       adminVoidDeliveryNote(db, {

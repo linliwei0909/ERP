@@ -4,6 +4,11 @@ import { describe, expect, it } from "vitest";
 
 const schemaPath = resolve(process.cwd(), "prisma/schema.prisma");
 const schema = readFileSync(schemaPath, "utf8");
+const migrationPath = resolve(
+  process.cwd(),
+  "prisma/migrations/0011_p3_delivery_note_print_storage/migration.sql",
+);
+const migration = readFileSync(migrationPath, "utf8");
 
 describe("P3.2a delivery-note schema contract", () => {
   it("defines only the approved delivery-note enum values", () => {
@@ -22,14 +27,12 @@ describe("P3.2a delivery-note schema contract", () => {
   it("uses the approved typed snapshot and numeric storage contract", () => {
     expect(schema).toContain("model DeliveryNote {");
     expect(schema).toContain("model DeliveryNoteLine {");
-    expect(schema).toContain(
-      'quantity             Decimal  @db.Decimal(18, 4)',
+    expect(schema).toMatch(/quantity\s+Decimal\s+@db\.Decimal\(18, 4\)/);
+    expect(schema).toMatch(
+      /unitPrice\s+Decimal\s+@map\("unit_price"\) @db\.Decimal\(18, 5\)/,
     );
-    expect(schema).toContain(
-      'unitPrice            Decimal  @map("unit_price") @db.Decimal(18, 5)',
-    );
-    expect(schema).toContain(
-      'lineAmount           Decimal  @map("line_amount") @db.Decimal(18, 0)',
+    expect(schema).toMatch(
+      /lineAmount\s+Decimal\s+@map\("line_amount"\) @db\.Decimal\(18, 0\)/,
     );
     expect(schema).not.toContain("orderSnapshot");
     expect(schema).not.toContain("currentDeliveryNoteId");
@@ -51,5 +54,65 @@ describe("P3.2a delivery-note schema contract", () => {
     for (const requiredPath of requiredPaths) {
       expect(existsSync(resolve(process.cwd(), requiredPath))).toBe(true);
     }
+  });
+});
+
+describe("P3.3b delivery-note print-storage schema contract", () => {
+  it("defines the immutable print version and append-only event models", () => {
+    expect(schema).toContain("model DeliveryNotePrintVersion {");
+    expect(schema).toContain("model DeliveryNotePrintEvent {");
+    expect(schema).toContain("enum DeliveryNotePrintEventType {");
+    expect(schema).toContain("  FORMAL_PRINT");
+    expect(schema).toContain("  REPRINT");
+    expect(schema).toContain(
+      '@unique(map: "delivery_note_print_versions_delivery_note_key")',
+    );
+  });
+
+  it("adds only the approved delivery-note summary fields", () => {
+    expect(schema).toContain(
+      'actualDeliveryDate      DateTime?               @map("actual_delivery_date") @db.Date',
+    );
+    expect(schema).toContain(
+      'firstPrintedAt          DateTime?               @map("first_printed_at") @db.Timestamptz(3)',
+    );
+    expect(schema).toContain(
+      'firstPrintedById        String?                 @map("first_printed_by") @db.Uuid',
+    );
+    expect(schema).toContain(
+      'reprintCount            Int                     @default(0) @map("reprint_count")',
+    );
+    expect(schema).not.toContain("formalPrintVersionId");
+    expect(schema).not.toContain("PrintSetting");
+    expect(schema).not.toContain("TemplateMaster");
+  });
+
+  it("keeps 0011 transactional, fail-fast, additive, and drift-visible", () => {
+    expect(migration.trimStart()).toMatch(/^BEGIN;/);
+    expect(migration.trimEnd()).toMatch(/COMMIT;$/);
+    expect(migration).toContain(
+      "P3.3b preflight failed: shipped delivery notes require complete print storage data",
+    );
+    expect(migration).toContain(
+      'WHERE "status" IN (\'SHIPPED\', \'RECEIVABLE_CREATED\')',
+    );
+    expect(migration).not.toContain("IF NOT EXISTS");
+    expect(migration).not.toMatch(/\bUPDATE\s+"delivery_notes"/);
+  });
+
+  it("installs fixed append-only protection for both print tables", () => {
+    expect(migration).toContain(
+      "CREATE FUNCTION \"reject_delivery_note_print_storage_mutation\"()",
+    );
+    expect(migration).toContain(
+      "RAISE EXCEPTION '% is append-only: % is not allowed'",
+    );
+    expect(migration.match(/ENABLE ALWAYS TRIGGER/g)).toHaveLength(4);
+    expect(migration).toContain(
+      'CREATE TRIGGER "delivery_note_print_versions_reject_truncate"',
+    );
+    expect(migration).toContain(
+      'CREATE TRIGGER "delivery_note_print_events_reject_truncate"',
+    );
   });
 });

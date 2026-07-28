@@ -1,7 +1,7 @@
 # P3.3 銷貨單正式列印與出貨計畫
 
-文件狀態：P3.3a 規格閉合完成；P3.3b～P3.3f 尚未授權
-同步基線：`DECISIONS.md` V0.11／DEC-058
+文件狀態：P3.3a 規格閉合完成；P3.3b schema／migration 已完成；P3.3c～P3.3f 尚未授權
+同步基線：`DECISIONS.md` V0.12／DEC-058
 版本日期：2026-07-28
 
 ## 1. 背景與目標
@@ -664,6 +664,8 @@ Body: {}
 ## 21. P3.3b～P3.3f 建議切片
 
 ### P3.3b Schema／migration
+
+完成狀態（2026-07-28）：已完成 Prisma schema、`0011_p3_delivery_note_print_storage`、DB constraints、company-scope FK、append-only triggers、fresh／upgrade／preflight rollback、catalog／checksum／schema diff 與 regression 驗證。此完成狀態不代表 renderer、首次正式列印／重印 service、API 或 UI 可用。
 
 - 混合模型 Prisma schema。
 - Create-only migration。

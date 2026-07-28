@@ -1,7 +1,7 @@
 # Ragic 本地端系統正式決議
 
 文件性質：本專案最高優先級的業務決議紀錄  
-版本：V0.11
+版本：V0.12
 最後更新：2026-07-28
 
 ## 1. 使用原則
@@ -1112,7 +1112,7 @@
 - filesystem／object storage 加 immutable reference 可在未來檔案量或 DB 容量證明需要時另案評估；未完成 staging、原子發布、孤兒檔清理、備份還原與 hash reconciliation 設計前不得替換本決議。
 - 每張銷貨單最多一個正式 PDF，`document_version` 第一版固定為 `1`，並以 `(delivery_note_id, document_version)` 唯一。正式版本至少保存 `document_version`、`template_version`、`generated_at`、`generated_by`、SHA-256 `content_hash`、`mime_type = application/pdf`、`byte_size`、`filename` 及 PDF bytes；不得 update 或 delete。
 - 第一版單一正式 PDF 上限為 20 MiB（20 × 1024 × 1024 bytes）；renderer 結果超過上限時整個首次正式列印 transaction 失敗並 rollback，不得截斷或降低內容完整性後默默保存。
-- `delivery_notes` 預計保存 `actual_delivery_date`、`first_printed_at`、`first_printed_by`、`formal_print_version_id` 與 `reprint_count`。正式 constraint 與 FK 由 P3.3b 設計並以 migration 實作，本決議不代表 schema 已存在。
+- `delivery_notes` 保存 `actual_delivery_date`、`first_printed_at`、`first_printed_by` 與 `reprint_count`，不保存 `formal_print_version_id`，也不建立 delivery note 指回 print version 的循環 FK。每張銷貨單唯一正式 PDF 由 `delivery_note_print_versions.delivery_note_id` 的 unique constraint 保證及查詢；此設計不降低正式 PDF 唯一性，並避免 Prisma relation、migration 次序與首次列印 insert transaction 的不必要循環依賴。
 
 ### 權限、公司隔離與列印資格
 
@@ -1155,6 +1155,7 @@
 
 ## 4. 變更紀錄
 
+- V0.12（2026-07-28）：完成 P3.3b schema 契約裁定；`delivery_notes` 不新增 `formal_print_version_id` 或循環 FK，唯一正式 PDF 改由 print version 的 `delivery_note_id` unique constraint 保證。本決議只固定 schema 契約，不代表 renderer、首次正式列印／重印 service、API 或 UI 已完成。
 - V0.11（2026-07-28）：修訂 DEC-017 並新增 DEC-058，正式化首次正式列印即出貨、P3.3／P3.4 責任切分、不可變 DB PDF、預覽／重印語意、版型版本、權限、作廢／replacement、audit、冪等、併發及 OQ-051 第一版排除；不代表 schema、migration、renderer、API 或 UI 已實作。
 - V0.10（2026-07-27）：新增 DEC-057，裁定 P3.2 銷貨單手動建立、revision 保留舊單及原子重建、追加單直接關聯 root 且不聚合、ADMIN 直接作廢、非 `VOIDED` 唯一限制、`delivery_note_date` 與月流水取號、快照、replacement、audit 及 idempotency；P3.2 尚未開始實作。
 - V0.9（2026-07-27）：新增 DEC-056，正式化兩家公司法定資訊與單據縮寫、月流水訂單號、未稅金額與 half-up、價格來源及人工理由、修訂版次、聯絡人與付款條件、作廢及確認快照規則，並限定 P3.1 不建立銷貨單。

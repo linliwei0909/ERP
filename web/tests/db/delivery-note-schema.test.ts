@@ -158,6 +158,8 @@ describeDatabase("P3.2a delivery-note database contract", () => {
     const status = options.status ?? "ACTIVE";
     const noteSequence = String(serial++).padStart(6, "0");
     const isVoided = status === "VOIDED";
+    const isPrinted =
+      status === "SHIPPED" || status === "RECEIVABLE_CREATED";
     const result = await client.query<{ id: string }>(
       `INSERT INTO delivery_notes (
          company_id, delivery_note_number, delivery_note_date,
@@ -165,14 +167,15 @@ describeDatabase("P3.2a delivery-note database contract", () => {
          status, void_source, company_snapshot, customer_snapshot,
          customer_company_snapshot, contact_snapshot, delivery_snapshot,
          freight_snapshot, subtotal, freight_amount, total_amount,
-         replaced_delivery_note_id, created_by, updated_by, updated_at,
+         replaced_delivery_note_id, actual_delivery_date, first_printed_at,
+         first_printed_by, reprint_count, created_by, updated_by, updated_at,
          voided_at, voided_by, void_reason
        ) VALUES (
          $1, $2, DATE '2026-07-27', 2026, 7, $3, 1,
          $4, $5, $6::jsonb, '{"name":"customer"}'::jsonb,
          '{"code":"customer"}'::jsonb, NULL, '{"address":"delivery"}'::jsonb,
          '{"mode":"NO_CHARGE"}'::jsonb, $7, $8, $9,
-         $10, $11, $11, now(), $12, $13, $14
+         $10, $11, $12, $13, 0, $14, $14, now(), $15, $16, $17
        )
        RETURNING id`,
       [
@@ -186,10 +189,87 @@ describeDatabase("P3.2a delivery-note database contract", () => {
         options.freightAmount ?? 0,
         options.totalAmount ?? 10,
         options.replacedDeliveryNoteId ?? null,
+        isPrinted ? "2026-07-27" : null,
+        isPrinted ? new Date() : null,
+        isPrinted ? fixture.userId : null,
         fixture.userId,
         isVoided ? new Date() : null,
         isVoided ? fixture.userId : null,
         isVoided ? "DB contract test void" : null,
+      ],
+    );
+    return result.rows[0]!.id;
+  }
+
+  async function createSession(fixture: Fixture): Promise<string> {
+    const result = await client.query<{ id: string }>(
+      `INSERT INTO user_sessions (
+         user_id, token_hash, selected_company_id, updated_at
+       ) VALUES ($1, $2, $3, now())
+       RETURNING id`,
+      [fixture.userId, `print-${randomUUID()}`, fixture.companyId],
+    );
+    return result.rows[0]!.id;
+  }
+
+  async function insertPrintVersion(
+    fixture: Fixture,
+    deliveryNoteId: string,
+    overrides: {
+      documentVersion?: number;
+      templateVersion?: string;
+      contentHash?: string;
+      mimeType?: string;
+      byteSize?: number;
+      filename?: string;
+      pdfBytes?: Buffer;
+      companyId?: string;
+    } = {},
+  ): Promise<string> {
+    const pdfBytes = overrides.pdfBytes ?? Buffer.from("%PDF-test");
+    const result = await client.query<{ id: string }>(
+      `INSERT INTO delivery_note_print_versions (
+         company_id, delivery_note_id, document_version, template_version,
+         generated_by, content_hash, mime_type, byte_size, filename, pdf_bytes
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       RETURNING id`,
+      [
+        overrides.companyId ?? fixture.companyId,
+        deliveryNoteId,
+        overrides.documentVersion ?? 1,
+        overrides.templateVersion ?? "delivery-note-v1",
+        fixture.userId,
+        overrides.contentHash ?? "a".repeat(64),
+        overrides.mimeType ?? "application/pdf",
+        overrides.byteSize ?? pdfBytes.length,
+        overrides.filename ?? "delivery-note.pdf",
+        pdfBytes,
+      ],
+    );
+    return result.rows[0]!.id;
+  }
+
+  async function insertPrintEvent(
+    fixture: Fixture,
+    deliveryNoteId: string,
+    printVersionId: string,
+    sessionId: string,
+    eventType: "FORMAL_PRINT" | "REPRINT" = "FORMAL_PRINT",
+  ): Promise<string> {
+    const result = await client.query<{ id: string }>(
+      `INSERT INTO delivery_note_print_events (
+         company_id, delivery_note_id, print_version_id, event_type,
+         actor_user_id, session_id, request_id
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id`,
+      [
+        fixture.companyId,
+        deliveryNoteId,
+        printVersionId,
+        eventType,
+        fixture.userId,
+        sessionId,
+        randomUUID(),
       ],
     );
     return result.rows[0]!.id;
@@ -504,6 +584,299 @@ describeDatabase("P3.2a delivery-note database contract", () => {
     ).rejects.toMatchObject({ code: "23514" });
   });
 
+  it("installs the P3.3b enum, columns, constraints, indexes, and triggers", async () => {
+    const enumValues = await client.query<{ enumlabel: string }>(
+      `SELECT e.enumlabel
+         FROM pg_type t
+         JOIN pg_enum e ON e.enumtypid = t.oid
+        WHERE t.typname = 'delivery_note_print_event_type'
+        ORDER BY e.enumsortorder`,
+    );
+    expect(enumValues.rows.map((row) => row.enumlabel)).toEqual([
+      "FORMAL_PRINT",
+      "REPRINT",
+    ]);
+
+    const columns = await client.query<{ column_name: string }>(
+      `SELECT column_name
+         FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'delivery_notes'
+          AND column_name IN (
+            'actual_delivery_date', 'first_printed_at',
+            'first_printed_by', 'reprint_count'
+          )
+        ORDER BY column_name`,
+    );
+    expect(columns.rows.map((row) => row.column_name)).toEqual([
+      "actual_delivery_date",
+      "first_printed_at",
+      "first_printed_by",
+      "reprint_count",
+    ]);
+
+    const objects = await client.query<{ object_name: string }>(
+      `SELECT conname AS object_name
+         FROM pg_constraint
+        WHERE conname IN (
+          'delivery_notes_print_summary_check',
+          'delivery_note_print_versions_document_version_check',
+          'delivery_note_print_versions_template_version_check',
+          'delivery_note_print_versions_content_hash_check',
+          'delivery_note_print_versions_mime_type_check',
+          'delivery_note_print_versions_byte_size_check',
+          'delivery_note_print_versions_filename_check',
+          'delivery_note_print_events_version_note_company_fkey'
+        )
+       UNION ALL
+       SELECT indexname
+         FROM pg_indexes
+        WHERE schemaname = 'public'
+          AND indexname IN (
+            'delivery_note_print_versions_delivery_note_key',
+            'delivery_note_print_versions_note_document_version_key',
+            'delivery_note_print_events_one_formal_print_key',
+            'delivery_note_print_events_note_occurred_idx',
+            'delivery_note_print_events_company_occurred_idx'
+          )
+       UNION ALL
+       SELECT tgname
+         FROM pg_trigger
+        WHERE NOT tgisinternal
+          AND tgname IN (
+            'delivery_note_print_versions_reject_update_delete',
+            'delivery_note_print_versions_reject_truncate',
+            'delivery_note_print_events_reject_update_delete',
+            'delivery_note_print_events_reject_truncate'
+          )
+       ORDER BY object_name`,
+    );
+    expect(objects.rows.map((row) => row.object_name)).toEqual([
+      "delivery_note_print_events_company_occurred_idx",
+      "delivery_note_print_events_note_occurred_idx",
+      "delivery_note_print_events_one_formal_print_key",
+      "delivery_note_print_events_reject_truncate",
+      "delivery_note_print_events_reject_update_delete",
+      "delivery_note_print_events_version_note_company_fkey",
+      "delivery_note_print_versions_byte_size_check",
+      "delivery_note_print_versions_content_hash_check",
+      "delivery_note_print_versions_delivery_note_key",
+      "delivery_note_print_versions_document_version_check",
+      "delivery_note_print_versions_filename_check",
+      "delivery_note_print_versions_mime_type_check",
+      "delivery_note_print_versions_note_document_version_key",
+      "delivery_note_print_versions_reject_truncate",
+      "delivery_note_print_versions_reject_update_delete",
+      "delivery_note_print_versions_template_version_check",
+      "delivery_notes_print_summary_check",
+    ]);
+
+    const validated = await client.query<{ convalidated: boolean }>(
+      `SELECT convalidated
+         FROM pg_constraint
+        WHERE conname = 'delivery_notes_print_summary_check'`,
+    );
+    expect(validated.rows).toEqual([{ convalidated: true }]);
+  });
+
+  it("allows one formal version/event and rejects duplicates", async () => {
+    const fixture = await createFixture();
+    const noteId = await insertNote(fixture);
+    const versionId = await insertPrintVersion(fixture, noteId);
+    const sessionId = await createSession(fixture);
+    await insertPrintEvent(fixture, noteId, versionId, sessionId);
+
+    await expect(
+      insertPrintVersion(fixture, noteId),
+    ).rejects.toMatchObject({ code: "23505" });
+    await expect(
+      insertPrintEvent(fixture, noteId, versionId, sessionId),
+    ).rejects.toMatchObject({ code: "23505" });
+
+    const otherFixture = await createFixture();
+    const validOtherNote = await insertNote(otherFixture);
+    await expect(
+      insertPrintVersion(otherFixture, validOtherNote, {
+        documentVersion: 2,
+      }),
+    ).rejects.toMatchObject({ code: "23514" });
+  });
+
+  it.each([
+    ["empty PDF", { pdfBytes: Buffer.alloc(0), byteSize: 0 }],
+    [
+      "PDF over 20 MiB",
+      { pdfBytes: Buffer.alloc(20 * 1024 * 1024 + 1) },
+    ],
+    ["mismatched byte size", { byteSize: 999 }],
+    ["wrong MIME", { mimeType: "text/plain" }],
+    ["invalid hash", { contentHash: "ABC" }],
+    ["blank template version", { templateVersion: "   " }],
+    ["blank filename", { filename: "   " }],
+  ] as const)("rejects invalid print-version metadata: %s", async (_label, overrides) => {
+    const fixture = await createFixture();
+    const noteId = await insertNote(fixture);
+    await expect(
+      insertPrintVersion(fixture, noteId, overrides),
+    ).rejects.toMatchObject({ code: "23514" });
+  });
+
+  it("enforces company scope across note, version, and event", async () => {
+    const first = await createFixture();
+    const firstNote = await insertNote(first);
+    const firstVersion = await insertPrintVersion(first, firstNote);
+    const firstUnversioned = await createFixture(first.companyId);
+    const firstUnversionedNote = await insertNote(firstUnversioned);
+    const second = await createFixture();
+    const secondNote = await insertNote(second);
+    const secondSession = await createSession(second);
+
+    await expect(
+      insertPrintVersion(second, firstUnversionedNote),
+    ).rejects.toMatchObject({ code: "23503" });
+    await expect(
+      insertPrintEvent(
+        second,
+        secondNote,
+        firstVersion,
+        secondSession,
+      ),
+    ).rejects.toMatchObject({ code: "23503" });
+  });
+
+  it("rejects UPDATE, DELETE, and TRUNCATE on both append-only tables", async () => {
+    const fixture = await createFixture();
+    const noteId = await insertNote(fixture);
+    const versionId = await insertPrintVersion(fixture, noteId);
+    const sessionId = await createSession(fixture);
+    const eventId = await insertPrintEvent(
+      fixture,
+      noteId,
+      versionId,
+      sessionId,
+    );
+
+    for (const [sql, message] of [
+      [
+        `UPDATE delivery_note_print_versions
+            SET filename = filename
+          WHERE id = '${versionId}'`,
+        "delivery_note_print_versions is append-only: UPDATE is not allowed",
+      ],
+      [
+        `DELETE FROM delivery_note_print_versions WHERE id = '${versionId}'`,
+        "delivery_note_print_versions is append-only: DELETE is not allowed",
+      ],
+      [
+        "TRUNCATE delivery_note_print_versions CASCADE",
+        "delivery_note_print_versions is append-only: TRUNCATE is not allowed",
+      ],
+      [
+        `UPDATE delivery_note_print_events
+            SET request_id = request_id
+          WHERE id = '${eventId}'`,
+        "delivery_note_print_events is append-only: UPDATE is not allowed",
+      ],
+      [
+        `DELETE FROM delivery_note_print_events WHERE id = '${eventId}'`,
+        "delivery_note_print_events is append-only: DELETE is not allowed",
+      ],
+      [
+        "TRUNCATE delivery_note_print_events",
+        "delivery_note_print_events is append-only: TRUNCATE is not allowed",
+      ],
+    ]) {
+      await expect(client.query(sql)).rejects.toMatchObject({
+        code: "55000",
+        message,
+      });
+    }
+  });
+
+  it("enforces delivery-note print-summary state completeness", async () => {
+    const activeFixture = await createFixture();
+    const activeId = await insertNote(activeFixture);
+    await expect(
+      client.query(
+        `UPDATE delivery_notes
+            SET actual_delivery_date = DATE '2026-07-28',
+                first_printed_at = now(),
+                first_printed_by = $2
+          WHERE id = $1`,
+        [activeId, activeFixture.userId],
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
+
+    await expect(
+      client.query(
+        `UPDATE delivery_notes SET status = 'SHIPPED' WHERE id = $1`,
+        [activeId],
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
+    await expect(
+      client.query(
+        `UPDATE delivery_notes
+            SET status = 'RECEIVABLE_CREATED'
+          WHERE id = $1`,
+        [activeId],
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
+    await expect(
+      client.query(
+        `UPDATE delivery_notes SET reprint_count = -1 WHERE id = $1`,
+        [activeId],
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
+
+    const emptyVoided = await createFixture();
+    await expect(
+      insertNote(emptyVoided, { status: "VOIDED" }),
+    ).resolves.toBeDefined();
+
+    const completeFixture = await createFixture();
+    const completeId = await insertNote(completeFixture);
+    await expect(
+      client.query(
+        `UPDATE delivery_notes
+            SET status = 'VOIDED',
+                void_source = 'ADMIN_DIRECT',
+                voided_at = now(),
+                voided_by = $2,
+                void_reason = 'P3.3b complete summary test',
+                actual_delivery_date = DATE '2026-07-28',
+                first_printed_at = now(),
+                first_printed_by = $2
+          WHERE id = $1`,
+        [completeId, completeFixture.userId],
+      ),
+    ).resolves.toBeDefined();
+
+    const partialFixture = await createFixture();
+    const partialId = await insertNote(partialFixture);
+    await expect(
+      client.query(
+        `UPDATE delivery_notes
+            SET status = 'VOIDED',
+                void_source = 'ADMIN_DIRECT',
+                voided_at = now(),
+                voided_by = $2,
+                void_reason = 'P3.3b partial summary test',
+                actual_delivery_date = DATE '2026-07-28'
+          WHERE id = $1`,
+        [partialId, partialFixture.userId],
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
+  });
+
+  it("restricts deletion of referenced print-storage principals", async () => {
+    const fixture = await createFixture();
+    const noteId = await insertNote(fixture);
+    await insertPrintVersion(fixture, noteId);
+    await expect(
+      client.query(`DELETE FROM users WHERE id = $1`, [fixture.userId]),
+    ).rejects.toMatchObject({ code: "23503" });
+  });
+
   it("uses only RESTRICT or NO ACTION delete behavior and creates no forbidden tables", async () => {
     const foreignKeys = await client.query<{ delete_action: string }>(
       `SELECT rc.delete_rule AS delete_action
@@ -512,6 +885,8 @@ describeDatabase("P3.2a delivery-note database contract", () => {
           AND (
             rc.constraint_name LIKE 'delivery_notes_%_fkey'
             OR rc.constraint_name LIKE 'delivery_note_lines_%_fkey'
+            OR rc.constraint_name LIKE 'delivery_note_print_versions_%_fkey'
+            OR rc.constraint_name LIKE 'delivery_note_print_events_%_fkey'
           )`,
     );
     expect(foreignKeys.rows.length).toBeGreaterThan(0);

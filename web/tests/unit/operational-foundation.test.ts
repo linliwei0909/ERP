@@ -60,6 +60,7 @@ describe("readiness migration contract", () => {
       "0008_p2_master_import_foundation",
       "0009_p3_sales_orders",
       "0010_p3_delivery_notes",
+      "0011_p3_delivery_note_print_storage",
     ]);
   });
 });
