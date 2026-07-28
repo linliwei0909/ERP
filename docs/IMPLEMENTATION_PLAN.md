@@ -1,13 +1,13 @@
 # Ragic 本地端系統開發階段與任務拆分
 
-文件狀態：P1、P2、P3.1 已完成工程驗收；P3.2a～P3.2e 已完成，P3.2 銷貨單主流程正式結案
-同步基線：`DECISIONS.md` V0.10
+文件狀態：P1、P2、P3.1 已完成工程驗收；P3.2a～P3.2e 已完成並正式結案；P3.3a 列印與出貨規格閉合完成，尚未開始 schema 或工程實作
+同步基線：`DECISIONS.md` V0.11
 版本日期：2026-07-28
 
 ## 1. 執行原則
 
 - 第一階段固定採 Ragic 本地端重建規格，不加入庫存、批號、分批出貨、出庫依賴或正式會計過帳。
-- `OPEN_QUESTIONS.md` 保留 OQ-005、OQ-044、OQ-045 與可延後至 P3.3／P3.4 的 OQ-051；OQ-046～OQ-050 已由 DEC-057 決議。第一階段以「銷貨單已回收」的人工確認作為建立應收條件，不實作正式電子簽收。
+- `OPEN_QUESTIONS.md` 保留 OQ-005、OQ-044、OQ-045；OQ-046～OQ-050 已由 DEC-057 決議，OQ-051 已由 DEC-058 裁定 P3.3 第一版排除。第一階段以「銷貨單已回收」的人工確認作為建立應收條件，不實作正式電子簽收。
 - 新決議先更新 `DECISIONS.md`，再同步規格、資料庫設計、計畫與程式。
 - 所有跨單據操作使用資料庫 transaction；核心規則必須有測試；重要狀態異動保留 audit log。
 - 每次只實作指定模組，不提前實作後續模組。
@@ -193,8 +193,9 @@ P2.6 完成狀態：
 - [DEC-057 規格完成／後續獨立授權] 追加訂單各自有單號、revision、snapshot、金額及銷貨單，全部直接關聯 root original order；不形成 chain、不 aggregate、不重複原單數量。`ADDITION` 訂單建立 capability 尚未實作，不屬於 P3.2e 補做範圍，也不阻止本次銷貨單主流程結案。
 - [P3.2a～P3.2e 完成] `DN-{document_company_code}-{YYYYMM}-{sequence6}` 使用 `DELIVERY_NOTE` 與 server `Asia/Taipei` `delivery_note_date` 月 scope；重建取新號，作廢不回收。
 - [P3.2a／P3.2b 完成] `0010_p3_delivery_notes`、兩個 enum、兩張表、composite FK、CHECK、replacement 與 ADDITION graph trigger 已完成；建立與查詢 service 已驗證只複製 confirmed order typed snapshots 與凍結金額，不重查主檔、價格或運費。
-- [P3.3 待授權] 首次列印、PDF、版型與重印控制。
-- [P3.4 待授權] 實際出貨日、`returned_confirmed` 人工回收確認、鎖定與整合驗收。
+- [P3.3a 規格閉合完成／工程待授權] 已裁定首次正式列印即出貨、`actual_delivery_date` 自動建立、order／delivery note 同步轉為 `SHIPPED`、DB immutable PDF、首次列印／重印／下載語意、混合資料模型、版型版本、權限、audit、冪等、併發、作廢／replacement 及 OQ-051 第一版排除。本階段未建立 schema、migration、renderer、API 或 UI。
+- [P3.3b～P3.3f 待授權] Schema／migration、正式列印 service 與 PDF renderer、API、UI／版型及整合驗收；第一版不提供預覽。
+- [P3.4 待授權] `returned_confirmed` 人工回收確認、確認時間／操作者、撤銷／更正、回收後鎖定、已存在實際出貨日的受控更正及與應收流程銜接驗收。P3.4 不再負責首次建立實際出貨日。
 - 銷貨單只能由訂單建立；partial unique index 保證同一 `sales_order_id` 在 `status <> 'VOIDED'` 時最多一張。
 - 明確不建立批號、庫存、出庫或分批出貨功能。
 
@@ -335,10 +336,11 @@ P3.1 完成條件已達成：訂單取號、草稿、確認、修訂、作廢、
 
 ## 6. 本輪交付限制
 
-P3.2d2 UI 完成後停止。未取得使用者下一步授權前，不得開始列印、PDF、實際送貨日、回收確認、應收、Ragic 正式全量移轉、舊 ERP 模組恢復或其他後續模組；任何後續對 `erp` 的資料庫 mutation 或破壞性操作仍須使用者另行核准。
+P3.3a 規格文件完成後停止。未取得使用者下一步授權前，不得開始 P3.3b schema／migration、PDF dependency／renderer、API、UI、實際資料 mutation、回收確認、應收、Ragic 正式全量移轉、舊 ERP 模組恢復或其他後續模組；任何後續對 `erp` 的資料庫 mutation 或破壞性操作仍須使用者另行核准。
 
 ## 7. 變更紀錄
 
+- V0.11（2026-07-28，P3.3a 規格閉合）：標示首次正式列印即出貨、P3.3／P3.4 新切分、DB immutable PDF、混合資料模型、版型、權限、作廢／replacement、audit、冪等、併發與 OQ-051 排除均已決；P3.3b～P3.3f 尚未授權。
 - V0.10（2026-07-27，P3.2d2 工程同步）：完成 Delivery-note list/detail、order create/rebuild linkage、ADMIN direct void、RBAC 導覽、typed client error、duplicate-submit handling 與 UI unit validation；未變更 schema、migration、package 或 API contract。
 - V0.10（2026-07-27，P3.2d1 工程同步）：完成 Delivery-note API、strict DTO、authentication、RBAC、company scope、idempotency、correlation ID、typed errors、serialization 與真實 PostgreSQL API workflow；正式 DB suite 固定單 worker 並完成兩次 13 files／124 tests。UI 尚未開始。
 - V0.10（2026-07-27，P3.2c 工程同步）：完成 revision start、re-confirm controlled state、原子 rebuild、replacement chain、ADMIN direct void、typed errors、固定 lock 順序、audit、idempotency 與 rollback；`_02` DB 13 files／121 tests 與完整品質 Gate 通過。API／UI 未開始。

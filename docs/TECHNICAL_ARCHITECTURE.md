@@ -1,14 +1,14 @@
 # Ragic 本地端系統技術架構
 
-文件狀態：P1、P2、P3.1 已完成；P3.2a～P3.2e 已完成，P3.2 銷貨單主流程正式結案
-同步基線：`DECISIONS.md` V0.10
+文件狀態：P1、P2、P3.1 已完成；P3.2a～P3.2e 已完成並正式結案；P3.3a 列印與出貨架構閉合完成，尚未開始工程實作
+同步基線：`DECISIONS.md` V0.11
 版本日期：2026-07-28
 
 ## 1. 規格依據與範圍
 
 本架構依下列優先順序設計：
 
-1. `DECISIONS.md` V0.10。
+1. `DECISIONS.md` V0.11。
 2. `business-rules.md`。
 3. `DATABASE_DESIGN.md`。
 4. `TECHNICAL_ARCHITECTURE.md`。
@@ -17,7 +17,7 @@
 7. `OPEN_QUESTIONS.md`。
 8. 其他舊文件。
 
-第一階段固定為 Ragic 本地端重建，不採 ERP MVP 的庫存、批號、分批出貨、出庫依賴或正式會計過帳。`OPEN_QUESTIONS.md` 保留 OQ-005、OQ-044、OQ-045 與可延後的 OQ-051；OQ-046～OQ-050 已由 DEC-057 決議。第一階段以「銷貨單已回收」的人工確認作為建立應收條件，不實作正式電子簽收。
+第一階段固定為 Ragic 本地端重建，不採 ERP MVP 的庫存、批號、分批出貨、出庫依賴或正式會計過帳。`OPEN_QUESTIONS.md` 只保留 OQ-005、OQ-044、OQ-045；OQ-046～OQ-050 已由 DEC-057 決議，OQ-051 已由 DEC-058 完成 P3.3 第一版裁定。第一階段以「銷貨單已回收」的人工確認作為建立應收條件，不實作正式電子簽收。
 
 ## 2. 第一階段模組
 
@@ -119,7 +119,7 @@ flowchart TB
 ## 8. 銷售與應收控制
 
 - 同一訂單同時最多一張 `status <> 'VOIDED'` 銷貨單；partial unique 不得只限制 `ACTIVE`，作廢歷史保留。
-- 首次列印且實際出貨日為空時才自動帶入日期；重印不得覆蓋。
+- 首次正式列印是 P3.3 的同步 application command；實際出貨日為空時以 `Asia/Taipei` 當地日期帶入，同一 transaction 建立不可變正式 PDF 並將訂單與銷貨單改為 `SHIPPED`。重印及 read-only 下載不得覆蓋。
 - 第一階段以 `returned_confirmed` 或等效欄位記錄銷貨單已回收，作為建立應收的人工作業證據。
 - 第一階段不實作正式電子簽收。OQ-005 只保留第二階段的電子簽收設計，不影響第一階段開發；未來簽收功能不得覆蓋人工確認歷程。
 - 建立應收後鎖定訂單與銷貨單；一張銷貨單最多一筆有效應收，一筆應收可有多張正式發票。
@@ -250,7 +250,25 @@ P3.2a 已完成 Prisma schema、`0010_p3_delivery_notes`、custom SQL、fresh DB
 - P3.2e 以全新 `erp_p3_2e_test_run_20260728_01` 完成 initial DB gate 與 ADMIN／ORDER_ENTRY production browser smoke，再以未重用的 `erp_p3_2e_test_run_20260728_02` 完成修改後 clean gate：0001～0010、schema diff 0、13 files／124 DB tests、20 files／130 unit/UI tests、lint、typecheck 與 production build。驗收修正 `DELIVERY_CREATED` order 遺漏 revision／void UI actions；後端 transition、API、RBAC 與資料模型不變。
 - DB test files 目前共用單一 disposable `DATABASE_URL`，且會建立固定共享角色，因此正式 `test:db` 採 `--maxWorkers=1`。Unit suite 保持平行；這是測試資料庫生命週期限制，不是 production concurrency 限制。若未來改為每個 test file 獨立 DB／schema，可重新評估平行執行。
 
-## 19. 變更紀錄
+## 19. P3.3a 銷貨單列印與出貨架構決議
+
+- P3.3 使用既有同步 application service、session context、RBAC、selected-company scope、audit、idempotency 與 correlation ID 邊界；不使用 background job 完成首次正式列印。
+- 第一版不提供預覽。首次正式列印、重印、read-only 正式 PDF 下載使用不同且不含糊的 command/query；一般 GET 不得觸發出貨或新增重印事件。
+- 首次正式列印的 lock 順序為 idempotency claim → sales order → delivery note。Service 在同一 transaction 產生 PDF bytes、建立唯一 print version、建立首次事件、寫入實際出貨日與首次列印摘要、更新 delivery note／order 為 `SHIPPED`、寫 audit 並完成 idempotency。
+- PDF renderer 必須在 transaction 內完成，且不得存取目前 master data；輸入只能來自 delivery note frozen snapshots、既有金額、server 產生的實際出貨日／列印時間及明確 template version。P3.3a 尚未選定或安裝 renderer。
+- 正式 PDF 使用 PostgreSQL `bytea` 保存。此選擇優先確保 DB transaction 原子性；不採外部 filesystem/object storage，也不只保存結構化 snapshot 後重新 render。
+- `delivery_note_print_versions` 是每張銷貨單唯一且不可變的正式版本；`delivery_note_print_events` 是 append-only 首次列印／重印歷程；`delivery_notes` 保存狀態查詢與 constraint 所需摘要。實際 schema、FK、CHECK、trigger 與 migration 留給 P3.3b。
+- 相同首次列印 idempotency key replay 同一版本。不同 key 併發時只有 lock winner 建立版本及轉換狀態，後續 request 收斂回傳既有版本且不新增事件。資料狀態與正式版本不完整時回 typed invariant error。
+- read-only 下載只需 `delivery_notes.read`，不計重印；首次正式列印與明確重印 command 需 `delivery_notes.manage`。兩種角色仍必須通過 company scope；不新增 `delivery_notes.print`。
+- 版型使用不可變 `template_version`；舊單重印直接回傳保存的 PDF，不受新版型、renderer、依賴、字型、公司設定或主檔變動影響。中文字型須可合法部署並穩定嵌入。
+- `VOIDED` 不得首次列印或重印；若歷史已有 PDF，read-only 下載仍可用且 UI/metadata 顯示作廢。不得改寫原 PDF 或動態加浮水印。Replacement 各自擁有正式版本與事件。
+- P3.3 負責首次正式列印、自動建立實際出貨日及兩張單據進入 `SHIPPED`；P3.4 負責人工回收確認、撤銷／更正、回收後鎖定、已存在實際出貨日的受控更正及應收銜接驗收。
+- OQ-051 四個欄位第一版排除，不預留 schema。現有資料沒有獨立稅額，PDF 固定顯示「稅額：未分列」，不得推算數值。
+- 本節是規格與候選架構，不代表 PDF renderer、字型、dependency、Prisma schema、migration、API 或 UI 已實作。
+
+## 20. 變更紀錄
+
+- V0.11（2026-07-28，P3.3a 規格閉合）：同步 DEC-058，固定首次正式列印即出貨、DB immutable PDF、混合資料模型、權限、版型、作廢／replacement、audit、冪等、併發與 P3.3／P3.4 邊界；尚未建立 schema、migration、renderer、API 或 UI。
 
 - V0.10（2026-07-28，P3.2e 結案）：完成 fresh migration／Prisma／unit／DB／build、refresh consistency 與 ADMIN／ORDER_ENTRY production browser smoke；修正 `DELIVERY_CREATED` order revision／void UI eligibility，未變更 API、RBAC、schema、migration 或 dependency。
 - V0.10（2026-07-27，P3.2d2 工程同步）：完成 server-rendered list/detail、order linkage、permission-gated create/rebuild／ADMIN void 與 client mutation boundary；無 schema、migration、package 或 API contract 變更。

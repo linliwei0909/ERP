@@ -1,12 +1,12 @@
 # Ragic 本地端系統共通業務規則
 
 文件狀態：第一階段正式規則彙整  
-同步基線：`DECISIONS.md` V0.10
-最後更新：2026-07-27
+同步基線：`DECISIONS.md` V0.11
+最後更新：2026-07-28
 
 ## 1. 規格效力
 
-- 本文件依 `DECISIONS.md` V0.10 同步整理；內容衝突時一律以 `DECISIONS.md` 為準。
+- 本文件依 `DECISIONS.md` V0.11 同步整理；內容衝突時一律以 `DECISIONS.md` 為準。
 - 已由 `DECISIONS.md` 決議的事項不得重新列為待確認。
 - 第一階段不得自行加入庫存、批號、分批出貨、出庫依賴或正式會計過帳。
 - `OPEN_QUESTIONS.md` 保留 OQ-005、OQ-044 與 OQ-045；三者均不阻塞 P1。
@@ -136,15 +136,23 @@
 - 一般使用者不提供獨立作廢按鈕；`DRAFT`、`CONFIRMED`、`DELIVERY_CREATED` 訂單作廢時，由同一 transaction 以 `ORDER_VOID` 連動作廢目前非作廢銷貨單。
 - ADMIN 具 `delivery_notes.admin_void` 及公司 scope 時，可例外直接將 `ACTIVE` 銷貨單作廢；理由 trim 後必填，`void_source = ADMIN_DIRECT`，並在同一 transaction 將 order `DELIVERY_CREATED -> CONFIRMED`。作廢後不自動重建，使用者可再明確建立新單。ORDER_ENTRY 不得直接作廢。
 - `SHIPPED`、`RECEIVABLE_CREATED`、`VOIDED` 不得由 P3.2 ADMIN 直接作廢，也不得進入 P3.2 revision／rebuild。
-- 尚未建立應收前可修改銷貨單的 DEC-016 原則維持；P3.2 的訂單／價格／運費快照不得直接 PATCH，只能透過 order revision 與原子 rebuild 形成 replacement。實際出貨日等可修改欄位由 P3.4 實作。
+- 尚未建立應收前可修改銷貨單的 DEC-016 原則維持；P3.2 的訂單／價格／運費快照不得直接 PATCH，只能透過 order revision 與原子 rebuild 形成 replacement。P3.3 首次正式列印自動建立實際出貨日；P3.4 才提供已存在實際出貨日的受控更正及回收確認後鎖定。
 - 銷貨單號為 `DN-{document_company_code}-{YYYYMM}-{六碼流水}`，document type 為 `DELIVERY_NOTE`。`YYYYMM` 與公司縮寫版本依 server 產生的 `Asia/Taipei` `delivery_note_date` 判斷，不得使用 `order_date`、`actual_delivery_date` 或 client 日期。重建使用重建當日並取得新號；作廢號碼不回收。
 - 銷貨單複製已確認 order 的 typed 快照與凍結金額，不重新讀取目前主檔、查價或重算運費。
 - P3.2b 建立服務已依上述規則實作：鎖定 order 與目前非作廢銷貨單，在單一 transaction 內完成月流水取號、header、lines、order `DELIVERY_CREATED`、audit 與 idempotency completion；任一明細失敗全部 rollback。
 - P3.2c 已實作 revision start 保留舊 `ACTIVE` 單、re-confirm controlled state、`ORDER_REVISION_REBUILD` 原子重建與 `ADMIN_DIRECT` 例外作廢。重建固定使用新號並向前延伸 replacement chain；所有 order／note／sequence／lines／audit／idempotency 異動位於同一 transaction，失敗不得留下中間狀態。
 - P3.2d1 API 已實作 create／rebuild／ADMIN void 與 list／detail／current；所有寫入沿用正式 transaction service，必須通過 session、後端 RBAC、selected-company scope、strict body、`Idempotency-Key` 與 correlation ID，不接受 client 指定 company、actor、狀態、單號、日期、快照或金額。
 - 銷貨單狀態為 `ACTIVE`、`SHIPPED`、`RECEIVABLE_CREATED`、`VOIDED`。P3.2 只實作建立為 `ACTIVE` 及三種 `ACTIVE -> VOIDED`；實際出貨與應收狀態由後續階段處理，紙本回收確認不是 status。
-- 實際出貨日預設為首次列印銷貨單的日期；只在欄位尚未填寫時帶入，後續重印不得覆蓋。使用者可修改，第一階段不要求修改原因，另記首次列印時間。
-- 填入實際出貨日後，訂單與銷貨單更新為已出貨。
+- 第一版不提供預覽。首次「正式列印」是明確的出貨 command；只有 `ACTIVE` 銷貨單及 `DELIVERY_CREATED` 訂單可執行。
+- 首次正式列印時，如實際出貨日尚未填寫，以 `Asia/Taipei` 當地日期帶入；同一 transaction 建立唯一不可變正式 PDF、首次列印摘要與事件，並將訂單及銷貨單更新為 `SHIPPED`。任何一步失敗全部 rollback。
+- `SHIPPED` 或 `RECEIVABLE_CREATED` 只能重印或下載既有正式 PDF，不得再次產生正式版本。重印不得覆蓋實際出貨日、首次列印時間、正式 PDF 或版型版本。
+- 使用者明確執行重印才新增 append-only 重印事件及計數；一般查閱／下載既有正式 PDF 及內部 hash 驗證不算重印。
+- 正式 PDF 保存於 PostgreSQL immutable binary version，包含 template version、產生時間／人、SHA-256、MIME type、byte size 與 filename。後續主檔、公司設定、版型、renderer 或字型變更不得使舊單重印內容漂移。
+- `VOIDED` 不得建立正式版本或執行重印；若歷史資料已有正式 PDF，仍保留供具 `delivery_notes.read` 及公司 scope 者查閱。不得覆寫原 PDF 或動態加作廢浮水印。
+- Replacement 銷貨單各自建立自己的正式 PDF、首次列印摘要、事件與重印計數，不得沿用舊單資料。
+- `delivery_notes.read` 可查看列印資訊及下載既有正式 PDF；`delivery_notes.manage` 可首次正式列印及重印。ADMIN 仍須通過 selected company 與 company scope，不新增 `delivery_notes.print`。
+- 首次正式列印及重印都使用 idempotency key。不同 key 併發首次正式列印只允許一個 request 建立正式版本及轉換狀態；其餘 request 收斂回傳同一既有版本，不新增事件或重複轉換。
+- P3.3 第一版不納入備註、預計送貨日、客戶採購單號或外部參考號，不建立 placeholder。現有快照沒有獨立稅額，版型顯示「稅額：未分列」，不得反推或臆造數值。
 - 第一階段不檢查庫存、不分配批號、不建立出庫或庫存異動，也不因庫存不足阻擋銷貨或應收。
 - 建立應收後，來源訂單與銷貨單鎖定，不得修改或直接作廢。
 
@@ -281,6 +289,7 @@
 
 ## 17. 變更紀錄
 
+- V0.11（2026-07-28，P3.3a 規格閉合）：同步 DEC-058，正式化首次正式列印即出貨、DB immutable PDF、預覽／重印／下載語意、權限、版型、作廢／replacement、audit、冪等、併發、P3.3／P3.4 邊界及 OQ-051 第一版排除；尚未實作 schema 或功能。
 - V0.10（2026-07-27，P3.2d1 工程同步）：完成 Delivery-note API security boundary、strict DTO、idempotency、correlation ID、error mapping 與 serialization；不包含 UI、出貨、列印、回收確認或應收。
 - V0.10（2026-07-27，P3.2c 工程同步）：完成 revision rebuild、replacement chain、ADMIN direct void、typed errors、audit、idempotency 與 atomic rollback；不包含 API／UI、出貨、列印或應收。
 - V0.10（2026-07-27，P3.2b 工程同步）：完成銷貨單初次建立、查詢、confirmed snapshot copy、月流水、RBAC／company scope、idempotency、audit、order 狀態與 ORDER_VOID 內部連動；不包含 API／UI／rebuild／ADMIN direct void。
