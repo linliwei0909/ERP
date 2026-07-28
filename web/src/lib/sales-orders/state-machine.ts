@@ -69,6 +69,14 @@ export function assertAdminVoidOrderTransition(
   }
 }
 
+export function assertSalesOrderShippedTransition(
+  from: SalesOrderStatus,
+): void {
+  if (from !== "DELIVERY_CREATED") {
+    throw new SalesOrderStatusTransitionError(from, "SHIPPED");
+  }
+}
+
 export function canEditSalesOrderDraft(status: SalesOrderStatus): boolean {
   return status === "DRAFT";
 }

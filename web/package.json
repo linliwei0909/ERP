@@ -9,7 +9,7 @@
     "worker": "tsx src/worker.ts",
     "lint": "eslint",
     "typecheck": "next typegen && tsc --project tsconfig.typecheck.json",
-    "test": "vitest run tests/unit",
+    "test": "vitest run tests/unit --exclude tests/unit/delivery-note-print.test.ts && vitest run tests/unit/delivery-note-print.test.ts --maxWorkers=1",
     "test:db": "vitest run tests/db --maxWorkers=1",
     "prisma:validate": "prisma validate",
     "prisma:generate": "prisma generate",
@@ -23,9 +23,11 @@
     "db:restore-verify": "pwsh -NoProfile -File scripts/restore-verify-development-db.ps1"
   },
   "dependencies": {
+    "@pdf-lib/fontkit": "^1.1.1",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "next": "16.2.11",
+    "pdf-lib": "^1.17.1",
     "pg": "^8.22.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",

@@ -101,3 +101,91 @@ export class DeliveryNoteInvariantError extends Error {
     super(message);
   }
 }
+
+export class DeliveryNotePrintError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+    readonly details: {
+      deliveryNoteId?: string;
+      snapshotVersion?: string;
+      path?: string;
+      reason?: string;
+    } = {},
+  ) {
+    super(message);
+    this.name = new.target.name;
+  }
+}
+
+export class DeliveryNoteSnapshotValidationError extends DeliveryNotePrintError {
+  constructor(input: {
+    deliveryNoteId: string;
+    snapshotVersion: string;
+    path: string;
+    reason: string;
+    code?: "DELIVERY_NOTE_SNAPSHOT_VERSION_UNSUPPORTED" | "DELIVERY_NOTE_SNAPSHOT_INVALID";
+  }) {
+    super(
+      input.code ?? "DELIVERY_NOTE_SNAPSHOT_INVALID",
+      `銷貨單快照欄位 ${input.path} 無效：${input.reason}`,
+      input,
+    );
+  }
+}
+
+export class DeliveryNotePrintStateError extends DeliveryNotePrintError {
+  constructor(message = "目前銷貨單狀態不可執行正式列印") {
+    super("DELIVERY_NOTE_PRINT_STATE_INVALID", message);
+  }
+}
+
+export class DeliveryNoteSalesOrderStateError extends DeliveryNotePrintError {
+  constructor(message = "來源訂單狀態不可轉為已出貨") {
+    super("DELIVERY_NOTE_SALES_ORDER_STATE_INVALID", message);
+  }
+}
+
+export class DeliveryNoteFormalPrintExistsError extends DeliveryNotePrintError {
+  constructor() {
+    super("DELIVERY_NOTE_FORMAL_PRINT_EXISTS", "銷貨單已有正式列印版本");
+  }
+}
+
+export class DeliveryNoteFormalPrintMissingError extends DeliveryNotePrintError {
+  constructor() {
+    super("DELIVERY_NOTE_FORMAL_PRINT_MISSING", "銷貨單尚無正式列印版本");
+  }
+}
+
+export class DeliveryNoteFontError extends DeliveryNotePrintError {
+  constructor(
+    code:
+      | "DELIVERY_NOTE_FONT_MISSING"
+      | "DELIVERY_NOTE_FONT_CHECKSUM_MISMATCH"
+      | "DELIVERY_NOTE_FONT_PARSE_FAILED"
+      | "DELIVERY_NOTE_FONT_GLYPH_MISSING",
+    message: string,
+  ) {
+    super(code, message);
+  }
+}
+
+export class DeliveryNotePdfRenderError extends DeliveryNotePrintError {
+  constructor(
+    code:
+      | "DELIVERY_NOTE_PDF_RENDER_FAILED"
+      | "DELIVERY_NOTE_PDF_INVALID"
+      | "DELIVERY_NOTE_PDF_CHECKSUM_MISMATCH"
+      | "DELIVERY_NOTE_PRINT_STORAGE_INVALID",
+    message: string,
+  ) {
+    super(code, message);
+  }
+}
+
+export class DeliveryNotePrintConcurrencyError extends DeliveryNotePrintError {
+  constructor(message = "正式列印操作發生併發衝突，請稍後重試") {
+    super("DELIVERY_NOTE_PRINT_CONCURRENCY_CONFLICT", message);
+  }
+}

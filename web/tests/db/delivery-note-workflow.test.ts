@@ -1213,6 +1213,7 @@ describeDatabase("P3.2b/P3.2c delivery-note workflows", () => {
       deliveryNoteId: created.deliveryNote.id,
       voidReason: "管理員例外作廢",
       idempotencyKey: key,
+      now: new Date("2026-07-27T06:01:00.000Z"),
     });
     expect(replay).toEqual({ ...voided, replayed: true });
     expect(voided.deliveryNote).toMatchObject({

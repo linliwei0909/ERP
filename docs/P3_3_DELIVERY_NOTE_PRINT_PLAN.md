@@ -1,6 +1,6 @@
 # P3.3 銷貨單正式列印與出貨計畫
 
-文件狀態：P3.3a 規格閉合、P3.3b storage 與 P3.3b2 version contract 已完成；P3.3c 以後尚未授權
+文件狀態：P3.3a 規格閉合、P3.3b storage、P3.3b2 version contract 與 P3.3c domain／transaction 已完成；P3.3d 以後尚未授權
 同步基線：`DECISIONS.md` V0.12／DEC-058
 版本日期：2026-07-28
 
@@ -689,6 +689,8 @@ Body: {}
 
 ### P3.3c 正式列印 service／renderer
 
+完成狀態（2026-07-28）：已完成嚴格 snapshot v1 validator、immutable print model、固定版本 deterministic `pdf-lib` renderer、官方 Noto Sans CJK TC Regular Sans2.004 資產／OFL／checksum／glyph fail-fast、正式列印與重印 transaction、row lock、既有 idempotency／audit、兩張單據 `SHIPPED` 同步、DB `bytea` 原子保存及 unit／DB integration 驗證。未建立 API、UI 或下載端點。
+
 - 驗證 `delivery-note-snapshot-v1` 並建立 Print model。
 - 固定 `delivery-note-pdf-renderer-v1` 等 domain renderer contract。
 - 依 font manifest 載入、驗證並嵌入 Noto Sans CJK TC Regular。
@@ -717,7 +719,7 @@ Body: {}
 - Concurrency、rollback、hash consistency、公司切換及 refresh。
 - Validation 文件與 P3.3 工程結案。
 
-## 22. P3.3c handoff 條件
+## 22. P3.3c 完成與 P3.3d handoff
 
 P3.3c 可依賴下列已完成條件：
 
@@ -733,7 +735,7 @@ P3.3c 可依賴下列已完成條件：
 - 既有 snapshot JSON 未重寫；既有 print version row 由 fail-fast migration guard 保護。
 - 正式字型已決為 Noto Sans CJK TC Regular。
 
-進入 P3.3c 仍需另行使用者授權，且實作時必須：
+P3.3c 已依使用者授權完成：
 
 1. 建立 frozen snapshot validator、print model 與 deterministic renderer。
 2. 固定 renderer version 與 font manifest identity。
@@ -741,4 +743,4 @@ P3.3c 可依賴下列已完成條件：
 4. 完成 formal-print／reprint transaction、狀態、audit、idempotency、concurrency 與 DB tests。
 5. 保持 API、UI、下載端點與 P4 blueprint 完全隔離。
 
-P3.3b2 完成不等於授權 P3.3c；renderer、正式列印／重印 service、API、UI 與下載 capability 仍不存在。
+P3.3c 完成不等於授權 P3.3d；API、HTTP DTO／mapping、UI、client adapter 與下載 capability 仍不存在。

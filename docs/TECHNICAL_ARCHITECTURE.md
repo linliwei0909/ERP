@@ -1,7 +1,7 @@
 # Ragic 本地端系統技術架構
 
-文件狀態：P1、P2、P3.1 已完成；P3.2a～P3.2e 已完成並正式結案；P3.3a 列印與出貨架構閉合完成，尚未開始工程實作
-同步基線：`DECISIONS.md` V0.11
+文件狀態：P1、P2、P3.1 已完成；P3.2a～P3.2e 已完成並正式結案；P3.3a～P3.3c 已完成，P3.3d 尚未授權
+同步基線：`DECISIONS.md` V0.12（含 DEC-059）
 版本日期：2026-07-28
 
 ## 1. 規格依據與範圍
@@ -254,7 +254,7 @@ P3.2a 已完成 Prisma schema、`0010_p3_delivery_notes`、custom SQL、fresh DB
 
 - P3.3 使用既有同步 application service、session context、RBAC、selected-company scope、audit、idempotency 與 correlation ID 邊界；不使用 background job 完成首次正式列印。
 - 第一版不提供預覽。首次正式列印、重印、read-only 正式 PDF 下載使用不同且不含糊的 command/query；一般 GET 不得觸發出貨或新增重印事件。
-- 首次正式列印的 lock 順序為 idempotency claim → sales order → delivery note。Service 在同一 transaction 產生 PDF bytes、建立唯一 print version、建立首次事件、寫入實際出貨日與首次列印摘要、更新 delivery note／order 為 `SHIPPED`、寫 audit 並完成 idempotency。
+- 首次正式列印的 lock 順序為 idempotency claim → delivery note → sales order → 正式 print version／event invariants。Service 在同一 transaction 產生 PDF bytes、建立唯一 print version、建立首次事件、寫入實際出貨日與首次列印摘要、更新 delivery note／order 為 `SHIPPED`、寫 audit 並完成 idempotency。
 - PDF renderer 必須在 transaction 內完成，且不得存取目前 master data；輸入只能來自 delivery note frozen snapshots、既有金額、server 產生的實際出貨日／列印時間及明確 template version。P3.3a 尚未選定或安裝 renderer。
 - 正式 PDF 使用 PostgreSQL `bytea` 保存。此選擇優先確保 DB transaction 原子性；不採外部 filesystem/object storage，也不只保存結構化 snapshot 後重新 render。
 - `delivery_note_print_versions` 是每張銷貨單唯一且不可變的正式版本；`delivery_note_print_events` 是 append-only 首次列印／重印歷程；`delivery_notes` 保存狀態查詢與 constraint 所需摘要。實際 schema、FK、CHECK、trigger 與 migration 留給 P3.3b。
