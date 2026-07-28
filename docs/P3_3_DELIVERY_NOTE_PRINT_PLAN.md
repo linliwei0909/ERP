@@ -1,6 +1,6 @@
 # P3.3 銷貨單正式列印與出貨計畫
 
-文件狀態：P3.3a～P3.3d 已完成；P3.3e 與後續階段未開始
+文件狀態：P3.3a～P3.3e 已完成實作與驗證；P3.3e 尚待獨立 Git 收尾，P3.3 尚未重新完成結案審查，P3.4 與 P4 未開始
 同步基線：`DECISIONS.md` V0.12／DEC-058
 版本日期：2026-07-28
 
@@ -112,10 +112,10 @@ delivery_notes: ACTIVE           -> SHIPPED
 
 同一 transaction 還必須完成：
 
-1. 驗證 permission、company scope、idempotency。
-2. Lock order。
-3. Lock delivery note。
-4. 驗證 order、delivery note、revision 與公司一致。
+1. 驗證 permission、company scope，並 claim idempotency。
+2. 以 company-scoped 唯讀查詢解析 Delivery Note 的 Sales Order identity。
+3. 依固定順序 lock Sales Order，再 lock Delivery Note。
+4. 鎖後重新驗證 order、delivery note、relation、revision 與公司一致。
 5. 以 `Asia/Taipei` 產生實際出貨日及 server timestamp。
 6. 由 frozen snapshots 建立 print model。
 7. 以固定 template version render PDF。
@@ -276,7 +276,7 @@ Read-only 下載不建立 business audit 或重印事件；HTTP access log 可�
 
 ### 11.3 併發
 
-- Lock 順序固定為 idempotency claim → order → delivery note。
+- Lock 順序固定為 idempotency → Sales Order → Delivery Note。
 - 不同 key 同時首次列印：
   - 第一個 lock winner 建立版本及轉換狀態。
   - 後續 request 取得 lock 後，如發現同一銷貨單已有完整正式版本及一致 `SHIPPED` 狀態，回傳既有版本。
@@ -691,6 +691,8 @@ Body: {}
 
 完成狀態（2026-07-28）：已完成嚴格 snapshot v1 validator、immutable print model、固定版本 deterministic `pdf-lib` renderer、官方 Noto Sans CJK TC Regular Sans2.004 資產／OFL／checksum／glyph fail-fast、正式列印與重印 transaction、row lock、既有 idempotency／audit、兩張單據 `SHIPPED` 同步、DB `bytea` 原子保存及 unit／DB integration 驗證。未建立 API、UI 或下載端點。
 
+P3.3e 補正（2026-07-28）：依 DEC-058 將正式列印與補印的實際順序統一為 `idempotency → Sales Order → Delivery Note`；P3.3c 其他 renderer、storage、狀態、audit、idempotency 與 rollback 結果不變。
+
 - 驗證 `delivery-note-snapshot-v1` 並建立 Print model。
 - 固定 `delivery-note-pdf-renderer-v1` 等 domain renderer contract。
 - 依 font manifest 載入、驗證並嵌入 Noto Sans CJK TC Regular。
@@ -744,4 +746,4 @@ P3.3c 已依使用者授權完成：
 4. 完成 formal-print／reprint transaction、狀態、audit、idempotency、concurrency 與 DB tests。
 5. 保持 API、UI、下載端點與 P4 blueprint 完全隔離。
 
-P3.3d 已依獨立授權完成 API、HTTP DTO／mapping、UI、client adapter 與下載 capability。GET 下載保持無副作用，且一般 detail/list query 不讀取 `pdf_bytes`。P3.3e、P3.4 與 P4 均未開始。
+P3.3d 已依獨立授權完成 API、HTTP DTO／mapping、UI、client adapter 與下載 capability。GET 下載保持無副作用，且一般 detail/list query 不讀取 `pdf_bytes`。P3.3e 已完成 lock-order 補正實作與驗證但尚待獨立 Git 收尾；P3.3 尚未重新完成結案審查，P3.4 與 P4 均未開始。

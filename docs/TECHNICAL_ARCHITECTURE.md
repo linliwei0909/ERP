@@ -1,6 +1,6 @@
 # Ragic 本地端系統技術架構
 
-文件狀態：P1、P2、P3.1 已完成；P3.2a～P3.2e 已完成並正式結案；P3.3a～P3.3d 已完成，P3.3e 與後續階段未開始
+文件狀態：P1、P2、P3.1 已完成；P3.2a～P3.2e 已完成並正式結案；P3.3a～P3.3e 已完成實作與驗證，P3.3e 尚待獨立 Git 收尾，P3.3 尚未重新完成結案審查，P4 未開始
 同步基線：`DECISIONS.md` V0.12（含 DEC-059）
 版本日期：2026-07-28
 
@@ -254,7 +254,7 @@ P3.2a 已完成 Prisma schema、`0010_p3_delivery_notes`、custom SQL、fresh DB
 
 - P3.3 使用既有同步 application service、session context、RBAC、selected-company scope、audit、idempotency 與 correlation ID 邊界；P3.3d route 只處理 HTTP 邊界並呼叫既有 service，不使用 background job 完成首次正式列印。
 - 第一版不提供預覽。首次正式列印、重印、read-only 正式 PDF 下載使用不同且不含糊的 command/query；一般 GET 不得觸發出貨或新增重印事件。
-- 首次正式列印的 lock 順序為 idempotency claim → delivery note → sales order → 正式 print version／event invariants。Service 在同一 transaction 產生 PDF bytes、建立唯一 print version、建立首次事件、寫入實際出貨日與首次列印摘要、更新 delivery note／order 為 `SHIPPED`、寫 audit 並完成 idempotency。
+- 首次正式列印與重印的 lock 順序為 idempotency → Sales Order → Delivery Note → 正式 print version／event invariants。Service 在 idempotency claim 後以 company-scoped 唯讀查詢取得 relation identity，依固定順序鎖 row，再重新驗證 company、relation 與狀態。首次正式列印在同一 transaction 產生 PDF bytes、建立唯一 print version、建立首次事件、寫入實際出貨日與首次列印摘要、更新 delivery note／order 為 `SHIPPED`、寫 audit 並完成 idempotency。
 - PDF renderer 必須在 transaction 內完成，且不得存取目前 master data；輸入只能來自 delivery note frozen snapshots、既有金額、server 產生的實際出貨日／列印時間及明確 template version。P3.3a 尚未選定或安裝 renderer。
 - 正式 PDF 使用 PostgreSQL `bytea` 保存。此選擇優先確保 DB transaction 原子性；不採外部 filesystem/object storage，也不只保存結構化 snapshot 後重新 render。
 - `delivery_note_print_versions` 是每張銷貨單唯一且不可變的正式版本；`delivery_note_print_events` 是 append-only 首次列印／重印歷程；`delivery_notes` 保存狀態查詢與 constraint 所需摘要。實際 schema、FK、CHECK、trigger 與 migration 留給 P3.3b。
@@ -270,6 +270,7 @@ P3.2a 已完成 Prisma schema、`0010_p3_delivery_notes`、custom SQL、fresh DB
 
 ## 20. 變更紀錄
 
+- V0.13（2026-07-28，P3.3e lock-order 補正）：依 DEC-058 將首次正式列印與補印統一為 `idempotency → Sales Order → Delivery Note`，以 company-scoped 唯讀 relation lookup 配合鎖後 company／relation／status 重驗證，並完成 deadlock、fresh DB、schema diff 與完整 regression；未修改 schema、migration、API、UI 或 renderer。
 - V0.12（2026-07-28，P3.3d API／下載／UI）：完成三個 Node route、binary query isolation、集中 HTTP error mapping、RBAC／company scope、detail metadata、client idempotency 與安全 browser download；未修改 schema、renderer 或 transaction。
 - V0.11（2026-07-28，P3.3a 規格閉合）：同步 DEC-058，固定首次正式列印即出貨、DB immutable PDF、混合資料模型、權限、版型、作廢／replacement、audit、冪等、併發與 P3.3／P3.4 邊界；尚未建立 schema、migration、renderer、API 或 UI。
 

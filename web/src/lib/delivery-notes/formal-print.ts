@@ -44,12 +44,17 @@ const REPRINT_OPERATION = "delivery_note.reprint";
 
 export const DELIVERY_NOTE_PRINT_LOCK_ORDER = [
   "idempotency",
-  "delivery_note",
   "sales_order",
+  "delivery_note",
   "formal_print_version_invariant",
   "formal_print_event_invariant",
   "audit",
 ] as const;
+
+export type DeliveryNotePrintRowLock = "sales_order" | "delivery_note";
+type LockObserver = (
+  lock: DeliveryNotePrintRowLock,
+) => void | Promise<void>;
 
 export type DeliveryNotePrintServiceInput = {
   context: RequestContext;
@@ -167,6 +172,69 @@ async function loadLockedNote(tx: Tx, companyId: string, deliveryNoteId: string)
   });
 }
 
+async function resolveDeliveryNoteRelationIdentity(
+  tx: Tx,
+  companyId: string,
+  deliveryNoteId: string,
+): Promise<{ companyId: string; salesOrderId: string }> {
+  const relation = await tx.deliveryNote.findFirst({
+    where: { id: deliveryNoteId, companyId },
+    select: { companyId: true, salesOrderId: true },
+  });
+  if (!relation) throw new DeliveryNoteNotFoundError();
+  return relation;
+}
+
+export function assertLockedDeliveryNoteRelation(
+  note: {
+    companyId: string;
+    salesOrderId: string;
+    salesOrder: { id: string; companyId: string };
+  },
+  expected: {
+    companyId: string;
+    salesOrderId: string;
+  },
+): void {
+  if (
+    note.companyId !== expected.companyId ||
+    note.salesOrderId !== expected.salesOrderId ||
+    note.salesOrder.id !== expected.salesOrderId ||
+    note.salesOrder.companyId !== expected.companyId
+  ) {
+    throw new DeliveryNoteSalesOrderStateError(
+      "銷貨單與訂單的公司或來源關聯不一致",
+    );
+  }
+}
+
+export async function acquireDeliveryNotePrintLocks(
+  tx: Tx,
+  input: {
+    companyId: string;
+    deliveryNoteId: string;
+  },
+  lockObserver?: LockObserver,
+) {
+  // This lookup resolves identity only. Business decisions use the locked reload.
+  const relation = await resolveDeliveryNoteRelationIdentity(
+    tx,
+    input.companyId,
+    input.deliveryNoteId,
+  );
+  await lockSalesOrder(tx, input.companyId, relation.salesOrderId);
+  await lockObserver?.("sales_order");
+  await lockDeliveryNote(tx, input.companyId, input.deliveryNoteId);
+  await lockObserver?.("delivery_note");
+  const note = await loadLockedNote(
+    tx,
+    input.companyId,
+    input.deliveryNoteId,
+  );
+  assertLockedDeliveryNoteRelation(note, relation);
+  return note;
+}
+
 function validateRenderedPdf(
   rendered: RenderedDeliveryNotePdf,
   snapshotVersion: string,
@@ -282,6 +350,7 @@ export async function formalPrintDeliveryNote(
   dependencies: {
     renderer?: DeliveryNotePdfRenderer;
     auditWriter?: typeof writeAudit;
+    lockObserver?: LockObserver;
   } = {},
 ): Promise<DeliveryNotePrintResult> {
   assertAccess(input.context, input.companyId);
@@ -299,10 +368,11 @@ export async function formalPrintDeliveryNote(
       expiresAt: new Date(now.getTime() + IDEMPOTENCY_TTL_MS),
       now,
     }, async (tx) => {
-      await lockDeliveryNote(tx, input.companyId, input.deliveryNoteId);
-      let note = await loadLockedNote(tx, input.companyId, input.deliveryNoteId);
-      await lockSalesOrder(tx, input.companyId, note.salesOrderId);
-      note = await loadLockedNote(tx, input.companyId, input.deliveryNoteId);
+      const note = await acquireDeliveryNotePrintLocks(
+        tx,
+        input,
+        dependencies.lockObserver,
+      );
 
       if (note.status !== "ACTIVE") {
         if (note.printVersions.length > 0) throw new DeliveryNoteFormalPrintExistsError();
@@ -446,6 +516,9 @@ export async function formalPrintDeliveryNote(
 export async function reprintDeliveryNote(
   db: PrismaClient,
   input: DeliveryNotePrintServiceInput,
+  dependencies: {
+    lockObserver?: LockObserver;
+  } = {},
 ): Promise<DeliveryNotePrintResult> {
   assertAccess(input.context, input.companyId);
   const now = input.now ?? new Date();
@@ -459,9 +532,11 @@ export async function reprintDeliveryNote(
       expiresAt: new Date(now.getTime() + IDEMPOTENCY_TTL_MS),
       now,
     }, async (tx) => {
-      await lockDeliveryNote(tx, input.companyId, input.deliveryNoteId);
-      const note = await loadLockedNote(tx, input.companyId, input.deliveryNoteId);
-      await lockSalesOrder(tx, input.companyId, note.salesOrderId);
+      const note = await acquireDeliveryNotePrintLocks(
+        tx,
+        input,
+        dependencies.lockObserver,
+      );
       if (note.status !== "SHIPPED") throw new DeliveryNotePrintStateError(
         "只有已出貨銷貨單可以重印",
       );

@@ -59,8 +59,8 @@ Loader 先驗證存在、byte size 與 SHA-256，再由 fontkit 解析並檢查�
 
 1. 驗證 `delivery_notes.manage` 與 authorized company scope。
 2. 以 operation `delivery_note.formal_print` claim 現有 idempotency record。
-3. transaction 內 `SELECT ... FOR UPDATE` 鎖 Delivery Note，再依 relation 鎖 Sales Order。
-4. 驗證 Delivery Note 為 `ACTIVE`、Sales Order 為 `DELIVERY_CREATED`、company／relation identity，且沒有 version 或 `FORMAL_PRINT` event。
+3. P3.3e 已修正 transaction：先以 company-scoped 唯讀查詢解析 relation identity，再以 `SELECT ... FOR UPDATE` 依序鎖 Sales Order、Delivery Note。
+4. 鎖後重新驗證 Delivery Note 為 `ACTIVE`、Sales Order 為 `DELIVERY_CREATED`、company／relation identity，且沒有 version 或 `FORMAL_PRINT` event。
 5. Strict parse frozen snapshot，產生 immutable print model。
 6. Transaction 內呼叫 renderer，驗證 bytes／MIME／size／SHA／snapshot version。
 7. 建立唯一 Print Version 與 `FORMAL_PRINT` event。
@@ -72,11 +72,11 @@ Renderer、storage、event、state transition 或 audit 任一步失敗，versio
 
 ## 8. Lock、idempotency、concurrency 與 retry
 
-固定順序：idempotency → Delivery Note → Sales Order → version invariant → event invariant → audit。
+P3.3c 原始實作與本文件原先記錄的順序為 `idempotency → Delivery Note → Sales Order`；該項與 DEC-058 衝突，已由 P3.3e 修正。正式固定順序為：idempotency → Sales Order → Delivery Note → version invariant → event invariant → audit。P3.3c 其餘歷史驗證結果維持不變，但 P3.3 完整結案必須重新執行，不得沿用先前失敗審查作為通過。
 
 Operation identity 包含 operation、company、Delivery Note、actor 及 canonical payload hash。同 key／同 payload 回傳同一 result reference，不重複 render、event、audit 或 transition；同 key／不同 payload回傳 typed idempotency conflict。
 
-不同 key 的首次併發由 Delivery Note row lock 序列化，unique constraint 作第二層保護；結果為一個成功，其他 request 收到 typed already-printed／state conflict。不同 key 的重印逐筆鎖住 Delivery Note，event insert 與 atomic counter increment 同 transaction，沒有 lost update。
+不同 key 的首次併發由同一固定順序的 Sales Order、Delivery Note row lock 序列化，unique constraint 作第二層保護；結果為一個成功，其他 request 收到 typed already-printed／state conflict。不同 key 的重印採相同鎖序，event insert 與 atomic counter increment 同 transaction，沒有 lost update。
 
 P3.3c 不在已進入 renderer 的 transaction 內自動 retry。PostgreSQL deadlock／serialization `P2034` 或 unique race 映射為 typed concurrency conflict；caller 可用原 idempotency key安全重試。
 

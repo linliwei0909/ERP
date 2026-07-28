@@ -4,8 +4,11 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { Prisma, PrismaClient } from "../../src/generated/prisma/client";
 import type { RequestContext } from "../../src/lib/auth/session";
 import {
+  DeliveryNoteAdminVoidNotAllowedError,
+  DeliveryNoteDownstreamLockedError,
   DeliveryNoteFormalPrintMissingError,
   DeliveryNoteFormalPrintExistsError,
+  DeliveryNotePrintError,
 } from "../../src/lib/delivery-notes/errors";
 import {
   formalPrintDeliveryNote,
@@ -14,7 +17,10 @@ import {
 import {
   getDeliveryNotePdfDownload,
 } from "../../src/lib/delivery-notes/print-download";
-import { getDeliveryNote } from "../../src/lib/delivery-notes/service";
+import {
+  adminVoidDeliveryNote,
+  getDeliveryNote,
+} from "../../src/lib/delivery-notes/service";
 import { DELIVERY_NOTE_FONT_MANIFEST } from "../../src/lib/delivery-notes/font";
 import {
   DeterministicDeliveryNotePdfRenderer,
@@ -469,10 +475,154 @@ describeDatabase("P3.3c delivery-note formal print transactions", () => {
     );
     expect(settled.filter((result) => result.status === "fulfilled")).toHaveLength(1);
     expect(settled.filter((result) => result.status === "rejected")).toHaveLength(1);
+    const rejected = settled.find((result) => result.status === "rejected");
+    if (rejected?.status === "rejected") {
+      expect(rejected.reason).toBeInstanceOf(DeliveryNotePrintError);
+      expect(String(rejected.reason)).not.toContain("40P01");
+    }
     expect(await db.deliveryNotePrintVersion.count({ where: { deliveryNoteId: note.id } })).toBe(1);
     expect(await db.deliveryNotePrintEvent.count({
       where: { deliveryNoteId: note.id, eventType: "FORMAL_PRINT" },
     })).toBe(1);
+  });
+
+  it("executes the approved Sales Order then Delivery Note row-lock order for formal print and reprint", async () => {
+    const { note } = await createActiveNote();
+    const formalLocks: string[] = [];
+    await formalPrintDeliveryNote(
+      db,
+      {
+        context,
+        companyId,
+        deliveryNoteId: note.id,
+        idempotencyKey: randomUUID(),
+      },
+      {
+        renderer: fakeRenderer().renderer,
+        lockObserver: (lock) => {
+          formalLocks.push(lock);
+        },
+      },
+    );
+    const reprintLocks: string[] = [];
+    await reprintDeliveryNote(
+      db,
+      {
+        context,
+        companyId,
+        deliveryNoteId: note.id,
+        idempotencyKey: randomUUID(),
+      },
+      {
+        lockObserver: (lock) => {
+          reprintLocks.push(lock);
+        },
+      },
+    );
+    expect(formalLocks).toEqual(["sales_order", "delivery_note"]);
+    expect(reprintLocks).toEqual(["sales_order", "delivery_note"]);
+  });
+
+  it("does not deadlock concurrent formal print and ADMIN void", async () => {
+    const { note, order } = await createActiveNote();
+    const adminContext = {
+      ...context,
+      requestId: `${context.requestId}-admin-void`,
+      roleCodes: ["ADMIN"],
+    };
+    const settled = await Promise.allSettled([
+      formalPrintDeliveryNote(
+        db,
+        {
+          context,
+          companyId,
+          deliveryNoteId: note.id,
+          idempotencyKey: randomUUID(),
+        },
+        { renderer: fakeRenderer().renderer },
+      ),
+      adminVoidDeliveryNote(db, {
+        context: adminContext,
+        companyId,
+        deliveryNoteId: note.id,
+        voidReason: "P3.3e 併發鎖序驗證",
+        idempotencyKey: randomUUID(),
+      }),
+    ]);
+    expect(settled.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    const rejected = settled.find((result) => result.status === "rejected");
+    expect(rejected?.status).toBe("rejected");
+    if (rejected?.status === "rejected") {
+      expect(
+        rejected.reason instanceof DeliveryNotePrintError ||
+          rejected.reason instanceof DeliveryNoteAdminVoidNotAllowedError ||
+          rejected.reason instanceof DeliveryNoteDownstreamLockedError,
+      ).toBe(true);
+      expect(String(rejected.reason)).not.toContain("40P01");
+    }
+    const [storedNote, storedOrder, versionCount] = await Promise.all([
+      db.deliveryNote.findUniqueOrThrow({ where: { id: note.id } }),
+      db.salesOrder.findUniqueOrThrow({ where: { id: order.id } }),
+      db.deliveryNotePrintVersion.count({ where: { deliveryNoteId: note.id } }),
+    ]);
+    expect(
+      (storedNote.status === "SHIPPED" &&
+        storedOrder.status === "SHIPPED" &&
+        versionCount === 1) ||
+        (storedNote.status === "VOIDED" &&
+          storedOrder.status === "CONFIRMED" &&
+          versionCount === 0),
+    ).toBe(true);
+  });
+
+  it("does not deadlock reprint against the closest legal ADMIN void conflict", async () => {
+    const { note } = await createActiveNote();
+    await formalPrintDeliveryNote(
+      db,
+      {
+        context,
+        companyId,
+        deliveryNoteId: note.id,
+        idempotencyKey: randomUUID(),
+      },
+      { renderer: fakeRenderer().renderer },
+    );
+    const adminContext = {
+      ...context,
+      requestId: `${context.requestId}-shipped-admin-void`,
+      roleCodes: ["ADMIN"],
+    };
+    const settled = await Promise.allSettled([
+      reprintDeliveryNote(db, {
+        context,
+        companyId,
+        deliveryNoteId: note.id,
+        idempotencyKey: randomUUID(),
+      }),
+      adminVoidDeliveryNote(db, {
+        context: adminContext,
+        companyId,
+        deliveryNoteId: note.id,
+        voidReason: "P3.3e 已出貨衝突驗證",
+        idempotencyKey: randomUUID(),
+      }),
+    ]);
+    expect(settled[0]?.status).toBe("fulfilled");
+    expect(settled[1]?.status).toBe("rejected");
+    if (settled[1]?.status === "rejected") {
+      expect(settled[1].reason).toBeInstanceOf(DeliveryNoteDownstreamLockedError);
+      expect(String(settled[1].reason)).not.toContain("40P01");
+    }
+    const stored = await db.deliveryNote.findUniqueOrThrow({
+      where: { id: note.id },
+    });
+    expect(stored.status).toBe("SHIPPED");
+    expect(stored.reprintCount).toBe(1);
+    expect(
+      await db.deliveryNotePrintEvent.count({
+        where: { deliveryNoteId: note.id, eventType: "REPRINT" },
+      }),
+    ).toBe(1);
   });
 
   it("reuses immutable PDF, never renders, and keeps event/count concurrency consistent", async () => {
