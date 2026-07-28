@@ -1,6 +1,6 @@
 # P3.3 銷貨單正式列印與出貨計畫
 
-文件狀態：P3.3a 規格閉合、P3.3b storage、P3.3b2 version contract 與 P3.3c domain／transaction 已完成；P3.3d 以後尚未授權
+文件狀態：P3.3a～P3.3d 已完成；P3.3e 與後續階段未開始
 同步基線：`DECISIONS.md` V0.12／DEC-058
 版本日期：2026-07-28
 
@@ -703,6 +703,7 @@ Body: {}
 
 ### P3.3d API／UI／下載
 
+- 完成狀態（2026-07-28）：已完成 formal-print／reprint POST、read-only PDF GET、strict empty DTO、集中 typed error mapping、RBAC／company scope、detail metadata、client idempotency lifecycle、確認 dialog、PDF browser download、API／UI／DB regression 與 validation 文件。
 - Formal-print command。
 - Read-only formal PDF download。
 - Reprint command。
@@ -743,4 +744,4 @@ P3.3c 已依使用者授權完成：
 4. 完成 formal-print／reprint transaction、狀態、audit、idempotency、concurrency 與 DB tests。
 5. 保持 API、UI、下載端點與 P4 blueprint 完全隔離。
 
-P3.3c 完成不等於授權 P3.3d；API、HTTP DTO／mapping、UI、client adapter 與下載 capability 仍不存在。
+P3.3d 已依獨立授權完成 API、HTTP DTO／mapping、UI、client adapter 與下載 capability。GET 下載保持無副作用，且一般 detail/list query 不讀取 `pdf_bytes`。P3.3e、P3.4 與 P4 均未開始。

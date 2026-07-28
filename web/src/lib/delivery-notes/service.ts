@@ -128,6 +128,14 @@ type LoadedDeliveryNoteSummary = DeliveryNote & {
 
 type LoadedDeliveryNote = LoadedDeliveryNoteSummary & {
   createdBy: { id: string; username: string };
+  firstPrintedBy: { id: string; username: string } | null;
+  printVersions: Array<{
+    id: string;
+    filename: string;
+    byteSize: number;
+    generatedAt: Date;
+    generatedBy: { id: string; username: string };
+  }>;
 };
 
 function auditContext(context: RequestContext, companyId: string) {
@@ -191,7 +199,10 @@ function serializeSummary(
   };
 }
 
-function serializeDetail(note: LoadedDeliveryNote): DeliveryNoteDetail {
+function serializeDetail(
+  note: LoadedDeliveryNote,
+  roleCodes: readonly string[],
+): DeliveryNoteDetail {
   const serializeReference = (
     reference: LoadedDeliveryNote["replacedDeliveryNote"],
   ) =>
@@ -223,6 +234,33 @@ function serializeDetail(note: LoadedDeliveryNote): DeliveryNoteDetail {
     ),
     voidedById: note.voidedById,
     voidedBy: note.voidedBy,
+    actualDeliveryDate: note.actualDeliveryDate
+      ? formatDateOnly(note.actualDeliveryDate)
+      : null,
+    firstPrintedAt: note.firstPrintedAt?.toISOString() ?? null,
+    firstPrintedById: note.firstPrintedById,
+    firstPrintedBy: note.firstPrintedBy,
+    reprintCount: note.reprintCount,
+    formalPdf: note.printVersions[0]
+      ? {
+          id: note.printVersions[0].id,
+          filename: note.printVersions[0].filename,
+          byteSize: note.printVersions[0].byteSize,
+          generatedAt: note.printVersions[0].generatedAt.toISOString(),
+          generatedBy: note.printVersions[0].generatedBy,
+        }
+      : null,
+    printCapabilities: {
+      canFormalPrint:
+        note.status === "ACTIVE" &&
+        note.printVersions.length === 0 &&
+        hasPermission(roleCodes, "delivery_notes.manage"),
+      canReprint:
+        note.status === "SHIPPED" &&
+        note.printVersions.length === 1 &&
+        hasPermission(roleCodes, "delivery_notes.manage"),
+      canDownload: note.printVersions.length === 1,
+    },
     lines: note.lines.map((line) => ({
       id: line.id,
       lineNumber: line.lineNumber,
@@ -267,6 +305,17 @@ async function loadDeliveryNote(
       },
       createdBy: { select: { id: true, username: true } },
       voidedBy: { select: { id: true, username: true } },
+      firstPrintedBy: { select: { id: true, username: true } },
+      printVersions: {
+        select: {
+          id: true,
+          filename: true,
+          byteSize: true,
+          generatedAt: true,
+          generatedBy: { select: { id: true, username: true } },
+        },
+        take: 1,
+      },
     },
   });
 }
@@ -657,7 +706,7 @@ export async function createDeliveryNoteFromOrder(
       throw new DeliveryNoteInvariantError("冪等結果指向不存在的銷貨單");
     }
     return {
-      deliveryNote: serializeDetail(deliveryNote),
+      deliveryNote: serializeDetail(deliveryNote, input.context.roleCodes),
       replayed: result.replayed,
     };
   } catch (error) {
@@ -911,7 +960,7 @@ export async function rebuildDeliveryNoteForOrder(
       throw new DeliveryNoteInvariantError("冪等重建結果指向不存在的銷貨單");
     }
     return {
-      deliveryNote: serializeDetail(deliveryNote),
+      deliveryNote: serializeDetail(deliveryNote, input.context.roleCodes),
       replayed: result.replayed,
     };
   } catch (error) {
@@ -1064,7 +1113,7 @@ export async function adminVoidDeliveryNote(
       throw new DeliveryNoteInvariantError("冪等作廢結果指向不存在的銷貨單");
     }
     return {
-      deliveryNote: serializeDetail(deliveryNote),
+      deliveryNote: serializeDetail(deliveryNote, input.context.roleCodes),
       replayed: result.replayed,
     };
   } catch (error) {
@@ -1147,7 +1196,7 @@ export async function getDeliveryNote(
     input.deliveryNoteId,
   );
   if (!note) throw new DeliveryNoteNotFoundError();
-  return serializeDetail(note);
+  return serializeDetail(note, input.context.roleCodes);
 }
 
 export async function listDeliveryNotes(
@@ -1285,6 +1334,17 @@ export async function getCurrentDeliveryNoteForOrder(
       },
       createdBy: { select: { id: true, username: true } },
       voidedBy: { select: { id: true, username: true } },
+      firstPrintedBy: { select: { id: true, username: true } },
+      printVersions: {
+        select: {
+          id: true,
+          filename: true,
+          byteSize: true,
+          generatedAt: true,
+          generatedBy: { select: { id: true, username: true } },
+        },
+        take: 1,
+      },
     },
     take: 2,
   });
@@ -1293,5 +1353,7 @@ export async function getCurrentDeliveryNoteForOrder(
       "同一訂單存在多張未作廢銷貨單",
     );
   }
-  return notes[0] ? serializeDetail(notes[0]) : null;
+  return notes[0]
+    ? serializeDetail(notes[0], input.context.roleCodes)
+    : null;
 }

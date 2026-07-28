@@ -69,6 +69,17 @@ function detailFixture(
     voidedById: null,
     voidedBy: null,
     voidReason: null,
+    actualDeliveryDate: null,
+    firstPrintedAt: null,
+    firstPrintedById: null,
+    firstPrintedBy: null,
+    reprintCount: 0,
+    formalPdf: null,
+    printCapabilities: {
+      canFormalPrint: true,
+      canReprint: false,
+      canDownload: false,
+    },
     lines: [
       {
         id: ids.line,

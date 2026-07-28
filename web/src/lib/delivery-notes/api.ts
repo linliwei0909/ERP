@@ -11,7 +11,15 @@ import {
   DeliveryNoteIdempotencyConflictError,
   DeliveryNoteInvariantError,
   DeliveryNoteNotFoundError,
+  DeliveryNoteFontError,
+  DeliveryNoteFormalPrintExistsError,
+  DeliveryNoteFormalPrintMissingError,
+  DeliveryNotePdfRenderError,
   DeliveryNotePrerequisiteError,
+  DeliveryNotePrintConcurrencyError,
+  DeliveryNotePrintStateError,
+  DeliveryNoteSalesOrderStateError,
+  DeliveryNoteSnapshotValidationError,
   DeliveryNoteRebuildNotAllowedError,
   DeliveryNoteRebuildRequiredError,
   DeliveryNoteReplacementConflictError,
@@ -173,7 +181,7 @@ export function deliveryNoteJsonResponse(
   });
 }
 
-function mappedError(error: unknown): {
+export function mapDeliveryNoteApiError(error: unknown): {
   code: string;
   message: string;
   status: number;
@@ -190,6 +198,9 @@ function mappedError(error: unknown): {
     return { code: error.code, message: error.message, status: 403 };
   }
   if (error instanceof DeliveryNoteNotFoundError) {
+    return { code: error.code, message: error.message, status: 404 };
+  }
+  if (error instanceof DeliveryNoteFormalPrintMissingError) {
     return { code: error.code, message: error.message, status: 404 };
   }
   if (error instanceof z.ZodError) {
@@ -222,10 +233,38 @@ function mappedError(error: unknown): {
     error instanceof DeliveryNoteAdminVoidNotAllowedError ||
     error instanceof DeliveryNoteIdempotencyConflictError ||
     error instanceof DeliveryNoteDownstreamLockedError ||
+    error instanceof DeliveryNoteFormalPrintExistsError ||
+    error instanceof DeliveryNotePrintStateError ||
+    error instanceof DeliveryNoteSalesOrderStateError ||
+    error instanceof DeliveryNotePrintConcurrencyError ||
     error instanceof IdempotencyInProgressError ||
     error instanceof SalesOrderStatusTransitionError
   ) {
     return { code: error.code, message: error.message, status: 409 };
+  }
+  if (
+    error instanceof DeliveryNoteSnapshotValidationError ||
+    error instanceof DeliveryNoteFontError
+  ) {
+    return {
+      code: error.code,
+      message: "正式 PDF 輸入或字型契約不符合要求",
+      status: 422,
+    };
+  }
+  if (error instanceof DeliveryNotePdfRenderError) {
+    if (error.code === "DELIVERY_NOTE_PRINT_STORAGE_INVALID") {
+      return {
+        code: error.code,
+        message: "正式 PDF 儲存完整性驗證失敗",
+        status: 500,
+      };
+    }
+    return {
+      code: error.code,
+      message: "正式 PDF 無法產生",
+      status: error.code === "DELIVERY_NOTE_PDF_RENDER_FAILED" ? 500 : 422,
+    };
   }
   if (
     error instanceof DeliveryNotePrerequisiteError ||
@@ -244,7 +283,7 @@ export function deliveryNoteApiError(
   error: unknown,
   correlationId: string,
 ): Response {
-  const mapped = mappedError(error);
+  const mapped = mapDeliveryNoteApiError(error);
   return deliveryNoteJsonResponse(
     {
       error: {

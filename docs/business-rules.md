@@ -154,6 +154,7 @@
 - Replacement 銷貨單各自建立自己的正式 PDF、首次列印摘要、事件與重印計數，不得沿用舊單資料。
 - `delivery_notes.read` 可查看列印資訊及下載既有正式 PDF；`delivery_notes.manage` 可首次正式列印及重印。ADMIN 仍須通過 selected company 與 company scope，不新增 `delivery_notes.print`。
 - 首次正式列印及重印都使用 idempotency key。不同 key 併發首次正式列印只允許一個 request 建立正式版本及轉換狀態；其餘 request 收斂回傳同一既有版本，不新增事件或重複轉換。
+- P3.3d HTTP／UI 已落實首次正式列印、補印與純下載分離；純下載可重試且沒有 event、counter、audit 或狀態副作用。明細只讀正式 PDF metadata，只有授權下載端點讀取 binary。
 - P3.3 第一版不納入備註、預計送貨日、客戶採購單號或外部參考號，不建立 placeholder。現有快照沒有獨立稅額，版型顯示「稅額：未分列」，不得反推或臆造數值。
 - 第一階段不檢查庫存、不分配批號、不建立出庫或庫存異動，也不因庫存不足阻擋銷貨或應收。
 - 建立應收後，來源訂單與銷貨單鎖定，不得修改或直接作廢。

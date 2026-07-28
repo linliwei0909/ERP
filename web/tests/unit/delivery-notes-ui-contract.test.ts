@@ -50,4 +50,27 @@ describe("P3.2e delivery-note page integration contracts", () => {
       expect(action).toContain("router.refresh()");
     }
   });
+
+  it("keeps P3.3d confirmation, cancel and same-operation retry boundaries", () => {
+    const action = source(
+      "src/app/delivery-notes/[id]/delivery-note-actions.tsx",
+    );
+    expect(action).toContain('role="dialog"');
+    expect(action).toContain("確認正式列印");
+    expect(action).toContain(
+      "此操作會將銷貨單與來源訂單標記為已出貨、寫入實際出貨日，並建立不可變的正式 PDF。",
+    );
+    expect(action).toContain(
+      "if (busy.current || !dialog || !session.current) return;",
+    );
+    expect(action).toContain("if (!session.current)");
+    expect(action).toContain("disabled={mutationPending}");
+    expect(action).toContain("onClick={() => setDialog(null)}");
+    expect(action).toContain(
+      "正式列印已完成，但 PDF 下載失敗；請使用「下載 PDF」重試",
+    );
+    expect(action).toContain(
+      "補印紀錄已完成，但 PDF 下載失敗；請只重試下載",
+    );
+  });
 });

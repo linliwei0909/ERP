@@ -11,6 +11,10 @@ import {
   formalPrintDeliveryNote,
   reprintDeliveryNote,
 } from "../../src/lib/delivery-notes/formal-print";
+import {
+  getDeliveryNotePdfDownload,
+} from "../../src/lib/delivery-notes/print-download";
+import { getDeliveryNote } from "../../src/lib/delivery-notes/service";
 import { DELIVERY_NOTE_FONT_MANIFEST } from "../../src/lib/delivery-notes/font";
 import {
   DeterministicDeliveryNotePdfRenderer,
@@ -339,6 +343,50 @@ describeDatabase("P3.3c delivery-note formal print transactions", () => {
     expect(audits).toHaveLength(1);
     expect(audits[0]?.metadata).not.toHaveProperty("pdfBytes");
     expect(idempotency.status).toBe("COMPLETED");
+
+    const detail = await getDeliveryNote(db, {
+      context,
+      companyId,
+      deliveryNoteId: note.id,
+    });
+    expect(detail).toMatchObject({
+      actualDeliveryDate: "2026-08-01",
+      firstPrintedBy: { id: userId, username: context.actor.username },
+      reprintCount: 0,
+      formalPdf: {
+        id: version.id,
+        filename: version.filename,
+        byteSize: version.byteSize,
+      },
+      printCapabilities: {
+        canFormalPrint: false,
+        canReprint: true,
+        canDownload: true,
+      },
+    });
+    expect(detail).not.toHaveProperty("pdfBytes");
+    expect(detail.formalPdf).not.toHaveProperty("pdfBytes");
+
+    const firstDownload = await getDeliveryNotePdfDownload(db, {
+      context,
+      companyId,
+      deliveryNoteId: note.id,
+    });
+    const secondDownload = await getDeliveryNotePdfDownload(db, {
+      context,
+      companyId,
+      deliveryNoteId: note.id,
+    });
+    expect(Buffer.from(firstDownload.bytes).equals(Buffer.from(version.pdfBytes)))
+      .toBe(true);
+    expect(Buffer.from(secondDownload.bytes).equals(Buffer.from(version.pdfBytes)))
+      .toBe(true);
+    const afterDownloads = await db.deliveryNote.findUniqueOrThrow({
+      where: { id: note.id },
+      include: { printEvents: true },
+    });
+    expect(afterDownloads.reprintCount).toBe(0);
+    expect(afterDownloads.printEvents).toHaveLength(1);
   });
 
   it("rolls every business row back when rendering fails", async () => {

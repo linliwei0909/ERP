@@ -14,11 +14,19 @@ import type {
 } from "../../src/lib/delivery-notes/api-types";
 import {
   createDeliveryNote,
+  createPrintMutationSession,
   DeliveryNoteClientError,
+  downloadDeliveryNotePdf,
+  filenameFromContentDisposition,
+  formalPrintDeliveryNote,
   rebuildDeliveryNote,
+  reprintDeliveryNote,
   singleFlight,
   voidDeliveryNote,
 } from "../../src/lib/delivery-notes/client";
+import {
+  deliveryNotePrintActions,
+} from "../../src/app/delivery-notes/[id]/delivery-note-actions";
 
 const ids = {
   company: "10000000-0000-4000-8000-000000000001",
@@ -80,6 +88,17 @@ function detail(
     replacementDeliveryNote: null,
     voidedById: null,
     voidedBy: null,
+    actualDeliveryDate: null,
+    firstPrintedAt: null,
+    firstPrintedById: null,
+    firstPrintedBy: null,
+    reprintCount: 0,
+    formalPdf: null,
+    printCapabilities: {
+      canFormalPrint: true,
+      canReprint: false,
+      canDownload: false,
+    },
     lines: [
       {
         id: ids.line,
@@ -186,10 +205,103 @@ describe("delivery-note UI rendering", () => {
     expect(html).toContain("admin");
   });
 
+  it("renders formal PDF metadata and first-print summary", () => {
+    const html = renderToStaticMarkup(
+      <DeliveryNoteDetailView
+        note={detail({
+          status: "SHIPPED",
+          actualDeliveryDate: "2026-07-28",
+          firstPrintedAt: "2026-07-28T01:00:00.000Z",
+          firstPrintedById: ids.actor,
+          firstPrintedBy: { id: ids.actor, username: "admin" },
+          reprintCount: 2,
+          formalPdf: {
+            id: "10000000-0000-4000-8000-000000000008",
+            filename: "DN-IN-202607-000001.pdf",
+            byteSize: 77266,
+            generatedAt: "2026-07-28T01:00:00.000Z",
+            generatedBy: { id: ids.actor, username: "admin" },
+          },
+          printCapabilities: {
+            canFormalPrint: false,
+            canReprint: true,
+            canDownload: true,
+          },
+        })}
+      />,
+    );
+    expect(html).toContain("正式列印摘要");
+    expect(html).toContain("2026-07-28");
+    expect(html).toContain("admin");
+    expect(html).toContain("補印次數");
+    expect(html).toContain(">2<");
+    expect(html).toContain("DN-IN-202607-000001.pdf");
+  });
+
   it("renders an accessible loading state", () => {
     const html = renderToStaticMarkup(<DeliveryNotesLoading />);
     expect(html).toContain("animate-pulse");
     expect(html).toContain("正在載入銷貨單");
+  });
+});
+
+describe("P3.3d print action capabilities", () => {
+  it("shows formal print only for manageable ACTIVE notes", () => {
+    expect(
+      deliveryNotePrintActions({
+        status: "ACTIVE",
+        hasFormalPdf: false,
+        canManage: true,
+        canRead: true,
+      }),
+    ).toEqual({
+      canFormalPrint: true,
+      canReprint: false,
+      canDownload: false,
+    });
+    expect(
+      deliveryNotePrintActions({
+        status: "ACTIVE",
+        hasFormalPdf: false,
+        canManage: false,
+        canRead: true,
+      }).canFormalPrint,
+    ).toBe(false);
+  });
+
+  it("shows download to readers and reprint only to managers of SHIPPED notes", () => {
+    expect(
+      deliveryNotePrintActions({
+        status: "SHIPPED",
+        hasFormalPdf: true,
+        canManage: false,
+        canRead: true,
+      }),
+    ).toEqual({
+      canFormalPrint: false,
+      canReprint: false,
+      canDownload: true,
+    });
+    expect(
+      deliveryNotePrintActions({
+        status: "SHIPPED",
+        hasFormalPdf: true,
+        canManage: true,
+        canRead: true,
+      }).canReprint,
+    ).toBe(true);
+    expect(
+      deliveryNotePrintActions({
+        status: "VOIDED",
+        hasFormalPdf: false,
+        canManage: true,
+        canRead: true,
+      }),
+    ).toEqual({
+      canFormalPrint: false,
+      canReprint: false,
+      canDownload: false,
+    });
   });
 });
 
@@ -409,5 +521,193 @@ describe("delivery-note UI mutation client", () => {
     release("done");
     await expect(first).resolves.toBe("done");
     await expect(second).resolves.toBe("done");
+  });
+});
+
+describe("P3.3d print mutation and download client", () => {
+  function printResponse(reprintCount = 0) {
+    return {
+      deliveryNote: {
+        id: ids.note,
+        number: "DN-IN-202607-000001",
+        status: "SHIPPED" as const,
+        actualDeliveryDate: "2026-07-28",
+        firstPrintedAt: "2026-07-28T01:00:00.000Z",
+        firstPrintedBy: { id: ids.actor, username: "admin" },
+        reprintCount,
+      },
+      salesOrder: {
+        id: ids.order,
+        number: "SO-IN-202607-000001",
+        status: "SHIPPED" as const,
+      },
+      printVersion: {
+        id: "10000000-0000-4000-8000-000000000008",
+        documentVersion: 1,
+        rendererVersion: "renderer-v1",
+        templateVersion: "template-v1",
+        fontVersion: "font-v1",
+        snapshotVersion: "delivery-note-snapshot-v1",
+        filename: "正式銷貨單.pdf",
+        byteSize: 10,
+        sha256: "a".repeat(64),
+        mimeType: "application/pdf",
+      },
+      printEvent: {
+        id: "10000000-0000-4000-8000-000000000009",
+        type: reprintCount ? ("REPRINT" as const) : ("FORMAL_PRINT" as const),
+      },
+      downloadUrl: `/api/delivery-notes/${ids.note}/pdf`,
+      replayed: false,
+      correlationId: "print-request",
+    };
+  }
+
+  it("sends strict formal-print and reprint mutations with the caller key", async () => {
+    const fetcher = vi.fn(async (url: string) =>
+      Response.json(
+        url.endsWith("/reprint")
+          ? printResponse(1)
+          : printResponse(),
+      ),
+    );
+    await formalPrintDeliveryNote(ids.note, "formal-key", fetcher);
+    await reprintDeliveryNote(ids.note, "reprint-key", fetcher);
+    expect(fetcher).toHaveBeenNthCalledWith(
+      1,
+      `/api/delivery-notes/${ids.note}/formal-print`,
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          "idempotency-key": "formal-key",
+        }),
+        body: "{}",
+      }),
+    );
+    expect(fetcher).toHaveBeenNthCalledWith(
+      2,
+      `/api/delivery-notes/${ids.note}/reprint`,
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          "idempotency-key": "reprint-key",
+        }),
+      }),
+    );
+  });
+
+  it("reuses one operation key for retry and creates a new key for a new operation", async () => {
+    const fetcher = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("network timeout"))
+      .mockResolvedValueOnce(Response.json(printResponse(1)))
+      .mockResolvedValueOnce(Response.json(printResponse(2)));
+    const first = createPrintMutationSession(
+      "reprint",
+      ids.note,
+      fetcher,
+    );
+    await expect(first.execute()).rejects.toThrow("network timeout");
+    await expect(first.execute()).resolves.toMatchObject({
+      deliveryNote: { reprintCount: 1 },
+    });
+    const second = createPrintMutationSession(
+      "reprint",
+      ids.note,
+      fetcher,
+    );
+    await second.execute();
+    const firstKey = (
+      fetcher.mock.calls[0]?.[1] as RequestInit
+    ).headers as Record<string, string>;
+    const retryKey = (
+      fetcher.mock.calls[1]?.[1] as RequestInit
+    ).headers as Record<string, string>;
+    const secondKey = (
+      fetcher.mock.calls[2]?.[1] as RequestInit
+    ).headers as Record<string, string>;
+    expect(firstKey["idempotency-key"]).toBe(
+      retryKey["idempotency-key"],
+    );
+    expect(secondKey["idempotency-key"]).not.toBe(
+      firstKey["idempotency-key"],
+    );
+  });
+
+  it("downloads authenticated PDF blobs, clicks once and always revokes the URL", async () => {
+    const fetcher = vi.fn(async () =>
+      new Response(new TextEncoder().encode("%PDF-test"), {
+        status: 200,
+        headers: {
+          "content-type": "application/pdf",
+          "content-disposition":
+            "attachment; filename=\"fallback.pdf\"; filename*=UTF-8''%E6%AD%A3%E5%BC%8F.pdf",
+        },
+      }),
+    );
+    const click = vi.fn();
+    const remove = vi.fn();
+    const revoke = vi.fn();
+    const anchor = { href: "", download: "", click, remove };
+    await expect(
+      downloadDeliveryNotePdf(ids.note, fetcher, {
+        createObjectUrl: () => "blob:pdf",
+        revokeObjectUrl: revoke,
+        createAnchor: () => anchor,
+      }),
+    ).resolves.toBe("正式.pdf");
+    expect(fetcher).toHaveBeenCalledWith(
+      `/api/delivery-notes/${ids.note}/pdf`,
+      { method: "GET", cache: "no-store" },
+    );
+    expect(anchor.href).toBe("blob:pdf");
+    expect(anchor.download).toBe("正式.pdf");
+    expect(click).toHaveBeenCalledTimes(1);
+    expect(remove).toHaveBeenCalledTimes(1);
+    expect(revoke).toHaveBeenCalledWith("blob:pdf");
+  });
+
+  it("rejects non-PDF content without creating a browser object URL", async () => {
+    const createObjectUrl = vi.fn();
+    await expect(
+      downloadDeliveryNotePdf(
+        ids.note,
+        async () =>
+          new Response("not pdf", {
+            headers: { "content-type": "text/html" },
+          }),
+        {
+          createObjectUrl,
+          revokeObjectUrl: vi.fn(),
+          createAnchor: vi.fn(),
+        },
+      ),
+    ).rejects.toMatchObject({
+      code: "DOWNLOAD_CONTENT_TYPE_INVALID",
+    });
+    expect(createObjectUrl).not.toHaveBeenCalled();
+  });
+
+  it("parses only safe Content-Disposition filenames and blocks SSR browser use", async () => {
+    expect(
+      filenameFromContentDisposition(
+        "attachment; filename*=UTF-8''%E9%8A%B7%E8%B2%A8%E5%96%AE.pdf",
+      ),
+    ).toBe("銷貨單.pdf");
+    expect(
+      filenameFromContentDisposition(
+        'attachment; filename="bad\r\nname.pdf"',
+      ),
+    ).toBeNull();
+    await expect(
+      downloadDeliveryNotePdf(
+        ids.note,
+        async () =>
+          new Response(new TextEncoder().encode("%PDF-test"), {
+            headers: { "content-type": "application/pdf" },
+          }),
+      ),
+    ).rejects.toMatchObject({
+      code: "DOWNLOAD_UNAVAILABLE",
+    });
   });
 });

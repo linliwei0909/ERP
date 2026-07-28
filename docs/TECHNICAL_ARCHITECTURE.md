@@ -1,6 +1,6 @@
 # Ragic 本地端系統技術架構
 
-文件狀態：P1、P2、P3.1 已完成；P3.2a～P3.2e 已完成並正式結案；P3.3a～P3.3c 已完成，P3.3d 尚未授權
+文件狀態：P1、P2、P3.1 已完成；P3.2a～P3.2e 已完成並正式結案；P3.3a～P3.3d 已完成，P3.3e 與後續階段未開始
 同步基線：`DECISIONS.md` V0.12（含 DEC-059）
 版本日期：2026-07-28
 
@@ -252,7 +252,7 @@ P3.2a 已完成 Prisma schema、`0010_p3_delivery_notes`、custom SQL、fresh DB
 
 ## 19. P3.3a 銷貨單列印與出貨架構決議
 
-- P3.3 使用既有同步 application service、session context、RBAC、selected-company scope、audit、idempotency 與 correlation ID 邊界；不使用 background job 完成首次正式列印。
+- P3.3 使用既有同步 application service、session context、RBAC、selected-company scope、audit、idempotency 與 correlation ID 邊界；P3.3d route 只處理 HTTP 邊界並呼叫既有 service，不使用 background job 完成首次正式列印。
 - 第一版不提供預覽。首次正式列印、重印、read-only 正式 PDF 下載使用不同且不含糊的 command/query；一般 GET 不得觸發出貨或新增重印事件。
 - 首次正式列印的 lock 順序為 idempotency claim → delivery note → sales order → 正式 print version／event invariants。Service 在同一 transaction 產生 PDF bytes、建立唯一 print version、建立首次事件、寫入實際出貨日與首次列印摘要、更新 delivery note／order 為 `SHIPPED`、寫 audit 並完成 idempotency。
 - PDF renderer 必須在 transaction 內完成，且不得存取目前 master data；輸入只能來自 delivery note frozen snapshots、既有金額、server 產生的實際出貨日／列印時間及明確 template version。P3.3a 尚未選定或安裝 renderer。
@@ -260,6 +260,8 @@ P3.2a 已完成 Prisma schema、`0010_p3_delivery_notes`、custom SQL、fresh DB
 - `delivery_note_print_versions` 是每張銷貨單唯一且不可變的正式版本；`delivery_note_print_events` 是 append-only 首次列印／重印歷程；`delivery_notes` 保存狀態查詢與 constraint 所需摘要。實際 schema、FK、CHECK、trigger 與 migration 留給 P3.3b。
 - 相同首次列印 idempotency key replay 同一版本。不同 key 併發時只有 lock winner 建立版本及轉換狀態，後續 request 收斂回傳既有版本且不新增事件。資料狀態與正式版本不完整時回 typed invariant error。
 - read-only 下載只需 `delivery_notes.read`，不計重印；首次正式列印與明確重印 command 需 `delivery_notes.manage`。兩種角色仍必須通過 company scope；不新增 `delivery_notes.print`。
+- P3.3d 的 `GET /api/delivery-notes/{id}/pdf` 固定 Node runtime、`private, no-store`、attachment 與 RFC 5987 filename；只在授權及 company scope 後 select `pdf_bytes`，驗證 byte size、SHA-256 與 `%PDF-` magic，且不寫 event、audit、counter 或狀態。
+- Delivery Note detail 只 select正式 PDF metadata 與產生者，不 select `pdf_bytes`；list query 不 join print version。Client bundle 不得 import Prisma、renderer、font 或 `pdf-lib`。
 - 版型使用不可變 `template_version`；舊單重印直接回傳保存的 PDF，不受新版型、renderer、依賴、字型、公司設定或主檔變動影響。中文字型須可合法部署並穩定嵌入。
 - `VOIDED` 不得首次列印或重印；若歷史已有 PDF，read-only 下載仍可用且 UI/metadata 顯示作廢。不得改寫原 PDF 或動態加浮水印。Replacement 各自擁有正式版本與事件。
 - P3.3 負責首次正式列印、自動建立實際出貨日及兩張單據進入 `SHIPPED`；P3.4 負責人工回收確認、撤銷／更正、回收後鎖定、已存在實際出貨日的受控更正及應收銜接驗收。
@@ -268,6 +270,7 @@ P3.2a 已完成 Prisma schema、`0010_p3_delivery_notes`、custom SQL、fresh DB
 
 ## 20. 變更紀錄
 
+- V0.12（2026-07-28，P3.3d API／下載／UI）：完成三個 Node route、binary query isolation、集中 HTTP error mapping、RBAC／company scope、detail metadata、client idempotency 與安全 browser download；未修改 schema、renderer 或 transaction。
 - V0.11（2026-07-28，P3.3a 規格閉合）：同步 DEC-058，固定首次正式列印即出貨、DB immutable PDF、混合資料模型、權限、版型、作廢／replacement、audit、冪等、併發與 P3.3／P3.4 邊界；尚未建立 schema、migration、renderer、API 或 UI。
 
 - V0.10（2026-07-28，P3.2e 結案）：完成 fresh migration／Prisma／unit／DB／build、refresh consistency 與 ADMIN／ORDER_ENTRY production browser smoke；修正 `DELIVERY_CREATED` order revision／void UI eligibility，未變更 API、RBAC、schema、migration 或 dependency。

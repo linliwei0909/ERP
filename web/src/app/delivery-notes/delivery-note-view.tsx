@@ -139,6 +139,8 @@ export function DeliveryNoteListView({
         >
           <option value="ALL">全部狀態</option>
           <option value="ACTIVE">有效</option>
+          <option value="SHIPPED">已出貨</option>
+          <option value="RECEIVABLE_CREATED">已建立應收</option>
           <option value="VOIDED">已作廢</option>
         </select>
         <input
@@ -307,6 +309,38 @@ export function DeliveryNoteDetailView({
           {STATUS_LABELS[note.status] ?? note.status}
         </SummaryField>
       </dl>
+
+      {note.formalPdf ? (
+        <section className="rounded-2xl border border-teal-200 bg-teal-50 p-6">
+          <h2 className="text-lg font-bold text-teal-950">正式列印摘要</h2>
+          <dl className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <SummaryField label="實際出貨日">
+              {note.actualDeliveryDate ?? "—"}
+            </SummaryField>
+            <SummaryField label="首次正式列印">
+              {formatTimestamp(note.firstPrintedAt)}
+            </SummaryField>
+            <SummaryField label="首次列印者">
+              {note.firstPrintedBy?.username ?? "—"}
+            </SummaryField>
+            <SummaryField label="補印次數">
+              {note.reprintCount}
+            </SummaryField>
+            <SummaryField label="正式 PDF">
+              {note.formalPdf.filename}
+            </SummaryField>
+            <SummaryField label="檔案大小">
+              {note.formalPdf.byteSize.toLocaleString("zh-TW")} bytes
+            </SummaryField>
+            <SummaryField label="產生時間">
+              {formatTimestamp(note.formalPdf.generatedAt)}
+            </SummaryField>
+            <SummaryField label="產生者">
+              {note.formalPdf.generatedBy.username}
+            </SummaryField>
+          </dl>
+        </section>
+      ) : null}
 
       <section className="grid gap-5 rounded-2xl border border-slate-200 bg-white p-6 md:grid-cols-2">
         <div>

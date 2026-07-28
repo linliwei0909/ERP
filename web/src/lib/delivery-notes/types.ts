@@ -32,6 +32,20 @@ export type DeliveryNoteActorSummary = {
   username: string;
 };
 
+export type DeliveryNoteFormalPdfSummary = {
+  id: string;
+  filename: string;
+  byteSize: number;
+  generatedAt: string;
+  generatedBy: DeliveryNoteActorSummary;
+};
+
+export type DeliveryNotePrintCapabilities = {
+  canFormalPrint: boolean;
+  canReprint: boolean;
+  canDownload: boolean;
+};
+
 export type DeliveryNoteSummary = {
   id: string;
   companyId: string;
@@ -69,6 +83,13 @@ export type DeliveryNoteDetail = DeliveryNoteSummary & {
   replacementDeliveryNote: DeliveryNoteReferenceSummary | null;
   voidedById: string | null;
   voidedBy: DeliveryNoteActorSummary | null;
+  actualDeliveryDate: string | null;
+  firstPrintedAt: string | null;
+  firstPrintedById: string | null;
+  firstPrintedBy: DeliveryNoteActorSummary | null;
+  reprintCount: number;
+  formalPdf: DeliveryNoteFormalPdfSummary | null;
+  printCapabilities: DeliveryNotePrintCapabilities;
   lines: DeliveryNoteLineDetail[];
 };
 

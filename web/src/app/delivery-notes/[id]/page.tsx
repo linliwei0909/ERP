@@ -9,7 +9,10 @@ import { DeliveryNoteNotFoundError } from "@/lib/delivery-notes/errors";
 import { getDeliveryNote } from "@/lib/delivery-notes/service";
 import { prisma } from "@/lib/prisma";
 import { DeliveryNoteDetailView } from "../delivery-note-view";
-import { DeliveryNoteVoidAction } from "./delivery-note-actions";
+import {
+  DeliveryNotePrintActions,
+  DeliveryNoteVoidAction,
+} from "./delivery-note-actions";
 
 export default async function DeliveryNoteDetailPage({
   params,
@@ -66,9 +69,15 @@ export default async function DeliveryNoteDetailPage({
       <DeliveryNoteDetailView
         note={note}
         actions={
-          canVoid ? (
-            <DeliveryNoteVoidAction deliveryNoteId={note.id} />
-          ) : undefined
+          <>
+            <DeliveryNotePrintActions
+              deliveryNoteId={note.id}
+              capabilities={note.printCapabilities}
+            />
+            {canVoid ? (
+              <DeliveryNoteVoidAction deliveryNoteId={note.id} />
+            ) : null}
+          </>
         }
       />
     </main>

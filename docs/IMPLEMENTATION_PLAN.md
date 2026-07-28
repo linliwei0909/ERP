@@ -1,6 +1,6 @@
 # Ragic 本地端系統開發階段與任務拆分
 
-文件狀態：P1、P2、P3.1 已完成工程驗收；P3.2a～P3.2e 已完成並正式結案；P3.3a～P3.3c 已完成，P3.3d 尚未授權
+文件狀態：P1、P2、P3.1 已完成工程驗收；P3.2a～P3.2e 已完成並正式結案；P3.3a～P3.3d 已完成，P3.3e 與後續階段未開始
 同步基線：`DECISIONS.md` V0.12（含 DEC-059）
 版本日期：2026-07-28
 
@@ -195,7 +195,7 @@ P2.6 完成狀態：
 - [P3.2a／P3.2b 完成] `0010_p3_delivery_notes`、兩個 enum、兩張表、composite FK、CHECK、replacement 與 ADDITION graph trigger 已完成；建立與查詢 service 已驗證只複製 confirmed order typed snapshots 與凍結金額，不重查主檔、價格或運費。
 - [P3.3b／P3.3b2 完成] 0011 建立 immutable print storage；0012 補上 `delivery-note-snapshot-v1` discriminator，以及 print version 的 renderer、font、snapshot version。既有 frozen JSON 不重寫，既有 print rows 以 migration fail-fast guard 保護。
 - [P3.3c 完成] Frozen snapshot validation、immutable print model、deterministic renderer、Noto Sans CJK TC Regular 受控資產與嵌入、正式列印／重印 transaction、狀態、audit、idempotency、row lock、concurrency 與 service/DB tests。
-- [P3.3d 待授權] Formal-print、read-only PDF download、reprint API，strict DTO、headers、typed errors、company scope，以及 UI／下載流程；第一版不提供預覽。
+- [P3.3d 完成] Formal-print、read-only PDF download、reprint API，strict DTO、headers、typed errors、company scope、detail metadata、client idempotency、UI／下載流程及 API／UI／DB regression；第一版不提供預覽。
 - [P3.4 待授權] `returned_confirmed` 人工回收確認、確認時間／操作者、撤銷／更正、回收後鎖定、已存在實際出貨日的受控更正及與應收流程銜接驗收。P3.4 不再負責首次建立實際出貨日。
 - 銷貨單只能由訂單建立；partial unique index 保證同一 `sales_order_id` 在 `status <> 'VOIDED'` 時最多一張。
 - 明確不建立批號、庫存、出庫或分批出貨功能。
@@ -337,10 +337,11 @@ P3.1 完成條件已達成：訂單取號、草稿、確認、修訂、作廢、
 
 ## 6. 本輪交付限制
 
-P3.3c domain 與 transaction 完成後停止。未取得使用者下一步授權前，不得開始 P3.3d API／UI／下載、回收確認、應收、Ragic 正式全量移轉、舊 ERP 模組恢復或其他後續模組；任何後續對 `erp` 的資料庫 mutation 或破壞性操作仍須使用者另行核准。
+P3.3d API／UI／下載完成後停止。未取得使用者下一步授權前，不得開始 P3.3e、回收確認、應收、Ragic 正式全量移轉、舊 ERP 模組恢復或其他後續模組；任何後續對 `erp` 的資料庫 mutation 或破壞性操作仍須使用者另行核准。
 
 ## 7. 變更紀錄
 
+- V0.14（2026-07-28，P3.3d API／UI／下載）：完成正式列印、補印、read-only PDF 下載、strict DTO、集中 error mapping、detail metadata、browser download、client idempotency lifecycle 與完整 regression；未修改 schema／migration，P3.3e、P3.4、P4 未開始。
 - V0.13（2026-07-28，P3.3c domain／transaction）：完成 frozen snapshot validator、immutable print model、deterministic PDF renderer、正式 Noto Sans CJK TC Regular 資產、正式列印／重印 transaction、狀態同步、audit、idempotency、row lock、concurrency、rollback 與完整 DB 驗證；P3.3d API／UI／下載未開始。
 - V0.12（2026-07-28，P3.3b2 契約補強）：新增 Delivery Note snapshot version、正式 PDF renderer/font/snapshot version、既有資料 fail-fast migration 與 Noto Sans CJK TC Regular 決策；P3.3c renderer/service 與 P3.3d API/UI 未開始。
 - V0.11（2026-07-28，P3.3a 規格閉合）：標示首次正式列印即出貨、P3.3／P3.4 新切分、DB immutable PDF、混合資料模型、版型、權限、作廢／replacement、audit、冪等、併發與 OQ-051 排除均已決；P3.3b～P3.3f 尚未授權。
