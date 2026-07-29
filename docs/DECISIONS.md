@@ -1,8 +1,8 @@
 # Ragic 本地端系統正式決議
 
 文件性質：本專案最高優先級的業務決議紀錄  
-版本：V0.12
-最後更新：2026-07-28
+版本：V0.14
+最後更新：2026-07-29
 
 ## 1. 使用原則
 
@@ -1154,16 +1154,30 @@
 - P3.3c 正式中文字型採 **Noto Sans CJK TC Regular**，只能取自官方 Noto Fonts／Noto CJK 發布來源，固定明確 release 或 commit，保存原始檔名、上游版本、SHA-256、SIL Open Font License 與 font manifest，並以受控 server-only asset 載入及嵌入 PDF。
 - 正式字型缺少、checksum 不符或 glyph 不足時必須 fail fast。禁止 runtime download、CDN、作業系統字型 fallback、靜默替代或只記錄模糊 family 名稱。
 
+## DEC-060 P4 UI／UX 重整、P5 庫存／生產歸屬與後續階段重編
+
+- P4 正式名稱為「ERP UI／UX 與操作流程重整」。P4 是跨模組的資訊架構、導覽、共用設計系統、頁面模式、錯誤恢復、權限提示與日常操作流程階段，不是單一視覺換色或個別頁面美化。
+- P4 必須先完成現況盤點、正式藍圖、App Shell、Design System、主檔、銷售訂單、銷貨單與完整 UX 驗證；P4 完成前不得開始 P5 實作。
+- 原規劃為 P4 的庫存、採購、生產、銷售出庫、盤點與成本藍圖正式順延並歸屬 P5「Inventory and Production」。`docs/P5_INVENTORY_PRODUCTION_BLUEPRINT.md` 是 P5 規劃草案；其尚未核准的庫存／生產規則不因重新命名或階段重編而自動成為正式業務決議。
+- P5 至少涵蓋倉庫、庫存交易與過帳、原物料入庫、生產領料與退料、成品入庫、庫存調整、銷售出庫及生產流程。P5 開始前必須重新依本文件及當時正式 repository 狀態審查，不得直接建立 schema、migration、API 或 UI。
+- DEC-001、DEC-044 及第一階段排除庫存、批號、出庫依賴的規則維持不變。P5 是後續擴充階段，不得回溯改變既有 P1～P3 單據、首次正式列印、實際出貨日、應收條件或 transaction 語意。
+- 為避免階段編號碰撞，原正式 roadmap 的應收至切換工作依序順延：應收／正式統一發票／調整為 P6，收款／預收／票據為 P7，月結／快照為 P8，人工應付／付款／支出為 P9，Ragic 移轉／驗收／切換為 P10。這是 roadmap 編號調整，不改變既有業務規則。
+- P4 原則上保留既有後端 domain、schema、state machine、RBAC、company scope、transaction、locking、audit、idempotency、正式列印、重印、不可變快照、價格與運費解析契約。
+- UI 可依既有契約調整 layout、route presentation、navigation、shared components、CSS、client interaction、顯示用 DTO、清單 query、pagination、sorting、filtering、使用者用語、accessibility 與 error boundary；server authorization 仍是唯一正式授權邊界，UI 隱藏按鈕不得取代後端驗證。
+- 若 UX 審查發現必須修改 schema、API domain contract、state machine、RBAC、transaction 或其他正式業務規則，必須建立獨立 domain／API 子任務，先新增明確 decision 並取得核准；不得混入純 UI commit 或以顯示需求隱性修改。
+- P4 正式藍圖為 `docs/P4_UI_UX_BLUEPRINT.md`。P4.1 只產出盤點、設計契約、階段與驗收規劃；不開始 P4.2 App Shell、不實作 UI，也不開始 P5。
+
 ## 3. 尚未定案且應保留於 OPEN_QUESTIONS.md 的事項
 
 - `OQ-005`：第二階段是否實作正式電子簽收，以及簽收狀態、簽收人、附件、撤銷與例外更正流程如何設計。（不阻塞第一階段）
-- `OQ-044`：上線後允許回退至 Ragic 的窗口長度與結束條件。（P8 前確認，不阻塞 P1）
-- `OQ-045`：附件移轉的表單、日期、狀態與檔案範圍。（P8 前確認，不阻塞 P1）
+- `OQ-044`：上線後允許回退至 Ragic 的窗口長度與結束條件。（依 DEC-060 改為 P10 前確認，不阻塞 P1）
+- `OQ-045`：附件移轉的表單、日期、狀態與檔案範圍。（依 DEC-060 改為 P10 前確認，不阻塞 P1）
 
-第一階段已依 DEC-019 明確採「銷貨單已回收」的人工確認作為建立應收條件，不實作正式電子簽收。OQ-044 與 OQ-045 僅影響 P8 切換方案；其餘原 V0.2 未決事項 `OQ-042`、`OQ-012`、`OQ-023`、`OQ-037`、`OQ-038` 均已於 V0.3 定案。
+第一階段已依 DEC-019 明確採「銷貨單已回收」的人工確認作為建立應收條件，不實作正式電子簽收。OQ-044 與 OQ-045 僅影響依 DEC-060 重編後的 P10 切換方案；其餘原 V0.2 未決事項 `OQ-042`、`OQ-012`、`OQ-023`、`OQ-037`、`OQ-038` 均已於 V0.3 定案。
 
 ## 4. 變更紀錄
 
+- V0.14（2026-07-29）：新增 DEC-060，正式將跨模組 UI／UX 與操作流程重整定為 P4，將庫存／生產藍圖順延並歸屬 P5，原 P4～P8 第一階段後續 roadmap 順延為 P6～P10；保留既有後端契約與第一階段庫存排除，domain change 必須獨立核准。
 - V0.13（2026-07-28）：新增 DEC-059，固定 `delivery-note-snapshot-v1`、Delivery Note scalar discriminator、正式 PDF 四種獨立版本語意，以及 Noto Sans CJK TC Regular 的來源固定、checksum、授權、server-side embedding 與 fail-fast 契約。
 - V0.12（2026-07-28）：完成 P3.3b schema 契約裁定；`delivery_notes` 不新增 `formal_print_version_id` 或循環 FK，唯一正式 PDF 改由 print version 的 `delivery_note_id` unique constraint 保證。本決議只固定 schema 契約，不代表 renderer、首次正式列印／重印 service、API 或 UI 已完成。
 - V0.11（2026-07-28）：修訂 DEC-017 並新增 DEC-058，正式化首次正式列印即出貨、P3.3／P3.4 責任切分、不可變 DB PDF、預覽／重印語意、版型版本、權限、作廢／replacement、audit、冪等、併發及 OQ-051 第一版排除；不代表 schema、migration、renderer、API 或 UI 已實作。

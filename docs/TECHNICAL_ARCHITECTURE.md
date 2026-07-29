@@ -1,14 +1,14 @@
 # Ragic 本地端系統技術架構
 
-文件狀態：P1、P2、P3.1 已完成；P3.2a～P3.2e 已完成並正式結案；P3.3a～P3.3e 已完成實作與驗證，P3.3e 尚待獨立 Git 收尾，P3.3 尚未重新完成結案審查，P4 未開始
-同步基線：`DECISIONS.md` V0.12（含 DEC-059）
-版本日期：2026-07-28
+文件狀態：P1～P3.3 已完成正式結案；P4.1 UI／UX 規劃進行中；P4.2 與 P5 尚未開始
+同步基線：`DECISIONS.md` V0.14（含 DEC-060）
+版本日期：2026-07-29
 
 ## 1. 規格依據與範圍
 
 本架構依下列優先順序設計：
 
-1. `DECISIONS.md` V0.11。
+1. `DECISIONS.md` V0.14。
 2. `business-rules.md`。
 3. `DATABASE_DESIGN.md`。
 4. `TECHNICAL_ARCHITECTURE.md`。
@@ -70,6 +70,28 @@ flowchart TB
 | Background Jobs | PostgreSQL-backed queue | 月結、移轉與票據工作可追蹤及重跑 |
 | Attachments | NAS／受控檔案儲存 | DB 只存 metadata；20 MB；授權下載；不得實體刪除 |
 | Tests | Unit + DB integration + workflow + migration reconciliation | 核心規則、transaction、公司隔離與移轉核對 |
+
+## 4.1 P4 Presentation Architecture
+
+P4 在既有模組化單體上建立一致的 presentation layer，不另建第二套 domain 或平行 API：
+
+```mermaid
+flowchart LR
+  SHELL["App Shell\n導覽／公司／使用者"] --> PAGE["Page contracts\n清單／明細／表單"]
+  DESIGN["Design System\n元件／狀態／a11y"] --> PAGE
+  PAGE --> HTTP["既有 Route Handler／Server boundary"]
+  HTTP --> APP["既有 Application／Domain services"]
+  APP --> DB[("既有 PostgreSQL 契約")]
+```
+
+- App Shell 統一 authenticated route 的 navigation、company switch、user menu、breadcrumb 與全域狀態。
+- Page contract 統一 list、detail、edit、document subtable、capability action 與 relation navigation。
+- Design System 統一元件、焦點、loading、empty、error、403、404、session expired、confirmation 與 validation。
+- UI 可新增安全的 presentation DTO 或 list query，但不得在 page、client 或 route 重作 domain rule。
+- P4 保留 schema、migration、state machine、RBAC、company scope、transaction、locking、audit、idempotency、formal-print、reprint、immutable snapshot、pricing 與 freight 契約。
+- 真正 domain change 必須依 DEC-060 另立 decision 與獨立任務。
+
+P5 Inventory and Production 仍是後續擴充，文件為 `docs/P5_INVENTORY_PRODUCTION_BLUEPRINT.md`。P4 不預先建立 P5 schema、API、route 或 UI；P5 開始前需重新完成 domain review。
 
 ## 5. 模組邊界
 
@@ -163,7 +185,7 @@ flowchart TB
 - 核對至少包含筆數、公司、客戶／廠商、月份、應收、應付、票據與月結餘額。
 - 上線前一天凍結 Ragic 寫入，執行增量匯入與最終核對；切換後 Ragic 唯讀，失敗時恢復 Ragic 寫入。
 - 新系統只移未結案件與整理後主檔；完整歷史保留於唯讀 Ragic 或封存至少 7 年。
-- 上線後回退窗口（OQ-044）與附件移轉範圍（OQ-045）在 P8 切換前確認，不阻塞 P1。
+- 上線後回退窗口（OQ-044）與附件移轉範圍（OQ-045）在 P10 切換前確認，不阻塞 P1。
 - 現有資料用途無法只由資料庫完全確認；重建資料庫或 schema 必須另案授權。P1.2 未修改現有 `erp` 資料庫。
 
 ## 12. Prisma 與 PostgreSQL migration 策略
@@ -212,7 +234,7 @@ P1.2 只實作帳號、密碼、Session、`ADMIN`／`ORDER_ENTRY` 後端 RBAC、
 
 ## 16. P2 工程結案邊界
 
-P2.1～P2.6 已完成公司參數、客戶、品項、價格、運費的主檔功能與整合驗收，以及小量主檔匯入框架。P2 未建立訂單、銷貨單、快照、列印、應收、庫存、採購、生產或會計資料表；完整 Ragic 正式移轉仍屬 P8。
+P2.1～P2.6 已完成公司參數、客戶、品項、價格、運費的主檔功能與整合驗收，以及小量主檔匯入框架。P2 未建立訂單、銷貨單、快照、列印、應收、庫存、採購、生產或會計資料表；完整 Ragic 正式移轉現依 DEC-060 歸屬 P10。
 
 ## 17. P3.1 銷售訂單架構
 
@@ -270,6 +292,7 @@ P3.2a 已完成 Prisma schema、`0010_p3_delivery_notes`、custom SQL、fresh DB
 
 ## 20. 變更紀錄
 
+- V0.14（2026-07-29，P4.1 UI／UX 規劃）：同步 DEC-060，新增 P4 presentation architecture、後端契約保留與 domain change 升級邊界；庫存／生產歸屬 P5，Ragic 切換順延為 P10；未修改 production architecture 或程式。
 - V0.13（2026-07-28，P3.3e lock-order 補正）：依 DEC-058 將首次正式列印與補印統一為 `idempotency → Sales Order → Delivery Note`，以 company-scoped 唯讀 relation lookup 配合鎖後 company／relation／status 重驗證，並完成 deadlock、fresh DB、schema diff 與完整 regression；未修改 schema、migration、API、UI 或 renderer。
 - V0.12（2026-07-28，P3.3d API／下載／UI）：完成三個 Node route、binary query isolation、集中 HTTP error mapping、RBAC／company scope、detail metadata、client idempotency 與安全 browser download；未修改 schema、renderer 或 transaction。
 - V0.11（2026-07-28，P3.3a 規格閉合）：同步 DEC-058，固定首次正式列印即出貨、DB immutable PDF、混合資料模型、權限、版型、作廢／replacement、audit、冪等、併發與 P3.3／P3.4 邊界；尚未建立 schema、migration、renderer、API 或 UI。

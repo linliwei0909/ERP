@@ -1,8 +1,8 @@
 # Ragic 本地端系統資料庫設計草稿
 
-文件狀態：P1、P2、P3.1 已完成；P3.2a～P3.2e 已完成並正式結案；P3.3a 候選資料模型已決，schema／migration 尚未建立
-同步基線：`DECISIONS.md` V0.11
-版本日期：2026-07-28
+文件狀態：P1～P3.3 正式資料模型已完成；P4.1 為純 UI／UX 規劃，未修改 schema 或 migration；P5 尚未開始
+同步基線：`DECISIONS.md` V0.14
+版本日期：2026-07-29
 
 ## 1. 設計基線
 
@@ -10,6 +10,7 @@
 - Ragic Record ID 只保存在 legacy mapping，不作新系統主鍵。
 - 所有交易表頭保存 `company_id`；客戶、品項及廠商為可跨公司共用主檔，以公司關係表限制可見與可用範圍。
 - 第一階段不建立庫存、批號、入庫、出庫、庫存異動、採購或正式會計資料表及依賴。
+- DEC-060 將 UI／UX 重整定為 P4、Inventory and Production 定為 P5；此階段重編不新增資料表，也不核准 P5 草案中的 schema。P5 開始前仍須獨立資料模型與 migration 審查。
 - 交易金額使用 `numeric(18,0)` 計算至元；未稅單價使用 `numeric(18,5)`；所有交易數量使用 `numeric(18,4)`。
 - 日期使用 `date`；時間使用 `timestamptz` 並保存 UTC。
 - 交易外鍵與交易快照並存；主檔修改不得改變既有交易內容。
@@ -405,6 +406,7 @@ P3.3b／P3.3b2 已完成的正式資料模型如下：
 
 ## 8. 變更紀錄
 
+- V0.12（2026-07-29，P4.1 規劃同步）：同步 DEC-060 的 P4／P5 階段歸屬；確認 P4.1 沒有 schema／migration 變更，P5 草案不構成正式資料模型。
 - V0.11（2026-07-28，P3.3a 規格閉合）：新增尚未實作的混合列印模型 contract，裁定 delivery note 摘要、唯一 immutable DB PDF version、append-only events、同公司 FK、狀態完整性及稅額未分列；未建立 Prisma schema、migration 或 SQL。
 - V0.10（2026-07-27，P3.2c 工程同步）：未變更 schema 或 migration；完成並驗證 0010 replacement／partial unique contract 對原子 rebuild、ADMIN direct void、chain query 與 rollback 的支援。
 - V0.10（2026-07-27，P3.2b 工程同步）：完成 header／lines 原子建立、row lock、confirmed snapshot copy、Decimal invariant、月流水、idempotency、audit、ORDER_VOID 與 scoped query service；`_03` fresh DB 0001～0010、diff 0、13 files／114 DB tests 通過。

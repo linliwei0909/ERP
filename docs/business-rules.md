@@ -1,16 +1,18 @@
 # Ragic 本地端系統共通業務規則
 
 文件狀態：第一階段正式規則彙整  
-同步基線：`DECISIONS.md` V0.11
-最後更新：2026-07-28
+同步基線：`DECISIONS.md` V0.14
+最後更新：2026-07-29
 
 ## 1. 規格效力
 
-- 本文件依 `DECISIONS.md` V0.11 同步整理；內容衝突時一律以 `DECISIONS.md` 為準。
+- 本文件依 `DECISIONS.md` V0.14 同步整理；內容衝突時一律以 `DECISIONS.md` 為準。
 - 已由 `DECISIONS.md` 決議的事項不得重新列為待確認。
 - 第一階段不得自行加入庫存、批號、分批出貨、出庫依賴或正式會計過帳。
 - `OPEN_QUESTIONS.md` 保留 OQ-005、OQ-044 與 OQ-045；三者均不阻塞 P1。
 - P2.5 僅實作送貨地點運費規則與唯讀試算；不得提前實作訂單、運費快照、匯入或其他模組。
+- 依 DEC-060，P4 是跨模組 UI／UX 與操作流程重整，P5 是後續 Inventory and Production；P4 完成前不得開始 P5。
+- P5 階段歸屬不會推翻本文件的第一階段庫存排除，也不會使 P5 草案中的倉庫、批號、負庫存、成本或生產規則自動生效。
 
 ## 2. 第一階段範圍
 
@@ -262,7 +264,7 @@
 - 欄位 mapping、轉換、核對報表及 legacy ID 對照是移轉執行工作，不是業務 Open Question。
 - 上線前一天凍結 Ragic 寫入，完成增量匯入與核對；正式切換後 Ragic 改唯讀，失敗時恢復 Ragic 寫入。
 - 新系統只移未結案件及整理後主檔；完整歷史保留於唯讀 Ragic 或封存至少 7 年。
-- 上線後回退窗口與附件移轉範圍於 P8 切換前確認，不阻塞 P1；未確認前不得刪除來源資料或形成依賴未決事項的不可逆操作。
+- 上線後回退窗口與附件移轉範圍於 P10 切換前確認，不阻塞 P1；未確認前不得刪除來源資料或形成依賴未決事項的不可逆操作。
 - 現有資料均為測試資料，不要求保留；是否移除既有資料庫或 schema 必須在另行授權的 migration／環境重建任務中處理，本輪不得執行。
 
 ### P2.6 工程落地
@@ -287,11 +289,12 @@
 - OQ-005 只處理第二階段是否實作正式電子簽收及其流程設計，不阻塞第一階段。
 - 第一階段已正式決議以「銷貨單已回收」的人工確認作為建立應收條件，保存 `returned_confirmed`、`returned_confirmed_at`、`returned_confirmed_by` 或等效欄位。
 - 第一階段不實作正式電子簽收；後續功能不得覆蓋既有人工確認歷程。
-- OQ-044：上線後回退窗口，P8 前確認，不阻塞 P1。
-- OQ-045：附件移轉範圍，P8 前確認，不阻塞 P1。
+- OQ-044：上線後回退窗口，P10 前確認，不阻塞 P1。
+- OQ-045：附件移轉範圍，P10 前確認，不阻塞 P1。
 
 ## 17. 變更紀錄
 
+- V0.12（2026-07-29，P4.1 規劃同步）：同步 DEC-060 的 P4 UI／UX、P5 Inventory and Production 與 P4 先於 P5 原則；保留第一階段庫存排除及全部既有業務規則。
 - V0.11（2026-07-28，P3.3a 規格閉合）：同步 DEC-058，正式化首次正式列印即出貨、DB immutable PDF、預覽／重印／下載語意、權限、版型、作廢／replacement、audit、冪等、併發、P3.3／P3.4 邊界及 OQ-051 第一版排除；尚未實作 schema 或功能。
 - V0.10（2026-07-27，P3.2d1 工程同步）：完成 Delivery-note API security boundary、strict DTO、idempotency、correlation ID、error mapping 與 serialization；不包含 UI、出貨、列印、回收確認或應收。
 - V0.10（2026-07-27，P3.2c 工程同步）：完成 revision rebuild、replacement chain、ADMIN direct void、typed errors、audit、idempotency 與 atomic rollback；不包含 API／UI、出貨、列印或應收。

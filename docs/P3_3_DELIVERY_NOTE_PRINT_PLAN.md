@@ -1,8 +1,8 @@
 # P3.3 銷貨單正式列印與出貨計畫
 
-文件狀態：P3.3a～P3.3e 已完成實作與驗證；P3.3e 尚待獨立 Git 收尾，P3.3 尚未重新完成結案審查，P3.4 與 P4 未開始
-同步基線：`DECISIONS.md` V0.12／DEC-058
-版本日期：2026-07-28
+文件狀態：P3.3 已於基線 `ffffc8ce82e497a0b3fd58461c6ae66919271014` 正式結案；P3.4 未開始；P4.1 只進行 UI／UX 規劃
+同步基線：`DECISIONS.md` V0.14／DEC-058／DEC-060
+版本日期：2026-07-29
 
 ## 1. 背景與目標
 
@@ -664,7 +664,7 @@ Body: {}
 - 數值稅額推算或 placeholder。
 - 追加訂單建立 capability。
 - 庫存、批號、出庫、庫存異動或分批出貨。
-- P4 blueprint 的任何內容。
+- P5 Inventory and Production blueprint 的任何內容。
 
 ## 21. P3.3b～P3.3f 建議切片
 
@@ -744,6 +744,6 @@ P3.3c 已依使用者授權完成：
 2. 固定 renderer version 與 font manifest identity。
 3. 納入官方字型資產、SIL OFL、checksum、embedding 與 glyph fail-fast。
 4. 完成 formal-print／reprint transaction、狀態、audit、idempotency、concurrency 與 DB tests。
-5. 保持 API、UI、下載端點與 P4 blueprint 完全隔離。
+5. 保持 API、UI、下載端點與現歸屬 P5 的 Inventory and Production blueprint 完全隔離。
 
-P3.3d 已依獨立授權完成 API、HTTP DTO／mapping、UI、client adapter 與下載 capability。GET 下載保持無副作用，且一般 detail/list query 不讀取 `pdf_bytes`。P3.3e 已完成 lock-order 補正實作與驗證但尚待獨立 Git 收尾；P3.3 尚未重新完成結案審查，P3.4 與 P4 均未開始。
+P3.3d 已依獨立授權完成 API、HTTP DTO／mapping、UI、client adapter 與下載 capability。GET 下載保持無副作用，且一般 detail/list query 不讀取 `pdf_bytes`。P3.3e lock-order 補正與完整 P3.3 已於正式基線結案；P3.4 未開始。依 DEC-060，原 Inventory and Production blueprint 已歸屬 P5；P4.1 目前只進行 UI／UX 文件規劃，未修改本計畫所定 domain 契約。

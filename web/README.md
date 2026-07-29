@@ -1,6 +1,14 @@
 # Ragic 本地端系統
 
-目前進度為 P1.3「Audit、Idempotency、Background Jobs、Logging 與營運基礎」。正式應用包含登入、公司切換、最小使用者管理與 P1 共用營運框架；尚未啟用任何 P2 以後的業務模組。
+P1～P3.3 已完成正式結案，Git 基線為 `ffffc8ce82e497a0b3fd58461c6ae66919271014`。目前進行 P4.1「ERP UI／UX 現況盤點與正式藍圖」；此階段只做文件規劃，尚未開始 P4.2 App Shell 或任何 UI 實作。
+
+正式階段依 DEC-060 調整為：
+
+- P4：ERP UI／UX 與操作流程重整。
+- P5：Inventory and Production；P4 完成前不得開始。
+- 原應收至切換 roadmap 順延為 P6～P10。
+
+UI／UX 規劃以 `docs/P4_UI_UX_BLUEPRINT.md` 為準；庫存／生產草案歸屬 `docs/P5_INVENTORY_PRODUCTION_BLUEPRINT.md`。P5 歸屬不推翻第一階段排除庫存、批號與出庫依賴的正式規則。
 
 ## 技術需求
 

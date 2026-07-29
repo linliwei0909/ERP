@@ -1,8 +1,8 @@
 # Ragic 本地端系統開發階段與任務拆分
 
-文件狀態：P1、P2、P3.1 已完成工程驗收；P3.2a～P3.2e 已完成並正式結案；P3.3a～P3.3e 已完成實作與驗證，P3.3e 尚待獨立 Git 收尾，P3.3 尚未重新完成結案審查，P4 未開始
-同步基線：`DECISIONS.md` V0.12（含 DEC-059）
-版本日期：2026-07-28
+文件狀態：P1～P3.3 已完成正式結案；P4.1 UI／UX 現況盤點與正式藍圖進行中；P4.2 與 P5 尚未開始
+同步基線：`DECISIONS.md` V0.14（含 DEC-060）
+版本日期：2026-07-29
 
 ## 1. 執行原則
 
@@ -11,7 +11,9 @@
 - 新決議先更新 `DECISIONS.md`，再同步規格、資料庫設計、計畫與程式。
 - 所有跨單據操作使用資料庫 transaction；核心規則必須有測試；重要狀態異動保留 audit log。
 - 每次只實作指定模組，不提前實作後續模組。
-- 本輪完成 P3.2e Delivery-note 整合驗收與 P3.2 主流程結案；不建立列印、PDF、實際送貨日、回收確認、應收、追加訂單 capability 或其他後續模組。
+- P4 固定為 ERP UI／UX 與操作流程重整；P4.1 只做文件盤點與規劃，不實作 UI。
+- P5 固定為 Inventory and Production；P4 完成前不得開始，且不因階段歸屬而推翻第一階段庫存排除。
+- 原 P4～P8 roadmap 依 DEC-060 順延為 P6～P10；只有編號改變，既有業務規則與 transaction 邊界不變。
 
 ## 2. 開發階段
 
@@ -20,12 +22,14 @@ flowchart LR
   P0["P0 規格與資料盤點"] --> P1["P1 技術基線"]
   P1 --> P2["P2 公司／權限／主檔"]
   P2 --> P3["P3 訂單／銷貨"]
-  P3 --> P4["P4 應收／發票／調整"]
-  P4 --> P5["P5 收款／預收／票據"]
-  P5 --> P6["P6 月結／快照"]
-  P2 --> P7["P7 應付／付款／支出"]
-  P6 --> P8["P8 移轉／驗收／切換"]
-  P7 --> P8
+  P3 --> P4["P4 ERP UI／UX 與操作流程"]
+  P4 --> P5["P5 Inventory and Production"]
+  P5 --> P6["P6 應收／發票／調整"]
+  P6 --> P7["P7 收款／預收／票據"]
+  P7 --> P8["P8 月結／快照"]
+  P2 --> P9["P9 應付／付款／支出"]
+  P8 --> P10["P10 移轉／驗收／切換"]
+  P9 --> P10
 ```
 
 ## 3. 階段與工作包
@@ -165,7 +169,7 @@ P2.6 完成狀態：
 - 正式價格表只允許管理員新增／更新；人工價格不回寫正式價表。
 - [完成 P2.5 主檔] 三種運費方式、半開有效期間與唯讀試算；交易快照留待交易模組。
 - [完成 P2.6] 主檔整合驗收、匯入 batch／issue／mapping／reconciliation、安全 dry-run 與四類小量 importer。
-- 主檔合併與完整 Ragic 正式資料移轉仍留待後續核准切片／P8。
+- 主檔合併與完整 Ragic 正式資料移轉仍留待後續核准切片／P10。
 
 完成條件：P2.1～P2.6 的主檔、跨公司負面測試、唯一限制、可用條件、期間邊界、缺價／缺規則、停用、decimal-safe 試算、rollback、稽核及匯入 reconciliation 已通過，P2 工程結案；交易價格／運費快照及所有 P3 功能尚未開始。
 
@@ -196,14 +200,44 @@ P2.6 完成狀態：
 - [P3.3b／P3.3b2 完成] 0011 建立 immutable print storage；0012 補上 `delivery-note-snapshot-v1` discriminator，以及 print version 的 renderer、font、snapshot version。既有 frozen JSON 不重寫，既有 print rows 以 migration fail-fast guard 保護。
 - [P3.3c 完成] Frozen snapshot validation、immutable print model、deterministic renderer、Noto Sans CJK TC Regular 受控資產與嵌入、正式列印／重印 transaction、狀態、audit、idempotency、row lock、concurrency 與 service/DB tests。
 - [P3.3d 完成] Formal-print、read-only PDF download、reprint API，strict DTO、headers、typed errors、company scope、detail metadata、client idempotency、UI／下載流程及 API／UI／DB regression；第一版不提供預覽。
-- [P3.3e 完成] 依 DEC-058 將正式列印與補印固定為 `idempotency → Sales Order → Delivery Note`，補上 relation identity 鎖後重驗證、formal/reprint/ADMIN void deadlock regression，並完成 fresh DB、schema diff、unit、全部 DB 與 build 品質 Gate；仍須先完成 P3.3e Git 收尾並另開完整 P3.3 結案審查，不得直接進入 P4。
+- [P3.3e 完成／P3.3 正式結案] 依 DEC-058 將正式列印與補印固定為 `idempotency → Sales Order → Delivery Note`，補上 relation identity 鎖後重驗證、formal/reprint/ADMIN void deadlock regression，並完成 fresh DB、schema diff、unit、全部 DB 與 build 品質 Gate；正式結案基線為 `ffffc8ce82e497a0b3fd58461c6ae66919271014`。
 - [P3.4 待授權] `returned_confirmed` 人工回收確認、確認時間／操作者、撤銷／更正、回收後鎖定、已存在實際出貨日的受控更正及與應收流程銜接驗收。P3.4 不再負責首次建立實際出貨日。
 - 銷貨單只能由訂單建立；partial unique index 保證同一 `sales_order_id` 在 `status <> 'VOIDED'` 時最多一張。
 - 明確不建立批號、庫存、出庫或分批出貨功能。
 
 P3.1 完成條件已達成：訂單取號、草稿、確認、修訂、作廢、價格、缺運費拒絕、快照、公司隔離、rollback、並行與重複請求測試通過；兩個 fresh DB、獨立 disposable DB 95 項 DB tests、`erp` smoke 與最終 gate 全部通過。P3.2 銷貨單 create／revision rebuild／ADMIN void 主流程亦已完成 P3.2e 整合驗收並正式結案。追加訂單建立 capability、首次列印與人工回收確認仍是後續獨立授權項目，不得因 P3.2 結案而視為已實作。
 
-### P4：應收、正式統一發票與應收調整
+### P4：ERP UI／UX 與操作流程重整
+
+目標：先建立一致、可操作且可延伸的 ERP App Shell、Design System、頁面模式與跨模組工作流程，再擴充後續模組。
+
+子階段：
+
+- P4.1 現況盤點與 UX 藍圖。
+- P4.2 App Shell 與導覽。
+- P4.3 Design System 與共用元件。
+- P4.4 主檔 UI 重整。
+- P4.5 銷售訂單 UI 重整。
+- P4.6 銷貨單與列印 UI 重整。
+- P4.7 完整 UX 驗證與結案。
+
+P4 詳細範圍、技術邊界、角色、流程、元件與驗收條件以 `docs/P4_UI_UX_BLUEPRINT.md` 為準。P4 原則上保留既有 backend domain、schema、state machine、RBAC、company scope、transaction、locking、audit、idempotency、formal-print、reprint、immutable snapshot、pricing 與 freight 契約。真正 domain change 必須另立 decision 與獨立任務。
+
+完成條件：P4.1～P4.7 依序完成；登入、公司切換、主檔、訂單、銷貨單、正式列印、PDF、補印、權限、session、API failure、keyboard 與支援 viewport 通過完整驗收。
+
+### P5：Inventory and Production
+
+目標：承接庫存、採購、生產、銷售出庫、盤點與成本的後續擴充規劃。
+
+- 正式規劃草案為 `docs/P5_INVENTORY_PRODUCTION_BLUEPRINT.md`。
+- P4 完成前不得開始 P5。
+- P5 開始前必須重新核對 DECISIONS、當時 schema、P4 結案與所有未決業務事項。
+- 草案中的倉庫、批號、負庫存、分次領料、成本與銷售出庫規則不因歸屬 P5 而自動核准。
+- 不得回溯改變 P1～P3 的正式列印、出貨、應收條件或既有 transaction。
+
+完成條件：另案決議後定義；P4.1 不開始 P5。
+
+### P6：應收、正式統一發票與應收調整
 
 目標：由符合條件的銷貨單建立唯一應收，並完成發票資料與調整流程。
 
@@ -224,7 +258,7 @@ P3.1 完成條件已達成：訂單取號、草稿、確認、修訂、作廢、
 
 完成條件：不得重複立帳；已立帳來源鎖定；發票部分開立、稅額精度、調整核准與月結生效時點均有測試。
 
-### P5：收款、預收、退款與票據
+### P7：收款、預收、退款與票據
 
 目標：完成多對多沖抵、反向紀錄與應收／應付共用票據模型。
 
@@ -244,7 +278,7 @@ P3.1 完成條件已達成：訂單取號、草稿、確認、修訂、作廢、
 
 完成條件：並行分配不超額；預收／退款、反向分配、退票及換票均可完整重建歷史與餘額。
 
-### P6：月結、背景重算與對外版本
+### P8：月結、背景重算與對外版本
 
 目標：建立可由來源重建的月結投影與不可變列印／寄送版本。
 
@@ -262,7 +296,7 @@ P3.1 完成條件已達成：訂單取號、草稿、確認、修訂、作廢、
 
 完成條件：相同來源重跑結果一致；前期異動能正確向後重算；對外舊版本永不被覆蓋。
 
-### P7：人工應付、付款與什項支出
+### P9：人工應付、付款與什項支出
 
 目標：承接不依賴採購／進貨的人工應付與付款。
 
@@ -279,7 +313,7 @@ P3.1 完成條件已達成：訂單取號、草稿、確認、修訂、作廢、
 
 完成條件：分次付款、一筆付款沖多張應付、撤銷更正及應付票據可核對，且不產生任何庫存或採購資料。
 
-### P8：Ragic 混合移轉、驗收與切換
+### P10：Ragic 混合移轉、驗收與切換
 
 目標：可重跑、可核對地移轉整理後主檔與未結案件。
 
@@ -301,8 +335,8 @@ P3.1 完成條件已達成：訂單取號、草稿、確認、修訂、作廢、
 - 核對筆數、公司、客戶／廠商、月份、應收、應付、票據與月結總額及逐筆餘額。
 - 上線前一天凍結 Ragic，執行最終增量與核對；切換後改唯讀，失敗時恢復寫入。
 - 完整歷史不全部匯入，保留於唯讀 Ragic 或封存至少 7 年。
-- P8 執行前確認 OQ-044：上線後回退窗口、啟動／結束條件、決策人及窗口內資料處理方式。
-- P8 執行前確認 OQ-045：附件移轉的表單、日期、狀態、類型、大小、失敗處理與核對範圍。
+- P10 執行前確認 OQ-044：上線後回退窗口、啟動／結束條件、決策人及窗口內資料處理方式。
+- P10 執行前確認 OQ-045：附件移轉的表單、日期、狀態、類型、大小、失敗處理與核對範圍。
 - OQ-044 與 OQ-045 不阻塞 P1；未確認前不得刪除來源資料或執行依賴其答案的不可逆操作。
 
 完成條件：移轉可安全重跑、不產生重複；業務驗收、權限驗收、核對、備份還原、切換與回復方案均簽核。
@@ -338,10 +372,11 @@ P3.1 完成條件已達成：訂單取號、草稿、確認、修訂、作廢、
 
 ## 6. 本輪交付限制
 
-P3.3d API／UI／下載完成後停止。未取得使用者下一步授權前，不得開始 P3.3e、回收確認、應收、Ragic 正式全量移轉、舊 ERP 模組恢復或其他後續模組；任何後續對 `erp` 的資料庫 mutation 或破壞性操作仍須使用者另行核准。
+P4.1 只建立 UI／UX 正式藍圖、roadmap、decision、P5 handoff 與 validation。不得修改 production code、tests、schema、migration、package 或 lockfile；不得開始 P4.2、P5 或任何後續模組；不得對 `erp` 執行資料庫 mutation。
 
 ## 7. 變更紀錄
 
+- V0.16（2026-07-29，P4.1 UI／UX 規劃）：同步 DEC-060，將 P4 正式改為 ERP UI／UX 與操作流程重整、庫存／生產歸屬 P5，原應收至切換 roadmap 順延為 P6～P10；本輪只做文件規劃，未開始 P4.2 或 P5。
 - V0.15（2026-07-28，P3.3e lock-order 補正）：依 DEC-058 將正式列印與補印修正為 `idempotency → Sales Order → Delivery Note`，完成鎖後 identity 重驗證、deadlock matrix、fresh 0001–0012、schema diff、unit、完整 DB 與 build；P4 未開始。
 - V0.14（2026-07-28，P3.3d API／UI／下載）：完成正式列印、補印、read-only PDF 下載、strict DTO、集中 error mapping、detail metadata、browser download、client idempotency lifecycle 與完整 regression；未修改 schema／migration，P3.3e、P3.4、P4 未開始。
 - V0.13（2026-07-28，P3.3c domain／transaction）：完成 frozen snapshot validator、immutable print model、deterministic PDF renderer、正式 Noto Sans CJK TC Regular 資產、正式列印／重印 transaction、狀態同步、audit、idempotency、row lock、concurrency、rollback 與完整 DB 驗證；P3.3d API／UI／下載未開始。
