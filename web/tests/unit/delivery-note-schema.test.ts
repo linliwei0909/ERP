@@ -51,8 +51,8 @@ describe("P3.2a delivery-note schema contract", () => {
     ).toBe(false);
     const requiredPaths = [
       "src/app/api/delivery-notes",
-      "src/app/delivery-notes/page.tsx",
-      "src/app/delivery-notes/[id]/page.tsx",
+      "src/app/(authenticated)/delivery-notes/page.tsx",
+      "src/app/(authenticated)/delivery-notes/[id]/page.tsx",
       "src/lib/delivery-notes/client.ts",
     ];
 

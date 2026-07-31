@@ -8,17 +8,15 @@ function source(path: string): string {
 
 describe("P3.2e delivery-note page integration contracts", () => {
   it("gates the home delivery-note navigation by read permission", () => {
-    const home = source("src/app/page.tsx");
-    expect(home).toContain(
-      'hasPermission(context.roleCodes, "delivery_notes.read")',
-    );
-    expect(home).toContain('href="/delivery-notes"');
+    const registry = source("src/lib/navigation/registry.ts");
+    expect(registry).toContain('"delivery_notes.read"');
+    expect(registry).toContain('href: "/delivery-notes"');
   });
 
   it("redirects unauthenticated and unauthorized list/detail page access", () => {
     for (const path of [
-      "src/app/delivery-notes/page.tsx",
-      "src/app/delivery-notes/[id]/page.tsx",
+      "src/app/(authenticated)/delivery-notes/page.tsx",
+      "src/app/(authenticated)/delivery-notes/[id]/page.tsx",
     ]) {
       const page = source(path);
       expect(page).toContain(
@@ -34,13 +32,15 @@ describe("P3.2e delivery-note page integration contracts", () => {
   });
 
   it("keeps explicit list load-error and duplicate-submit guards", () => {
-    const listPage = source("src/app/delivery-notes/page.tsx");
+    const listPage = source(
+      "src/app/(authenticated)/delivery-notes/page.tsx",
+    );
     expect(listPage).toContain("銷貨單清單載入失敗");
     expect(listPage).toContain("viewData = undefined");
 
     for (const path of [
-      "src/app/sales-orders/delivery-note-order-actions.tsx",
-      "src/app/delivery-notes/[id]/delivery-note-actions.tsx",
+      "src/app/(authenticated)/sales-orders/delivery-note-order-actions.tsx",
+      "src/app/(authenticated)/delivery-notes/[id]/delivery-note-actions.tsx",
     ]) {
       const action = source(path);
       expect(action).toMatch(/if \([^)]*busy\.current[^)]*\) return;/);
@@ -53,7 +53,7 @@ describe("P3.2e delivery-note page integration contracts", () => {
 
   it("keeps P3.3d confirmation, cancel and same-operation retry boundaries", () => {
     const action = source(
-      "src/app/delivery-notes/[id]/delivery-note-actions.tsx",
+      "src/app/(authenticated)/delivery-notes/[id]/delivery-note-actions.tsx",
     );
     expect(action).toContain('role="dialog"');
     expect(action).toContain("確認正式列印");

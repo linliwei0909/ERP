@@ -4,9 +4,9 @@ import {
   DeliveryNoteDetailView,
   DeliveryNoteListView,
   type DeliveryNoteListItemView,
-} from "../../src/app/delivery-notes/delivery-note-view";
-import DeliveryNotesLoading from "../../src/app/delivery-notes/loading";
-import { deliveryNoteOrderAction } from "../../src/app/sales-orders/delivery-note-order-actions";
+} from "../../src/app/(authenticated)/delivery-notes/delivery-note-view";
+import DeliveryNotesLoading from "../../src/app/(authenticated)/delivery-notes/loading";
+import { deliveryNoteOrderAction } from "../../src/app/(authenticated)/sales-orders/delivery-note-order-actions";
 import type {
   DeliveryNoteDetailDto,
   DeliveryNoteMutationResponseDto,
@@ -26,7 +26,7 @@ import {
 } from "../../src/lib/delivery-notes/client";
 import {
   deliveryNotePrintActions,
-} from "../../src/app/delivery-notes/[id]/delivery-note-actions";
+} from "../../src/app/(authenticated)/delivery-notes/[id]/delivery-note-actions";
 
 const ids = {
   company: "10000000-0000-4000-8000-000000000001",

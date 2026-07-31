@@ -19,7 +19,7 @@ import {
 import {
   canStartSalesOrderRevision,
   canVoidSalesOrder,
-} from "../../src/app/sales-orders/sales-order-editor";
+} from "../../src/app/(authenticated)/sales-orders/sales-order-editor";
 
 describe("P3.1 sales-order rules", () => {
   it("normalizes quantity and unit price without JavaScript floating point", () => {
