@@ -1,8 +1,8 @@
 # Ragic 本地端系統開發階段與任務拆分
 
-文件狀態：P1～P3.3 已完成正式結案；P4.1 UI／UX 現況盤點與正式藍圖進行中；P4.2 與 P5 尚未開始
-同步基線：`DECISIONS.md` V0.14（含 DEC-060）
-版本日期：2026-07-29
+文件狀態：P1～P3.3 已完成正式結案；P4.1、P4.2 已完成；下一正式階段為 P4.3；P5 尚未開始
+同步基線：`DECISIONS.md` V0.15（含 DEC-060 與 P4.2 完成同步）
+版本日期：2026-07-31
 
 ## 1. 執行原則
 
@@ -214,7 +214,7 @@ P3.1 完成條件已達成：訂單取號、草稿、確認、修訂、作廢、
 子階段：
 
 - P4.1 現況盤點與 UX 藍圖。
-- P4.2 App Shell 與導覽。
+- [2026-07-31 完成] P4.2 App Shell 與導覽；closure commit `29e68fff4cbd005443c0d228563a81e36ecf403d`。範圍包含 authenticated App Shell、navigation、company switcher、user menu、breadcrumb、responsive shell 與 accessibility baseline。
 - P4.3 Design System 與共用元件。
 - P4.4 主檔 UI 重整。
 - P4.5 銷售訂單 UI 重整。
@@ -222,6 +222,8 @@ P3.1 完成條件已達成：訂單取號、草稿、確認、修訂、作廢、
 - P4.7 完整 UX 驗證與結案。
 
 P4 詳細範圍、技術邊界、角色、流程、元件與驗收條件以 `docs/P4_UI_UX_BLUEPRINT.md` 為準。P4 原則上保留既有 backend domain、schema、state machine、RBAC、company scope、transaction、locking、audit、idempotency、formal-print、reprint、immutable snapshot、pricing 與 freight 契約。真正 domain change 必須另立 decision 與獨立任務。
+
+P4.2 沒有變更 Prisma schema、migration、RBAC mapping、session model、transaction、audit、idempotency、formal print 或 P5。下一正式階段為 P4.3；P5 尚未開始。
 
 完成條件：P4.1～P4.7 依序完成；登入、公司切換、主檔、訂單、銷貨單、正式列印、PDF、補印、權限、session、API failure、keyboard 與支援 viewport 通過完整驗收。
 
@@ -372,10 +374,11 @@ P4 詳細範圍、技術邊界、角色、流程、元件與驗收條件以 `doc
 
 ## 6. 本輪交付限制
 
-P4.1 只建立 UI／UX 正式藍圖、roadmap、decision、P5 handoff 與 validation。不得修改 production code、tests、schema、migration、package 或 lockfile；不得開始 P4.2、P5 或任何後續模組；不得對 `erp` 執行資料庫 mutation。
+P4.2.x Closure 只補強 disposable Test DB safety、P4.2 文件狀態與兩個 authenticated special-state main landmarks；不得開始 P4.3 或 P5，也不得變更 schema、migration、package、lockfile、RBAC、session、API、state machine、transaction、audit、idempotency 或 formal print。
 
 ## 7. 變更紀錄
 
+- V0.17（2026-07-31，P4.2 完成同步）：記錄 P4.2 closure commit `29e68fff4cbd005443c0d228563a81e36ecf403d`、App Shell 與導覽完成範圍、P4.3 為下一正式階段及 P5 尚未開始；後端與資料庫契約不變。
 - V0.16（2026-07-29，P4.1 UI／UX 規劃）：同步 DEC-060，將 P4 正式改為 ERP UI／UX 與操作流程重整、庫存／生產歸屬 P5，原應收至切換 roadmap 順延為 P6～P10；本輪只做文件規劃，未開始 P4.2 或 P5。
 - V0.15（2026-07-28，P3.3e lock-order 補正）：依 DEC-058 將正式列印與補印修正為 `idempotency → Sales Order → Delivery Note`，完成鎖後 identity 重驗證、deadlock matrix、fresh 0001–0012、schema diff、unit、完整 DB 與 build；P4 未開始。
 - V0.14（2026-07-28，P3.3d API／UI／下載）：完成正式列印、補印、read-only PDF 下載、strict DTO、集中 error mapping、detail metadata、browser download、client idempotency lifecycle 與完整 regression；未修改 schema／migration，P3.3e、P3.4、P4 未開始。

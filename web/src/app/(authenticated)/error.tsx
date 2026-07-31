@@ -15,10 +15,12 @@ export default function AuthenticatedError({
   }, [error]);
 
   return (
-    <ShellErrorState
-      correlationId={error.digest}
-      retry={reset}
-      title="頁面暫時無法載入"
-    />
+    <main className="shell-special-state">
+      <ShellErrorState
+        correlationId={error.digest}
+        retry={reset}
+        title="頁面暫時無法載入"
+      />
+    </main>
   );
 }

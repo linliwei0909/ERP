@@ -179,6 +179,26 @@ describe("P4.2 shell context and presentation", () => {
     expect(header).toContain("儲存");
     expect(renderToStaticMarkup(<NotFoundState />)).toContain("404");
   });
+
+  it("gives authenticated error and not-found routes one main landmark", () => {
+    for (const path of [
+      "src/app/(authenticated)/error.tsx",
+      "src/app/(authenticated)/not-found.tsx",
+    ]) {
+      const routeState = source(path);
+      expect(routeState.match(/<main\b/g)).toHaveLength(1);
+      expect(routeState.match(/<\/main>/g)).toHaveLength(1);
+    }
+    expect(source("src/app/(authenticated)/error.tsx")).toContain(
+      "correlationId={error.digest}",
+    );
+    expect(source("src/app/(authenticated)/error.tsx")).toContain(
+      "retry={reset}",
+    );
+    expect(source("src/app/(authenticated)/not-found.tsx")).toContain(
+      "<NotFoundState />",
+    );
+  });
 });
 
 describe("P4.2 breadcrumb and route integration", () => {

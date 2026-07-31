@@ -1,8 +1,8 @@
 # Ragic 本地端系統共通業務規則
 
 文件狀態：第一階段正式規則彙整  
-同步基線：`DECISIONS.md` V0.14
-最後更新：2026-07-29
+同步基線：`DECISIONS.md` V0.15
+最後更新：2026-07-31
 
 ## 1. 規格效力
 
@@ -13,6 +13,7 @@
 - P2.5 僅實作送貨地點運費規則與唯讀試算；不得提前實作訂單、運費快照、匯入或其他模組。
 - 依 DEC-060，P4 是跨模組 UI／UX 與操作流程重整，P5 是後續 Inventory and Production；P4 完成前不得開始 P5。
 - P5 階段歸屬不會推翻本文件的第一階段庫存排除，也不會使 P5 草案中的倉庫、批號、負庫存、成本或生產規則自動生效。
+- P4.2 已於 2026-07-31 完成（closure commit `29e68fff4cbd005443c0d228563a81e36ecf403d`），範圍為 authenticated App Shell、navigation、company switcher、user menu、breadcrumb、responsive shell 與 accessibility baseline；下一正式階段為 P4.3，P5 尚未開始。此 UI 工作未變更 Prisma schema、migration、RBAC mapping、session model、transaction、audit、idempotency、formal print 或既有業務規則。
 
 ## 2. 第一階段範圍
 
@@ -294,6 +295,7 @@
 
 ## 17. 變更紀錄
 
+- V0.13（2026-07-31，P4.2 完成同步）：記錄 P4.2 完成範圍與 closure commit、P4.3 為下一正式階段及 P5 尚未開始；全部既有業務、transaction、audit、idempotency 與 formal-print 規則不變。
 - V0.12（2026-07-29，P4.1 規劃同步）：同步 DEC-060 的 P4 UI／UX、P5 Inventory and Production 與 P4 先於 P5 原則；保留第一階段庫存排除及全部既有業務規則。
 - V0.11（2026-07-28，P3.3a 規格閉合）：同步 DEC-058，正式化首次正式列印即出貨、DB immutable PDF、預覽／重印／下載語意、權限、版型、作廢／replacement、audit、冪等、併發、P3.3／P3.4 邊界及 OQ-051 第一版排除；尚未實作 schema 或功能。
 - V0.10（2026-07-27，P3.2d1 工程同步）：完成 Delivery-note API security boundary、strict DTO、idempotency、correlation ID、error mapping 與 serialization；不包含 UI、出貨、列印、回收確認或應收。

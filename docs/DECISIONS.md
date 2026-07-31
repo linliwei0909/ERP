@@ -1,8 +1,8 @@
 # Ragic 本地端系統正式決議
 
 文件性質：本專案最高優先級的業務決議紀錄  
-版本：V0.14
-最後更新：2026-07-29
+版本：V0.15
+最後更新：2026-07-31
 
 ## 1. 使用原則
 
@@ -1166,6 +1166,7 @@
 - UI 可依既有契約調整 layout、route presentation、navigation、shared components、CSS、client interaction、顯示用 DTO、清單 query、pagination、sorting、filtering、使用者用語、accessibility 與 error boundary；server authorization 仍是唯一正式授權邊界，UI 隱藏按鈕不得取代後端驗證。
 - 若 UX 審查發現必須修改 schema、API domain contract、state machine、RBAC、transaction 或其他正式業務規則，必須建立獨立 domain／API 子任務，先新增明確 decision 並取得核准；不得混入純 UI commit 或以顯示需求隱性修改。
 - P4 正式藍圖為 `docs/P4_UI_UX_BLUEPRINT.md`。P4.1 只產出盤點、設計契約、階段與驗收規劃；不開始 P4.2 App Shell、不實作 UI，也不開始 P5。
+- P4.2 已於 2026-07-31 完成，closure commit 為 `29e68fff4cbd005443c0d228563a81e36ecf403d`；完成範圍為 authenticated App Shell、navigation、company switcher、user menu、breadcrumb、responsive shell 與 accessibility baseline。下一正式階段為 P4.3 Design System 與共用元件；P5 尚未開始。P4.2 未變更 Prisma schema、migration、RBAC mapping、session model、transaction、audit、idempotency、formal print 或任何 P5 契約。
 
 ## 3. 尚未定案且應保留於 OPEN_QUESTIONS.md 的事項
 
@@ -1177,6 +1178,7 @@
 
 ## 4. 變更紀錄
 
+- V0.15（2026-07-31，P4.2 完成同步）：記錄 P4.2 closure commit、App Shell 與導覽完成範圍、P4.3 為下一正式階段及 P5 尚未開始；既有 domain、資料庫、安全與列印契約不變。
 - V0.14（2026-07-29）：新增 DEC-060，正式將跨模組 UI／UX 與操作流程重整定為 P4，將庫存／生產藍圖順延並歸屬 P5，原 P4～P8 第一階段後續 roadmap 順延為 P6～P10；保留既有後端契約與第一階段庫存排除，domain change 必須獨立核准。
 - V0.13（2026-07-28）：新增 DEC-059，固定 `delivery-note-snapshot-v1`、Delivery Note scalar discriminator、正式 PDF 四種獨立版本語意，以及 Noto Sans CJK TC Regular 的來源固定、checksum、授權、server-side embedding 與 fail-fast 契約。
 - V0.12（2026-07-28）：完成 P3.3b schema 契約裁定；`delivery_notes` 不新增 `formal_print_version_id` 或循環 FK，唯一正式 PDF 改由 print version 的 `delivery_note_id` unique constraint 保證。本決議只固定 schema 契約，不代表 renderer、首次正式列印／重印 service、API 或 UI 已完成。

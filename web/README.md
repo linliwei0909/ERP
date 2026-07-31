@@ -46,7 +46,7 @@ WORKER_READY_MAX_AGE_SECONDS="60"
 - `erp` 開發資料庫已受控套用至 0003；其他環境仍須先備份、審查並使用 `prisma migrate deploy`。
 - 禁止自行執行 `prisma migrate reset`、drop database、drop schema 或清除 Docker volume。
 
-## 獨立 P1 測試資料庫
+## 獨立 disposable 測試資料庫
 
 啟動不同 container 與 port 的測試 PostgreSQL：
 
@@ -54,14 +54,18 @@ WORKER_READY_MAX_AGE_SECONDS="60"
 docker compose -f compose.p1-test.yaml up -d
 ```
 
-在 PowerShell 設定測試連線後套用正式 migration：
+每次完整 DB suite 都必須先建立一個全新的 database。名稱必須以 `erp_` 開頭、包含 `test` 或 `closeout`，並以八碼日期及唯一識別結尾，例如 `erp_p4_2x_closeout_20260731_01`。不得重用 `erp_p1_test_a` 或任何已有資料的 database。
+
+在同一個 PowerShell process 將兩個連線變數指向該全新 database，再套用正式 migration：
 
 ```powershell
-$env:DATABASE_URL = "postgresql://p1_test:p1_test_only@localhost:55432/erp_p1_test_a"
+$env:DATABASE_URL = "postgresql://p1_test:<test-password>@localhost:55432/erp_p4_2x_closeout_20260731_01?schema=public"
+$env:P1_TEST_DATABASE_URL = $env:DATABASE_URL
 npm run db:deploy
+npm run test:db
 ```
 
-此連線不得改成目前開發資料庫，除非已取得明確的資料庫重建核准。
+DB suite 啟動前會集中驗證 local host、isolated port、dedicated role、disposable database naming、兩個變數的實際目標一致性及 business tables 為空。驗證失敗會停止，不會 skip、reset、drop、truncate 或自動清除資料。
 
 ## 建立初始管理員
 
@@ -129,7 +133,8 @@ npm run prisma:generate
 npm run lint
 npm run typecheck
 npm run test
-$env:P1_TEST_DATABASE_URL = "postgresql://p1_test:p1_test_only@localhost:55432/erp_p1_test_a"
+$env:DATABASE_URL = "postgresql://p1_test:<test-password>@localhost:55432/erp_p4_2x_closeout_20260731_01?schema=public"
+$env:P1_TEST_DATABASE_URL = $env:DATABASE_URL
 npm run test:db
 npm run build
 ```
@@ -137,7 +142,7 @@ npm run build
 Schema 與測試資料庫一致性：
 
 ```powershell
-$env:DATABASE_URL = "postgresql://p1_test:p1_test_only@localhost:55432/erp_p1_test_a"
+$env:DATABASE_URL = "postgresql://p1_test:<test-password>@localhost:55432/erp_p4_2x_closeout_20260731_01?schema=public"
 npx prisma migrate diff `
   --from-config-datasource `
   --to-schema .\prisma\schema.prisma `
