@@ -1,5 +1,7 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
+import { PageHeader } from "@/components/app-shell/page-header";
+import pageStyles from "@/components/app-shell/page-contract.module.css";
+import { Button, Card, EmptyState, Field, Input, LinkButton, Pagination, Section, Select, StatusBadge } from "@/components/ui";
 import { requireAdminWithAudit } from "@/lib/auth/authorization";
 import { getPageRequestContext } from "@/lib/auth/request-context";
 import { listPriceLists } from "@/lib/pricing/service";
@@ -19,32 +21,34 @@ export default async function AdminPricingPage({ searchParams }: {
     data = { context, query, companyId, result };
   } catch { redirect("/"); }
   const { context, query, companyId, result } = data;
+  const pageHref = (page: number) => {
+    const params = new URLSearchParams({ companyId, search: query.search ?? "", status: query.status ?? "ACTIVE", page: String(page) });
+    return `/admin/pricing?${params.toString()}`;
+  };
+
   return (
-    <main className="mx-auto min-h-screen max-w-6xl px-6 py-12">
-      <div className="flex justify-between">
-        <div><p className="text-sm font-semibold text-teal-700">P2.4 管理員功能</p><h1 className="text-3xl font-bold">正式價格管理</h1></div>
-        <Link href="/" className="rounded-lg border px-4 py-2">返回首頁</Link>
-      </div>
-      <form className="mt-8 grid gap-3 rounded-2xl border bg-white p-5 md:grid-cols-4">
-        <select name="companyId" defaultValue={companyId} className="rounded-lg border px-3 py-2">
-          {context.authorizedCompanies.map((company) => <option key={company.id} value={company.id}>{company.code}－{company.name}</option>)}
-        </select>
-        <input name="search" defaultValue={query.search} placeholder="名稱或代碼" className="rounded-lg border px-3 py-2 md:col-span-2" />
-        <select name="status" defaultValue={query.status ?? "ACTIVE"} className="rounded-lg border px-3 py-2">
-          <option value="ACTIVE">有效</option><option value="INACTIVE">停用</option><option value="ALL">全部</option>
-        </select>
-        <button className="rounded-lg bg-slate-900 px-4 py-2 text-white md:col-span-4 md:justify-self-start">查詢</button>
-      </form>
+    <div className={pageStyles.pageStack}>
+      <PageHeader containerVariant="standard" context="管理員功能" title="正式價格管理" description="管理價格表、品項價格版本與客戶價格表指派。" />
+      <Card>
+        <form className={`${pageStyles.filterGrid} ${pageStyles.adminFilters}`}>
+          <Field label="公司"><Select name="companyId" defaultValue={companyId}>{context.authorizedCompanies.map((company) => <option key={company.id} value={company.id}>{company.code}－{company.name}</option>)}</Select></Field>
+          <Field label="搜尋"><Input name="search" defaultValue={query.search} placeholder="名稱或代碼" /></Field>
+          <Field label="狀態"><Select name="status" defaultValue={query.status ?? "ACTIVE"}><option value="ACTIVE">有效</option><option value="INACTIVE">停用</option><option value="ALL">全部</option></Select></Field>
+          <Button type="submit">查詢</Button>
+        </form>
+      </Card>
       <PriceListCreateClient companyId={companyId} />
-      <section className="mt-6 divide-y rounded-2xl border bg-white p-6">
-        {result.items.map((entry) => (
-          <div key={entry.id} className="flex items-center justify-between py-3">
-            <div><p className="font-semibold">{entry.code}－{entry.name}</p><p className="text-sm text-slate-500">{entry.status === "ACTIVE" ? "有效" : "停用"}</p></div>
-            <Link href={`/admin/pricing/${entry.id}?companyId=${companyId}`} className="rounded-lg border px-3 py-2">管理</Link>
-          </div>
-        ))}
-        {result.items.length === 0 ? <p className="py-4 text-slate-500">查無資料。</p> : null}
-      </section>
-    </main>
+      <Card>
+        <Section title="價格表清單" description={`共 ${result.pagination.total} 筆`}>
+          {result.items.length > 0 ? result.items.map((entry) => (
+            <div key={entry.id} className={pageStyles.listRow}>
+              <div><strong>{entry.code}－{entry.name}</strong><div className={pageStyles.tableSubtext}><StatusBadge label={entry.status === "ACTIVE" ? "有效" : "停用"} tone={entry.status === "ACTIVE" ? "success" : "neutral"} /></div></div>
+              <LinkButton href={`/admin/pricing/${entry.id}?companyId=${companyId}`} variant="secondary" size="small">管理</LinkButton>
+            </div>
+          )) : <EmptyState variant={query.search?.trim() ? "no-results" : "no-data"} title={query.search?.trim() ? "查無符合條件的價格表" : "尚無價格表"} />}
+        </Section>
+      </Card>
+      <Pagination currentPage={result.pagination.page} totalPages={result.pagination.totalPages} previousHref={result.pagination.page > 1 ? pageHref(result.pagination.page - 1) : undefined} nextHref={result.pagination.page < result.pagination.totalPages ? pageHref(result.pagination.page + 1) : undefined} label="價格表清單分頁" />
+    </div>
   );
 }

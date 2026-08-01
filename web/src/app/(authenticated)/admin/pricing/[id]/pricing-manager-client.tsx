@@ -1,5 +1,9 @@
 "use client";
+
 import { useState, type FormEvent } from "react";
+import pageStyles from "@/components/app-shell/page-contract.module.css";
+import { Alert, Button, Card, EmptyState, Field, FormActions, Input, Section, Select, StatusBadge } from "@/components/ui";
+import pricingStyles from "../pricing-ui.module.css";
 
 type Option = { id: string; label: string };
 type Version = { id: string; itemId: string; unitPrice: string; validFrom: string; validTo: string | null; status: "ACTIVE" | "INACTIVE"; item: { code: string; name: string } };
@@ -17,57 +21,71 @@ export function PricingManagerClient({ priceList, companyId, items, customers }:
   priceList: ManagedPriceList; companyId: string; items: Option[]; customers: Option[];
 }) {
   const [message, setMessage] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   async function run(action: () => Promise<unknown>) {
+    setBusy(true);
     setMessage(null);
-    try { await action(); window.location.reload(); } catch (error) { setMessage(error instanceof Error ? error.message : "操作失敗"); }
+    try { await action(); window.location.reload(); } catch (error) { setMessage(error instanceof Error ? error.message : "操作失敗"); setBusy(false); }
   }
   return (
-    <div className="mt-6 space-y-6">
-      {message ? <p role="alert" className="rounded-lg bg-red-50 p-3 text-red-700">{message}</p> : null}
-      <form onSubmit={(event: FormEvent<HTMLFormElement>) => { event.preventDefault(); const form = new FormData(event.currentTarget); void run(() => send(`/api/admin/price-lists/${priceList.id}`, "PATCH", { companyId, priceList: { code: form.get("code"), name: form.get("name"), status: form.get("status") } })); }} className="grid gap-3 rounded-2xl border bg-white p-6 md:grid-cols-4">
-        <h2 className="text-xl font-bold md:col-span-4">價格表資料</h2>
-        <input name="code" required defaultValue={priceList.code} className="rounded-lg border px-3 py-2" />
-        <input name="name" required defaultValue={priceList.name} className="rounded-lg border px-3 py-2" />
-        <select name="status" defaultValue={priceList.status} className="rounded-lg border px-3 py-2"><option value="ACTIVE">有效</option><option value="INACTIVE">停用</option></select>
-        <button className="rounded-lg bg-slate-900 px-4 py-2 text-white">儲存</button>
-      </form>
-      <section className="rounded-2xl border bg-white p-6">
-        <h2 className="text-xl font-bold">品項價格版本</h2>
-        <form onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void run(() => send(`/api/admin/price-lists/${priceList.id}/prices`, "POST", { companyId, price: { itemId: form.get("itemId"), unitPrice: form.get("unitPrice"), validFrom: form.get("validFrom"), validTo: form.get("validTo"), status: "ACTIVE" } })); }} className="mt-4 grid gap-3 md:grid-cols-5">
-          <select name="itemId" required className="rounded-lg border px-3 py-2">{items.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select>
-          <input name="unitPrice" required inputMode="decimal" placeholder="未稅單價" className="rounded-lg border px-3 py-2" />
-          <input name="validFrom" type="date" required className="rounded-lg border px-3 py-2" />
-          <input name="validTo" type="date" className="rounded-lg border px-3 py-2" />
-          <button className="rounded-lg bg-slate-900 px-3 py-2 text-white">新增版本</button>
-        </form>
-        <div className="mt-4 space-y-3">{priceList.itemPrices.map((version) => (
-          <form key={version.id} onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void run(() => send(`/api/admin/item-prices/${version.id}`, "PATCH", { companyId, adjustment: { validFrom: form.get("validFrom"), validTo: form.get("validTo"), status: form.get("status") } })); }} className="grid gap-2 rounded-lg border p-3 md:grid-cols-6">
-            <span>{version.item.code}－{version.item.name}<br />{version.unitPrice}</span>
-            <input name="validFrom" type="date" defaultValue={version.validFrom} className="rounded border px-2" />
-            <input name="validTo" type="date" defaultValue={version.validTo ?? ""} className="rounded border px-2" />
-            <select name="status" defaultValue={version.status} className="rounded border px-2"><option value="ACTIVE">有效</option><option value="INACTIVE">停用</option></select>
-            <button className="rounded border px-2 md:col-span-2">調整期間</button>
+    <div className={pageStyles.pageStack}>
+      {message ? <Alert tone="danger" title="操作失敗">{message}</Alert> : null}
+
+      <Card>
+        <Section title="價格表資料" description="維持既有價格表代碼、名稱與有效狀態。">
+          <form onSubmit={(event: FormEvent<HTMLFormElement>) => { event.preventDefault(); const form = new FormData(event.currentTarget); void run(() => send(`/api/admin/price-lists/${priceList.id}`, "PATCH", { companyId, priceList: { code: form.get("code"), name: form.get("name"), status: form.get("status") } })); }} className={pageStyles.formGrid}>
+            <Field label="價格表代碼" required><Input name="code" required defaultValue={priceList.code} /></Field>
+            <Field label="價格表名稱" required><Input name="name" required defaultValue={priceList.name} /></Field>
+            <Field label="狀態"><Select name="status" defaultValue={priceList.status}><option value="ACTIVE">有效</option><option value="INACTIVE">停用</option></Select></Field>
+            <FormActions className={pageStyles.fullSpan} align="start" primary={<Button type="submit" pending={busy} pendingLabel="儲存中…">儲存價格表</Button>} />
           </form>
-        ))}</div>
-      </section>
-      <section className="rounded-2xl border bg-white p-6">
-        <h2 className="text-xl font-bold">客戶價格表指派</h2>
-        <form onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void run(() => send("/api/admin/customer-price-list-assignments", "POST", { companyId, assignment: { customerId: form.get("customerId"), priceListId: priceList.id, validFrom: form.get("validFrom"), validTo: form.get("validTo"), status: "ACTIVE" } })); }} className="mt-4 grid gap-3 md:grid-cols-4">
-          <select name="customerId" required className="rounded-lg border px-3 py-2">{customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.label}</option>)}</select>
-          <input name="validFrom" type="date" required className="rounded-lg border px-3 py-2" />
-          <input name="validTo" type="date" className="rounded-lg border px-3 py-2" />
-          <button className="rounded-lg bg-slate-900 px-3 py-2 text-white">新增指派</button>
-        </form>
-        <div className="mt-4 space-y-3">{priceList.assignments.map((assignment) => (
-          <form key={assignment.id} onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void run(() => send(`/api/admin/customer-price-list-assignments/${assignment.id}`, "PATCH", { companyId, adjustment: { validFrom: form.get("validFrom"), validTo: form.get("validTo"), status: form.get("status") } })); }} className="grid gap-2 rounded-lg border p-3 md:grid-cols-5">
-            <span>{assignment.customer.name}</span>
-            <input name="validFrom" type="date" defaultValue={assignment.validFrom} className="rounded border px-2" />
-            <input name="validTo" type="date" defaultValue={assignment.validTo ?? ""} className="rounded border px-2" />
-            <select name="status" defaultValue={assignment.status} className="rounded border px-2"><option value="ACTIVE">有效</option><option value="INACTIVE">停用</option></select>
-            <button className="rounded border px-2">調整期間</button>
+        </Section>
+      </Card>
+
+      <Card>
+        <Section title="品項價格版本" description="有效期間與重疊限制由既有 pricing domain 規則驗證。">
+          <form onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void run(() => send(`/api/admin/price-lists/${priceList.id}/prices`, "POST", { companyId, price: { itemId: form.get("itemId"), unitPrice: form.get("unitPrice"), validFrom: form.get("validFrom"), validTo: form.get("validTo"), status: "ACTIVE" } })); }} className={pricingStyles.createGrid}>
+            <Field label="品項" required><Select name="itemId" required>{items.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</Select></Field>
+            <Field label="未稅單價" required><Input name="unitPrice" required inputMode="decimal" /></Field>
+            <Field label="生效日" required><Input name="validFrom" type="date" required /></Field>
+            <Field label="結束日"><Input name="validTo" type="date" /></Field>
+            <FormActions className={pageStyles.fullSpan} align="start" primary={<Button type="submit" pending={busy} pendingLabel="新增中…">新增版本</Button>} />
           </form>
-        ))}</div>
-      </section>
+          <div className={pricingStyles.recordStack}>
+            {priceList.itemPrices.length > 0 ? priceList.itemPrices.map((version) => (
+              <form key={version.id} onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void run(() => send(`/api/admin/item-prices/${version.id}`, "PATCH", { companyId, adjustment: { validFrom: form.get("validFrom"), validTo: form.get("validTo"), status: form.get("status") } })); }} className={pricingStyles.recordGrid}>
+                <div className={pricingStyles.recordSummary}><strong>{version.item.code}－{version.item.name}</strong><span>{version.unitPrice}</span><StatusBadge label={version.status === "ACTIVE" ? "有效" : "停用"} tone={version.status === "ACTIVE" ? "success" : "neutral"} /></div>
+                <Field label="生效日"><Input name="validFrom" type="date" defaultValue={version.validFrom} /></Field>
+                <Field label="結束日"><Input name="validTo" type="date" defaultValue={version.validTo ?? ""} /></Field>
+                <Field label="狀態"><Select name="status" defaultValue={version.status}><option value="ACTIVE">有效</option><option value="INACTIVE">停用</option></Select></Field>
+                <FormActions className={pageStyles.fullSpan} align="start" primary={<Button type="submit" variant="secondary" pending={busy} pendingLabel="調整中…">調整期間</Button>} />
+              </form>
+            )) : <EmptyState variant="no-data" title="尚無品項價格版本" />}
+          </div>
+        </Section>
+      </Card>
+
+      <Card>
+        <Section title="客戶價格表指派" description="指派期間與重疊限制由既有 pricing domain 規則驗證。">
+          <form onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void run(() => send("/api/admin/customer-price-list-assignments", "POST", { companyId, assignment: { customerId: form.get("customerId"), priceListId: priceList.id, validFrom: form.get("validFrom"), validTo: form.get("validTo"), status: "ACTIVE" } })); }} className={pricingStyles.assignmentGrid}>
+            <Field label="客戶" required><Select name="customerId" required>{customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.label}</option>)}</Select></Field>
+            <Field label="生效日" required><Input name="validFrom" type="date" required /></Field>
+            <Field label="結束日"><Input name="validTo" type="date" /></Field>
+            <FormActions className={pageStyles.fullSpan} align="start" primary={<Button type="submit" pending={busy} pendingLabel="新增中…">新增指派</Button>} />
+          </form>
+          <div className={pricingStyles.recordStack}>
+            {priceList.assignments.length > 0 ? priceList.assignments.map((assignment) => (
+              <form key={assignment.id} onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); void run(() => send(`/api/admin/customer-price-list-assignments/${assignment.id}`, "PATCH", { companyId, adjustment: { validFrom: form.get("validFrom"), validTo: form.get("validTo"), status: form.get("status") } })); }} className={pricingStyles.recordGrid}>
+                <div className={pricingStyles.recordSummary}><strong>{assignment.customer.name}</strong><StatusBadge label={assignment.status === "ACTIVE" ? "有效" : "停用"} tone={assignment.status === "ACTIVE" ? "success" : "neutral"} /></div>
+                <Field label="生效日"><Input name="validFrom" type="date" defaultValue={assignment.validFrom} /></Field>
+                <Field label="結束日"><Input name="validTo" type="date" defaultValue={assignment.validTo ?? ""} /></Field>
+                <Field label="狀態"><Select name="status" defaultValue={assignment.status}><option value="ACTIVE">有效</option><option value="INACTIVE">停用</option></Select></Field>
+                <FormActions className={pageStyles.fullSpan} align="start" primary={<Button type="submit" variant="secondary" pending={busy} pendingLabel="調整中…">調整期間</Button>} />
+              </form>
+            )) : <EmptyState variant="no-data" title="尚無客戶價格表指派" />}
+          </div>
+        </Section>
+      </Card>
     </div>
   );
 }
