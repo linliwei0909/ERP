@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { NextRequest } from "next/server";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { PrismaClient } from "../../src/generated/prisma/client";
 import {
   GET as getDeliveryNoteRoute,
@@ -50,6 +50,7 @@ import {
 
 const databaseUrl = process.env.P1_TEST_DATABASE_URL;
 const describeDatabase = databaseUrl ? describe.sequential : describe.skip;
+const FIXED_DELIVERY_NOTE_NOW = new Date("2026-07-14T16:30:00.000Z");
 
 describeDatabase("P3.2b/P3.2c delivery-note workflows", () => {
   const db = new PrismaClient({
@@ -73,6 +74,10 @@ describeDatabase("P3.2b/P3.2c delivery-note workflows", () => {
   let documentCodeB: string;
   let adminSessionToken: string;
   let orderEntrySessionToken: string;
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
   beforeAll(async () => {
     [companyA, companyB] = await Promise.all([
@@ -683,6 +688,9 @@ describeDatabase("P3.2b/P3.2c delivery-note workflows", () => {
   });
 
   it("isolates company sequences and uses company code settings", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(FIXED_DELIVERY_NOTE_NOW);
+
     const [orderA, orderB] = await Promise.all([
       createConfirmedOrder(companyA),
       createConfirmedOrder(companyB),
@@ -704,11 +712,13 @@ describeDatabase("P3.2b/P3.2c delivery-note workflows", () => {
       }),
     ]);
     expect(noteA.deliveryNote.deliveryNoteNumber).toMatch(
-      new RegExp(`^DN-${documentCodeA}-202607-`),
+      new RegExp(`^DN-${documentCodeA}-202607-\\d{6}$`),
     );
     expect(noteB.deliveryNote.deliveryNoteNumber).toMatch(
-      new RegExp(`^DN-${documentCodeB}-202607-`),
+      new RegExp(`^DN-${documentCodeB}-202607-\\d{6}$`),
     );
+    expect(noteA.deliveryNote.deliveryNoteDate).toBe("2026-07-15");
+    expect(noteB.deliveryNote.deliveryNoteDate).toBe("2026-07-15");
     const sequences = await db.documentSequence.findMany({
       where: {
         companyId: { in: [companyA.id, companyB.id] },
@@ -1582,6 +1592,9 @@ describeDatabase("P3.2b/P3.2c delivery-note workflows", () => {
   });
 
   it("exposes create, replay, current, detail and list through the real API boundary", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(FIXED_DELIVERY_NOTE_NOW);
+
     const order = await createConfirmedOrder(companyA);
     const idempotencyKey = randomUUID();
     const requestId = `api-create-${randomUUID()}`;
@@ -1636,9 +1649,7 @@ describeDatabase("P3.2b/P3.2c delivery-note workflows", () => {
     expect(createBody.deliveryNote.deliveryNoteNumber).toMatch(
       new RegExp(`^DN-${documentCodeA}-202607-\\d{6}$`),
     );
-    expect(createBody.deliveryNote.deliveryNoteDate).toMatch(
-      /^\d{4}-\d{2}-\d{2}$/,
-    );
+    expect(createBody.deliveryNote.deliveryNoteDate).toBe("2026-07-15");
     expect(createBody.deliveryNote.lines[0]).toMatchObject({
       quantity: "1.0000",
       unitPrice: "10.00000",
