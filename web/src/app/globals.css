@@ -2,18 +2,53 @@
 
 :root {
   color-scheme: light;
-  --background: #f8fafc;
-  --foreground: #0f172a;
+  --color-page-background: #f8fafc;
+  --color-surface: #ffffff;
+  --color-surface-subtle: #f1f5f9;
+  --color-surface-muted: #e2e8f0;
+  --color-text: #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-muted: #64748b;
+  --color-text-inverse: #ffffff;
+  --color-border: #dbe3ea;
+  --color-border-strong: #94a3b8;
+  --color-primary: #0f766e;
+  --color-primary-hover: #115e59;
+  --color-primary-active: #134e4a;
+  --color-primary-subtle: #f0fdfa;
+  --color-danger: #b91c1c;
+  --color-danger-hover: #991b1b;
+  --color-danger-subtle: #fef2f2;
+  --color-success: #047857;
+  --color-success-subtle: #ecfdf5;
+  --color-warning: #b45309;
+  --color-warning-subtle: #fffbeb;
+  --color-info: #0369a1;
+  --color-info-subtle: #f0f9ff;
+  --color-focus: #0f766e;
+  --color-overlay: rgb(15 23 42 / 55%);
+  --radius-control: 4px;
+  --radius-card: 3px;
+  --radius-dialog: 4px;
+  --duration-fast: 120ms;
+  --duration-normal: 180ms;
+  --duration-slow: 1440ms;
+  --easing-standard: ease-out;
+  --font-ui: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "Microsoft JhengHei", sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --background: var(--color-page-background);
+  --foreground: var(--color-text);
   --shell-sidebar-width: 264px;
   --shell-header-height: 64px;
   --shell-desktop-breakpoint: 1024px;
   --shell-content-max-width: 1280px;
   --shell-form-max-width: 960px;
-  --shell-focus: #0f766e;
-  --shell-border: #dbe3ea;
-  --shell-muted: #64748b;
-  --shell-surface: #ffffff;
-  --shell-sidebar: #0f172a;
+  --shell-focus: var(--color-focus);
+  --shell-border: var(--color-border);
+  --shell-muted: var(--color-text-muted);
+  --shell-surface: var(--color-surface);
+  --shell-sidebar: var(--color-text);
 }
 
 * {
@@ -24,10 +59,12 @@ body {
   margin: 0;
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-ui);
 }
 
 button,
+input,
+textarea,
 select,
 a {
   font: inherit;
@@ -35,10 +72,14 @@ a {
 
 a:focus-visible,
 button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
 select:focus-visible,
-[tabindex]:focus-visible {
-  outline: 3px solid var(--shell-focus);
-  outline-offset: 3px;
+input[type="checkbox"]:focus-visible,
+input[type="radio"]:focus-visible,
+[tabindex]:not([aria-disabled="true"]):focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
 }
 
 .sr-only {
@@ -208,7 +249,7 @@ select:focus-visible,
 .shell-company-switcher select,
 .shell-company-switcher button,
 .shell-user-menu > button {
-  min-height: 40px;
+  min-height: 44px;
   border: 1px solid var(--shell-border);
   border-radius: 9px;
   background: white;
@@ -297,16 +338,40 @@ select:focus-visible,
 
 .shell-page-container {
   width: 100%;
-  max-width: var(--shell-content-max-width);
   margin: 0 auto;
 }
 
+.shell-page-container-standard {
+  max-width: var(--shell-form-max-width);
+}
+
 .shell-page-container-wide {
+  max-width: var(--shell-content-max-width);
+}
+
+.shell-page-container-full {
   max-width: none;
 }
 
-.shell-page-container-narrow {
+.shell-main-content:has(
+    .shell-page-header[data-page-container-variant="standard"]
+  )
+  :is(.shell-breadcrumb, .shell-page-container) {
   max-width: var(--shell-form-max-width);
+}
+
+.shell-main-content:has(
+    .shell-page-header[data-page-container-variant="wide"]
+  )
+  :is(.shell-breadcrumb, .shell-page-container) {
+  max-width: var(--shell-content-max-width);
+}
+
+.shell-main-content:has(
+    .shell-page-header[data-page-container-variant="full"]
+  )
+  :is(.shell-breadcrumb, .shell-page-container) {
+  max-width: none;
 }
 
 .shell-page-container > main {
@@ -359,6 +424,13 @@ select:focus-visible,
   margin: 0;
   font-size: clamp(1.6rem, 3vw, 2rem);
   line-height: 1.2;
+}
+
+.shell-page-heading .shell-page-eyebrow {
+  margin: 0 0 6px;
+  color: var(--color-primary);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .shell-page-heading > p {

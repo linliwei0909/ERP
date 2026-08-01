@@ -1,5 +1,18 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
+import { PageHeader } from "@/components/app-shell/page-header";
+import pageStyles from "@/components/app-shell/page-contract.module.css";
+import {
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Input,
+  LinkButton,
+  Pagination,
+  Section,
+  Select,
+  StatusBadge,
+} from "@/components/ui";
 import { requireAdminWithAudit } from "@/lib/auth/authorization";
 import { getPageRequestContext } from "@/lib/auth/request-context";
 import { listItems } from "@/lib/items/service";
@@ -52,127 +65,89 @@ export default async function AdminItemsPage({
   };
 
   return (
-    <main className="mx-auto min-h-screen max-w-6xl px-6 py-12">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-semibold text-teal-700">P2.3 管理員功能</p>
-          <h1 className="text-3xl font-bold">品項主檔管理</h1>
-        </div>
-        <Link href="/" className="rounded-lg border px-4 py-2">
-          返回首頁
-        </Link>
-      </div>
+    <main className={pageStyles.pageStack}>
+      <PageHeader
+        containerVariant="standard"
+        context="管理員功能"
+        title="品項主檔管理"
+        description="管理品項基本資料與公司品項設定。"
+      />
 
-      <form className="mt-8 grid gap-3 rounded-2xl border bg-white p-5 md:grid-cols-5">
-        <select
-          name="companyId"
-          defaultValue={companyId}
-          className="rounded-lg border px-3 py-2"
-        >
-          {context.authorizedCompanies.map((company) => (
-            <option key={company.id} value={company.id}>
-              {company.code}－{company.name}
-            </option>
-          ))}
-        </select>
-        <input
-          name="search"
-          defaultValue={query.search}
-          placeholder="名稱、代碼或條碼"
-          className="rounded-lg border px-3 py-2 md:col-span-2"
-        />
-        <select
-          name="itemType"
-          defaultValue={query.itemType ?? "ALL"}
-          className="rounded-lg border px-3 py-2"
-        >
-          <option value="ALL">全部類型</option>
-          <option value="PRODUCT">產品</option>
-          <option value="RAW_MATERIAL">原物料</option>
-        </select>
-        <select
-          name="status"
-          defaultValue={query.status ?? "ACTIVE"}
-          className="rounded-lg border px-3 py-2"
-        >
-          <option value="ACTIVE">有效</option>
-          <option value="INACTIVE">停用</option>
-          <option value="ALL">全部</option>
-        </select>
-        <button className="rounded-lg bg-slate-900 px-4 py-2 text-white md:col-span-5 md:justify-self-start">
-          搜尋
-        </button>
-      </form>
+      <Card>
+        <form className={`${pageStyles.filterGrid} ${pageStyles.adminFilters}`}>
+          <Field label="公司">
+            <Select name="companyId" defaultValue={companyId}>
+              {context.authorizedCompanies.map((company) => (
+                <option key={company.id} value={company.id}>
+                  {company.code}－{company.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="搜尋">
+            <Input name="search" defaultValue={query.search} placeholder="名稱、代碼或條碼" />
+          </Field>
+          <Field label="品項類型">
+            <Select name="itemType" defaultValue={query.itemType ?? "ALL"}>
+              <option value="ALL">全部類型</option>
+              <option value="PRODUCT">產品</option>
+              <option value="RAW_MATERIAL">原物料</option>
+            </Select>
+          </Field>
+          <Field label="狀態">
+            <Select name="status" defaultValue={query.status ?? "ACTIVE"}>
+              <option value="ACTIVE">有效</option>
+              <option value="INACTIVE">停用</option>
+              <option value="ALL">全部</option>
+            </Select>
+          </Field>
+          <Button type="submit">搜尋</Button>
+        </form>
+      </Card>
 
       <ItemCreateClient selectedCompanyId={companyId} />
 
-      <section className="mt-6 rounded-2xl border bg-white p-6">
-        <h2 className="text-xl font-bold">品項清單</h2>
-        <div className="mt-4 divide-y">
+      <Section title="品項清單" description={`共 ${result.pagination.total} 筆`}>
+        <div>
           {result.items.map((item) => (
             <div
               key={item.id}
-              className="flex items-center justify-between py-3"
+              className={pageStyles.listRow}
             >
               <div>
-                <div className="font-semibold">
+                <div>
                   {item.companyRelations[0]?.companyItemCode}－{item.name}
                 </div>
-                <div className="text-sm text-slate-500">
-                  {item.code}／
-                  {item.itemType === "PRODUCT" ? "產品" : "原物料"}／
-                  {item.status === "ACTIVE" ? "有效" : "停用"}
+                <div className={pageStyles.tableSubtext}>
+                  {item.code}／{item.itemType === "PRODUCT" ? "產品" : "原物料"}　
+                  <StatusBadge
+                    label={item.status === "ACTIVE" ? "有效" : "停用"}
+                    tone={item.status === "ACTIVE" ? "success" : "neutral"}
+                  />
                 </div>
               </div>
-              <Link
-                className="rounded-lg border px-3 py-2 text-sm"
+              <LinkButton
                 href={`/admin/items/${item.id}?companyId=${companyId}`}
+                variant="secondary"
+                size="small"
               >
                 管理
-              </Link>
+              </LinkButton>
             </div>
           ))}
           {result.items.length === 0 ? (
-            <p className="py-4 text-sm text-slate-500">查無資料。</p>
+            <EmptyState variant="no-results" title="查無品項" description="請調整篩選條件後再試一次。" />
           ) : null}
         </div>
-      </section>
+      </Section>
 
-      <nav className="mt-5 flex items-center justify-between text-sm">
-        <Link
-          aria-disabled={result.pagination.page <= 1}
-          className={
-            result.pagination.page <= 1
-              ? "pointer-events-none text-slate-300"
-              : "underline"
-          }
-          href={pageHref(Math.max(1, result.pagination.page - 1))}
-        >
-          上一頁
-        </Link>
-        <span>
-          第 {result.pagination.page} / {result.pagination.totalPages} 頁，共{" "}
-          {result.pagination.total} 筆
-        </span>
-        <Link
-          aria-disabled={
-            result.pagination.page >= result.pagination.totalPages
-          }
-          className={
-            result.pagination.page >= result.pagination.totalPages
-              ? "pointer-events-none text-slate-300"
-              : "underline"
-          }
-          href={pageHref(
-            Math.min(
-              result.pagination.totalPages,
-              result.pagination.page + 1,
-            ),
-          )}
-        >
-          下一頁
-        </Link>
-      </nav>
+      <Pagination
+        currentPage={result.pagination.page}
+        totalPages={result.pagination.totalPages}
+        previousHref={result.pagination.page > 1 ? pageHref(result.pagination.page - 1) : undefined}
+        nextHref={result.pagination.page < result.pagination.totalPages ? pageHref(result.pagination.page + 1) : undefined}
+        label="品項清單分頁"
+      />
     </main>
   );
 }

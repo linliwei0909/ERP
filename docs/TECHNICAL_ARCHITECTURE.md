@@ -1,14 +1,14 @@
 # Ragic 本地端系統技術架構
 
-文件狀態：P1～P3.3 已完成正式結案；P4.1、P4.2 已完成；下一正式階段為 P4.3；P5 尚未開始
-同步基線：`DECISIONS.md` V0.15（含 DEC-060 與 P4.2 完成同步）
-版本日期：2026-07-31
+文件狀態：P1～P3.3 已完成正式結案；P4.1、P4.2、P4.3 已完成；下一階段 P4.4；P5 尚未開始
+同步基線：`DECISIONS.md` V0.16（含 DEC-060、DEC-061 與 P4.3 規格治理同步）
+版本日期：2026-08-01
 
 ## 1. 規格依據與範圍
 
 本架構依下列優先順序設計：
 
-1. `DECISIONS.md` V0.14。
+1. `DECISIONS.md` V0.16。
 2. `business-rules.md`。
 3. `DATABASE_DESIGN.md`。
 4. `TECHNICAL_ARCHITECTURE.md`。
@@ -17,7 +17,7 @@
 7. `OPEN_QUESTIONS.md`。
 8. 其他舊文件。
 
-第一階段固定為 Ragic 本地端重建，不採 ERP MVP 的庫存、批號、分批出貨、出庫依賴或正式會計過帳。`OPEN_QUESTIONS.md` 只保留 OQ-005、OQ-044、OQ-045；OQ-046～OQ-050 已由 DEC-057 決議，OQ-051 已由 DEC-058 完成 P3.3 第一版裁定。第一階段以「銷貨單已回收」的人工確認作為建立應收條件，不實作正式電子簽收。
+第一階段固定為 Ragic 本地端重建，不採 ERP MVP 的庫存、批號、分批出貨、出庫依賴或正式會計過帳。`OPEN_QUESTIONS.md` 保留 OQ-005、OQ-044、OQ-045，以及部分未決的 OQ-053、OQ-054；OQ-052 已由 DEC-061 關閉。OQ-053 只保留 company-context route 遷移細節，OQ-054 只保留完整 route 順序與 legacy layout 例外。OQ-046～OQ-050 已由 DEC-057 決議，OQ-051 已由 DEC-058 完成 P3.3 第一版裁定。
 
 ## 2. 第一階段模組
 
@@ -91,7 +91,25 @@ flowchart LR
 - P4 保留 schema、migration、state machine、RBAC、company scope、transaction、locking、audit、idempotency、formal-print、reprint、immutable snapshot、pricing 與 freight 契約。
 - 真正 domain change 必須依 DEC-060 另立 decision 與獨立任務。
 
-P4.2 已於 2026-07-31 完成，closure commit 為 `29e68fff4cbd005443c0d228563a81e36ecf403d`。已落地 authenticated App Shell、navigation、company switcher、user menu、breadcrumb、responsive shell 與 accessibility baseline；下一正式階段為 P4.3 Design System 與共用元件。P4.2 未變更 Prisma schema、migration、RBAC mapping、session model、transaction、audit、idempotency、formal print 或 P5，且 P5 尚未開始。
+P4.2 已於 2026-07-31 完成，closure commit 為 `29e68fff4cbd005443c0d228563a81e36ecf403d`。已落地 authenticated App Shell、navigation、company switcher、user menu、breadcrumb、responsive shell 與 accessibility baseline；後續 P4.3a 亦已於 2026-08-01 完成。P4.2 未變更 Prisma schema、migration、RBAC mapping、session model、transaction、audit、idempotency、formal print 或 P5，且 P5 尚未開始。
+
+P4.3 以 `docs/P4_3_DESIGN_SYSTEM_SPEC.md` 為正式 presentation 規格，V4 為唯一核准視覺基準。P4.3a 僅建立 semantic tokens、Button、LinkButton、IconButton、Input、Textarea、Select、Checkbox、最小 repository-native SVG icon contract、必要測試與 implementation validation；不建立 Field、feedback、data display、Dialog 或代表頁整合。無互動 primitive 預設 server-safe，不得迫使既有 Server Component client 化；每一 P4.3 切片都自行完成 lint、typecheck、unit tests、production build 與 validation。
+
+P4.3a 已依上述邊界落地。全域 `globals.css` 只承載 semantic tokens、system UI／mono font 與跨元件 focus baseline，並保留既有 `--shell-*` 映射；`web/src/components/ui/` 以單一 CSS Module 與小型 class composition helper 實作 context-neutral primitives，所有元件維持無 `"use client"` 的 server-safe 預設。互動測試沿用 Vitest，僅在 P4.3a 測試檔啟用 jsdom，搭配 React Testing Library 驗證原生事件與 accessibility contract；未新增 runtime dependency 或大型 icon／form 套件。
+
+P4.3b 沿用同一目錄、CSS Module、semantic tokens 與 per-file jsdom 策略。Field 以 React `useId`／`cloneElement` 保留或產生 control ID，串接 label、required、description、error 與 ARIA；ErrorSummary 保持 server-safe、只提供 `tabIndex=-1` focus target，自動 focus 留給使用端。Alert、EmptyState、LoadingState、Skeleton 都是 context-neutral presentation primitives；Skeleton／loading pulse 使用 slow motion token 並在 reduced-motion 停止。P4.3b 沒有 `"use client"` 元件、client wrapper、新 dependency 或 production route integration。
+
+P4.3c 的 Card、Section、Table primitives、Pagination、StatusBadge 與 DescriptionList 延續 server-safe composition；Table 使用原生 table tags，`TableContainer` 以 inline-size containment 將橫向捲動限制在資料區，不建立 DataTable、query、sorting、filtering 或 selection engine。Pagination 只接受使用端已清理的 previous／next href；StatusBadge 只接受 semantic tone；DescriptionList 保留 dl／dt／dd。
+
+Dialog／ConfirmDialog 是 P4.3c 唯一 client primitives。Dialog 以 SSR-safe portal 包裝原生 `<dialog>`／`showModal()`，以 controlled `open`／`onOpenChange` 管理 accessible title／description、explicit initial focus、Tab containment、Escape／native cancel、預設 backdrop dismiss、focus return、pending／non-dismissible 與 reduced-motion。ConfirmDialog 只組合 Dialog，取消在左並預設聚焦；pending 時 close／cancel／confirm 皆 disabled 且阻擋 dismiss。Dialog 與 MobileNavDrawer 共用 `acquireBodyScrollLock()` reference count，避免多 owner 提前恢復 body scroll；未建立 global modal provider或新增 dependency。
+
+P4.3d 將 PageContainer 正式化為 standard（960px）／wide（1280px）／full（無 max-width），legacy default／narrow 分別映射至 wide／standard。App Shell 仍只輸出一個 PageContainer；代表頁以 server-safe PageHeader data contract 宣告 variant，CSS `:has()` 同步該 container 與 Breadcrumb 寬度，不建立 pathname client registry或巢狀 layout wrapper。PageHeader 支援 context、actions、metadata 並保留唯一 h1、無 main；P4.2 legacy action slots仍可相容。
+
+Home、Customers list、Admin Item create/list、Delivery Notes list 四組 production representative只替換 presentation composition。頁面的 database query、authorization、pagination schema、field name、fetch payload、redirect、href 與 domain mapping保持原位；只有既有 ItemCreateClient 維持其原本 client mutation boundary，其餘新 page contract與組合元件皆 server-safe。Customers／Admin Items 的 local company selector暫時保留，未新增未來 `SYSTEM_ADMIN` 管理 scope或改動 session。
+
+P4.3e已完成Design System總體closure：26個UI TypeScript source／56條relative import edge無cycle，只有Dialog／ConfirmDialog為client primitives；全新0001～0012 disposable schema下四組representative routes正常，Delivery Notes不再因缺少`snapshot_version`失敗；desktop／360px、overlay／focus／reduced-motion、lint、typecheck、302 tests及37-unit production build均通過。P4.3完成不代表全部ERP route已遷移；P4.4～P4.7仍依既定模組邊界執行。
+
+依 DEC-061，未來 presentation 與資訊架構區分 `SYSTEM_ADMIN` 平台／跨公司治理及 `COMPANY_ADMIN` 授權公司治理；一般業務頁只使用 active company，跨公司管理必須明確標示「管理公司」。這是未來 authorization contract，不代表現有後端已實作新 role code；現有 `ADMIN`／`ORDER_ENTRY`、RBAC、session、schema 與 authorization enforcement 保持不變，後端遷移另案審查。
 
 P5 Inventory and Production 仍是後續擴充，文件為 `docs/P5_INVENTORY_PRODUCTION_BLUEPRINT.md`。P4 不預先建立 P5 schema、API、route 或 UI；P5 開始前需重新完成 domain review。
 
@@ -294,6 +312,12 @@ P3.2a 已完成 Prisma schema、`0010_p3_delivery_notes`、custom SQL、fresh DB
 
 ## 20. 變更紀錄
 
+- V0.21（2026-08-01，P4.3e closure）：記錄component inventory、V4 tokens、Server／Client boundary、Page contract與adoption matrix重驗，正確0001～0012 disposable schema route smoke、desktop／360px／Dialog／reduced-motion及完整quality gates通過；修正User Menu 44px觸控高度。P4.4～P4.7、schema、migration、RBAC、session、domain、formal print與P5未開始或未變更。
+- V0.20（2026-08-01，P4.3d 工程同步）：記錄 PageContainer formal／legacy variant、PageHeader API、App Shell 單一 container寬度協調與四組代表頁 presentation integration完成；未修改 query、mutation、authorization、session、schema、formal print、dependency或 P5。
+- V0.19（2026-08-01，P4.3c 工程同步）：記錄 server-safe Card／Section／native data display primitives、native Dialog／ConfirmDialog client boundary、portal／focus／pending／reduced-motion contract及與 Drawer 共用的 reference-counted body scroll lock完成；未建立 DataTable engine、業務頁整合、新 dependency、後端、資料庫或 P5。
+- V0.18（2026-08-01，P4.3b 工程同步）：記錄 Form／Feedback server-safe primitives、Field ARIA composition、ErrorSummary focus responsibility、Alert live-region matrix、有限 Empty／Loading／Skeleton contract、feedback SVG icons 與完整驗證完成；未變更業務頁、App Shell、後端、資料庫或 P5。
+- V0.17（2026-08-01，P4.3a 工程同步）：記錄 semantic tokens、system font、單一 CSS Module、server-safe primitives、repository-native SVG icons 與 per-file jsdom DOM tests 完成；未變更 App Shell、業務 route、schema、migration、RBAC、session、domain 或 P5。
+- V0.16（2026-08-01，P4.3 規格治理）：同步 DEC-061、V4、P4.3a server-safe primitive 邊界、每切片品質 gate、未來雙層管理 presentation contract，以及 OQ-052 關閉與 OQ-053／054 部分未決狀態；未修改 production architecture。
 - V0.15（2026-07-31，P4.2 完成同步）：記錄 P4.2 closure commit、authenticated App Shell 與導覽架構完成；P4.3 為下一正式階段，P5 尚未開始，既有 domain、schema、security、transaction 與 formal-print 契約不變。
 - V0.14（2026-07-29，P4.1 UI／UX 規劃）：同步 DEC-060，新增 P4 presentation architecture、後端契約保留與 domain change 升級邊界；庫存／生產歸屬 P5，Ragic 切換順延為 P10；未修改 production architecture 或程式。
 - V0.13（2026-07-28，P3.3e lock-order 補正）：依 DEC-058 將首次正式列印與補印統一為 `idempotency → Sales Order → Delivery Note`，以 company-scoped 唯讀 relation lookup 配合鎖後 company／relation／status 重驗證，並完成 deadlock、fresh DB、schema diff 與完整 regression；未修改 schema、migration、API、UI 或 renderer。

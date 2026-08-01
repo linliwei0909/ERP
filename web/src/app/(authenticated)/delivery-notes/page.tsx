@@ -1,4 +1,7 @@
 import { redirect } from "next/navigation";
+import { PageHeader } from "@/components/app-shell/page-header";
+import pageStyles from "@/components/app-shell/page-contract.module.css";
+import { Alert } from "@/components/ui";
 import { AuthorizationError, requirePermission } from "@/lib/auth/authorization";
 import { getPageRequestContext } from "@/lib/auth/request-context";
 import { SessionAuthenticationError } from "@/lib/auth/session";
@@ -50,13 +53,11 @@ export default async function DeliveryNotesPage({
 
   if (!parsed.success) {
     return (
-      <main className="mx-auto min-h-screen max-w-7xl px-6 py-12">
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-8">
-          <h1 className="text-xl font-bold text-rose-900">篩選條件不正確</h1>
-          <p className="mt-2 text-sm text-rose-800">
+      <main className={pageStyles.pageStack}>
+        <PageHeader containerVariant="wide" context="銷貨作業" title="銷貨單清單" />
+        <Alert tone="danger" title="篩選條件不正確">
             請確認日期範圍、狀態及頁碼後重新查詢。
-          </p>
-        </div>
+        </Alert>
       </main>
     );
   }
@@ -113,21 +114,17 @@ export default async function DeliveryNotesPage({
 
   if (!viewData) {
     return (
-      <main className="mx-auto min-h-screen max-w-7xl px-6 py-12">
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-8">
-          <h1 className="text-xl font-bold text-rose-900">
-            銷貨單清單載入失敗
-          </h1>
-          <p className="mt-2 text-sm text-rose-800">
+      <main className={pageStyles.pageStack}>
+        <PageHeader containerVariant="wide" context="銷貨作業" title="銷貨單清單" />
+        <Alert tone="danger" title="銷貨單清單載入失敗">
             請稍後重新整理頁面；若問題持續，請聯絡系統管理員。
-          </p>
-        </div>
+        </Alert>
       </main>
     );
   }
 
   return (
-    <main className="mx-auto min-h-screen max-w-7xl px-6 py-12">
+    <main className={pageStyles.pageStack}>
       <DeliveryNoteListView
         company={context.selectedCompany}
         items={viewData.items}

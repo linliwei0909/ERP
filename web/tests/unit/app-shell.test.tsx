@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { CompanySwitcher } from "../../src/components/app-shell/company-switcher";
 import { PageHeader } from "../../src/components/app-shell/page-header";
+import { PageContainer } from "../../src/components/app-shell/page-container";
 import {
   NoCompanyState,
   NotFoundState,
@@ -180,6 +181,43 @@ describe("P4.2 shell context and presentation", () => {
     expect(renderToStaticMarkup(<NotFoundState />)).toContain("404");
   });
 
+  it("renders the formal P4.3d page width and header contracts server-side", () => {
+    const widths = renderToStaticMarkup(
+      <>
+        <PageContainer variant="standard">標準</PageContainer>
+        <PageContainer variant="wide">寬版</PageContainer>
+        <PageContainer variant="full">全寬</PageContainer>
+        <PageContainer variant="default">相容寬版</PageContainer>
+        <PageContainer variant="narrow">相容標準</PageContainer>
+      </>,
+    );
+    expect(widths).toContain('data-variant="standard"');
+    expect(widths).toContain('data-variant="wide"');
+    expect(widths).toContain('data-variant="full"');
+    expect(widths).toContain('data-legacy-variant="default"');
+    expect(widths).toContain('data-legacy-variant="narrow"');
+
+    const header = renderToStaticMarkup(
+      <PageHeader
+        containerVariant="wide"
+        context="管理員功能"
+        title="代表頁面"
+        description="頁面說明"
+        metadata={[{ label: "目前公司", value: "A－甲公司" }]}
+        actions={<button>主要操作</button>}
+      />,
+    );
+    expect(header.match(/<h1/g)).toHaveLength(1);
+    expect(header).toContain("管理員功能");
+    expect(header).toContain("目前公司");
+    expect(header).toContain("主要操作");
+    expect(header).not.toContain("<main");
+
+    expect(source("src/app/globals.css")).toMatch(
+      /\.shell-user-menu > button \{[\s\S]*?min-height: 44px;/,
+    );
+  });
+
   it("gives authenticated error and not-found routes one main landmark", () => {
     for (const path of [
       "src/app/(authenticated)/error.tsx",
@@ -239,7 +277,9 @@ describe("P4.2 breadcrumb and route integration", () => {
     expect(drawer).toContain('event.key !== "Tab"');
     expect(drawer).toContain("triggerRef.current?.focus()");
     expect(drawer).toContain("previousPathname.current !== pathname");
-    expect(drawer).toContain('document.body.style.overflow = "hidden"');
+    expect(drawer).toContain("acquireBodyScrollLock()");
+    expect(drawer).toContain("releaseBodyScrollLock()");
+    expect(drawer).not.toContain('document.body.style.overflow = "hidden"');
     expect(drawer).toContain("event.target === event.currentTarget");
   });
 

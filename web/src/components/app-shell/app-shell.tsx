@@ -50,7 +50,7 @@ export function AppShell({
             tabIndex={-1}
           >
             <Breadcrumbs />
-            <PageContainer>{children}</PageContainer>
+            <PageContainer variant="default">{children}</PageContainer>
           </div>
         </div>
       </div>

@@ -1,6 +1,6 @@
 # Ragic 本地端系統
 
-P1～P3.3 已完成正式結案，Git 基線為 `ffffc8ce82e497a0b3fd58461c6ae66919271014`。目前進行 P4.1「ERP UI／UX 現況盤點與正式藍圖」；此階段只做文件規劃，尚未開始 P4.2 App Shell 或任何 UI 實作。
+P1～P3.3 已完成正式結案；P4.1規劃、P4.2 App Shell與P4.3 Design System亦已完成。P4.3只完成共用元件、page contract及四組representative integration；下一正式階段為P4.4主檔UI重整，P5尚未開始。
 
 正式階段依 DEC-060 調整為：
 
@@ -42,8 +42,8 @@ WORKER_READY_MAX_AGE_SECONDS="60"
 - 正式 active migration chain：`prisma/migrations/`
 - 舊 ERP migration 封存：`legacy/erp-mvp/prisma/migrations/`
 - 舊 migration 只供追溯，不得修改，也不會由 Prisma 正式設定執行。
-- 正式 migration chain 依序為 `0001_p1_foundation_baseline`、`0002_p1_authentication_and_access`、`0003_p1_operational_foundation`。
-- `erp` 開發資料庫已受控套用至 0003；其他環境仍須先備份、審查並使用 `prisma migrate deploy`。
+- 正式 migration chain 依序為 `0001_p1_foundation_baseline`、`0002_p1_authentication_and_access`、`0003_p1_operational_foundation`、`0004_p2_customer_master`、`0005_p2_item_master`、`0006_p2_pricing_master`、`0007_p2_freight_rules`、`0008_p2_master_import_foundation`、`0009_p3_sales_orders`、`0010_p3_delivery_notes`、`0011_p3_delivery_note_print_storage`、`0012_p3_delivery_note_print_version_contract`。
+- 各環境仍須先備份、審查並使用 `prisma migrate deploy`；不得由文件敘述推定某個既有 database已同步。
 - 禁止自行執行 `prisma migrate reset`、drop database、drop schema 或清除 Docker volume。
 
 ## 獨立 disposable 測試資料庫
@@ -94,7 +94,7 @@ npm run dev
 健康檢查：
 
 - `GET /api/health/live`：Web process 可回應。
-- `GET /api/health/ready`：Web process 可連線 PostgreSQL，且 migration chain 精確符合 0001～0003。
+- `GET /api/health/ready`：Web process 可連線 PostgreSQL，且 migration chain精確符合目前正式0001～0012。
 - `GET /api/health/worker`：最近有有效的 worker heartbeat。
 
 Worker 是獨立 process，啟動時不會自動執行 migration：

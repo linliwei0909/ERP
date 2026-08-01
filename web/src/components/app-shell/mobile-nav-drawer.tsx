@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import type { NavigationGroup } from "@/lib/navigation/registry";
 import { NavigationList } from "@/components/app-shell/navigation-list";
+import { acquireBodyScrollLock } from "@/lib/ui/body-scroll-lock";
 
 const focusableSelector =
   'a[href], button:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -36,8 +37,7 @@ export function MobileNavDrawer({
   useEffect(() => {
     if (!open) return;
 
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    const releaseBodyScrollLock = acquireBodyScrollLock();
     const drawer = drawerRef.current;
     const focusable = drawer
       ? Array.from(
@@ -68,7 +68,7 @@ export function MobileNavDrawer({
     document.addEventListener("keydown", onKeyDown);
     return () => {
       document.removeEventListener("keydown", onKeyDown);
-      document.body.style.overflow = previousOverflow;
+      releaseBodyScrollLock();
     };
   }, [open]);
 

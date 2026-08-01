@@ -1,6 +1,18 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import pageStyles from "@/components/app-shell/page-contract.module.css";
+import {
+  Button,
+  Checkbox,
+  ErrorSummary,
+  Field,
+  FormActions,
+  Input,
+  Section,
+  Select,
+  Textarea,
+} from "@/components/ui";
 
 async function errorMessage(response: Response): Promise<string> {
   const body = (await response.json().catch(() => null)) as
@@ -62,102 +74,68 @@ export function ItemCreateClient({
   }
 
   return (
-    <section className="mt-6 rounded-2xl border bg-white p-6">
-      <h2 className="text-xl font-bold">建立品項</h2>
+    <Section title="建立品項" description="建立全系統品項及目前公司的品項關聯。">
       {message ? (
-        <p
-          role="alert"
-          className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-800"
-        >
-          {message}
-        </p>
+        <ErrorSummary title="品項建立失敗" message={message} />
       ) : null}
-      <form onSubmit={submit} className="mt-4 grid gap-4 md:grid-cols-2">
-        <label className="text-sm font-medium">
-          品項類型
-          <select
-            name="itemType"
-            className="mt-1 w-full rounded-lg border px-3 py-2"
-          >
+      <form onSubmit={submit} className={pageStyles.formGrid}>
+        <Field label="品項類型">
+          <Select name="itemType">
             <option value="PRODUCT">產品</option>
             <option value="RAW_MATERIAL">原物料</option>
-          </select>
-        </label>
-        <label className="text-sm font-medium">
-          公司品項代碼
-          <input
+          </Select>
+        </Field>
+        <Field label="公司品項代碼" required>
+          <Input
             name="companyItemCode"
             required
             maxLength={100}
-            className="mt-1 w-full rounded-lg border px-3 py-2"
           />
-        </label>
-        <label className="text-sm font-medium">
-          全系統品項代碼
-          <input
+        </Field>
+        <Field label="全系統品項代碼" required>
+          <Input
             name="code"
             required
             maxLength={100}
-            className="mt-1 w-full rounded-lg border px-3 py-2"
           />
-        </label>
-        <label className="text-sm font-medium">
-          品項名稱
-          <input
+        </Field>
+        <Field label="品項名稱" required>
+          <Input
             name="name"
             required
             maxLength={200}
-            className="mt-1 w-full rounded-lg border px-3 py-2"
           />
-        </label>
-        <label className="text-sm font-medium">
-          基本單位
-          <input
+        </Field>
+        <Field label="基本單位" required>
+          <Input
             name="baseUnit"
             required
             maxLength={50}
-            className="mt-1 w-full rounded-lg border px-3 py-2"
           />
-        </label>
-        <label className="text-sm font-medium">
-          條碼（可空白）
-          <input
-            name="barcode"
-            maxLength={100}
-            className="mt-1 w-full rounded-lg border px-3 py-2"
-          />
-        </label>
-        <label className="text-sm font-medium md:col-span-2">
-          規格
-          <textarea
-            name="specification"
-            rows={2}
-            className="mt-1 w-full rounded-lg border px-3 py-2"
-          />
-        </label>
-        <label className="text-sm font-medium md:col-span-2">
-          說明
-          <textarea
-            name="description"
-            rows={2}
-            className="mt-1 w-full rounded-lg border px-3 py-2"
-          />
-        </label>
-        <label className="flex items-center gap-2 text-sm font-medium">
-          <input name="salesEnabled" type="checkbox" />
-          品項允許銷售
-        </label>
-        <label className="flex items-center gap-2 text-sm font-medium">
-          <input name="companySalesEnabled" type="checkbox" />
-          此公司允許銷售
-        </label>
-        <button
-          disabled={busy}
-          className="rounded-lg bg-slate-900 px-4 py-2 text-white disabled:opacity-50 md:col-span-2 md:justify-self-start"
-        >
-          {busy ? "建立中…" : "建立品項"}
-        </button>
+        </Field>
+        <Field label="條碼（可空白）">
+          <Input name="barcode" maxLength={100} />
+        </Field>
+        <Field label="規格" className={pageStyles.fullSpan}>
+          <Textarea name="specification" rows={2} />
+        </Field>
+        <Field label="說明" className={pageStyles.fullSpan}>
+          <Textarea name="description" rows={2} />
+        </Field>
+        <div className={`${pageStyles.checkboxGrid} ${pageStyles.fullSpan}`}>
+          <Checkbox name="salesEnabled" label="品項允許銷售" />
+          <Checkbox name="companySalesEnabled" label="此公司允許銷售" />
+        </div>
+        <FormActions
+          className={pageStyles.fullSpan}
+          align="start"
+          primary={
+            <Button type="submit" pending={busy} pendingLabel="建立中…">
+              建立品項
+            </Button>
+          }
+        />
       </form>
-    </section>
+    </Section>
   );
 }

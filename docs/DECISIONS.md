@@ -1,8 +1,8 @@
 # Ragic 本地端系統正式決議
 
 文件性質：本專案最高優先級的業務決議紀錄  
-版本：V0.15
-最後更新：2026-07-31
+版本：V0.16
+最後更新：2026-08-01
 
 ## 1. 使用原則
 
@@ -1168,15 +1168,30 @@
 - P4 正式藍圖為 `docs/P4_UI_UX_BLUEPRINT.md`。P4.1 只產出盤點、設計契約、階段與驗收規劃；不開始 P4.2 App Shell、不實作 UI，也不開始 P5。
 - P4.2 已於 2026-07-31 完成，closure commit 為 `29e68fff4cbd005443c0d228563a81e36ecf403d`；完成範圍為 authenticated App Shell、navigation、company switcher、user menu、breadcrumb、responsive shell 與 accessibility baseline。下一正式階段為 P4.3 Design System 與共用元件；P5 尚未開始。P4.2 未變更 Prisma schema、migration、RBAC mapping、session model、transaction、audit、idempotency、formal print 或任何 P5 契約。
 
+## DEC-061 系統管理雙層治理與 P4.3 UI contract
+
+- 系統管理採未來雙層治理模型：`SYSTEM_ADMIN` 負責平台及跨公司治理；`COMPANY_ADMIN` 只管理明確授權的公司。
+- 所有公司級操作必須同時通過 permission 與 company scope；一般業務頁只使用 active company。
+- `SYSTEM_ADMIN` 進行跨公司管理時，UI 必須明確標示「管理公司」，不得與一般業務 active-company context 混用。
+- `COMPANY_ADMIN` 不得指派 `SYSTEM_ADMIN`、擴大自身 scope 或管理未授權公司；系統至少必須保留一個有效 `SYSTEM_ADMIN`。
+- P4.3 目前只固定 UI、資訊架構及未來 authorization contract。本決策不表示現有後端已具有 `SYSTEM_ADMIN` 或 `COMPANY_ADMIN` role code。
+- 現有後端仍以既有 `ADMIN`、`ORDER_ENTRY`、permission、authorized company scope 與 session contract 運作；現有 `ADMIN` 如何遷移或映射至雙層模型仍須另案設計。
+- RBAC、role mapping、session、schema、migration 與 authorization enforcement 的變更必須建立獨立後端任務，完成影響分析、測試與核准；不得混入 P4.3 presentation 實作。
+- OQ-052 的治理方向已由本決策關閉；OQ-053 只保留 canonical redirect、safe filter preservation 與逐 route 遷移細節，OQ-054 只保留完整 route 遷移順序與 legacy layout 例外。
+
 ## 3. 尚未定案且應保留於 OPEN_QUESTIONS.md 的事項
 
 - `OQ-005`：第二階段是否實作正式電子簽收，以及簽收狀態、簽收人、附件、撤銷與例外更正流程如何設計。（不阻塞第一階段）
 - `OQ-044`：上線後允許回退至 Ragic 的窗口長度與結束條件。（依 DEC-060 改為 P10 前確認，不阻塞 P1）
 - `OQ-045`：附件移轉的表單、日期、狀態與檔案範圍。（依 DEC-060 改為 P10 前確認，不阻塞 P1）
+- `OQ-053`（部分未決）：一般業務頁只使用 active company、跨公司管理使用明確「管理公司」scope 已由 DEC-061 固定；只保留 canonical redirect、safe filter preservation 與逐 route 遷移細節於 P4.4 前確認。
+- `OQ-054`（部分未決）：P4.3 固定 page contract、P4.3d 只遷移代表頁、P4.4～P4.6 全面遷移已固定；只保留完整 route 順序、legacy layout 例外與過渡相容細節於 P4.4 前確認。
 
 第一階段已依 DEC-019 明確採「銷貨單已回收」的人工確認作為建立應收條件，不實作正式電子簽收。OQ-044 與 OQ-045 僅影響依 DEC-060 重編後的 P10 切換方案；其餘原 V0.2 未決事項 `OQ-042`、`OQ-012`、`OQ-023`、`OQ-037`、`OQ-038` 均已於 V0.3 定案。
 
 ## 4. 變更紀錄
+
+- V0.16（2026-08-01）：新增 DEC-061，固定未來 `SYSTEM_ADMIN`／`COMPANY_ADMIN` 雙層治理與 P4.3 UI contract；明確保留現有 `ADMIN`／`ORDER_ENTRY` 後端事實，關閉 OQ-052，並將 OQ-053／OQ-054 收斂為部分未決的 route migration 細節。
 
 - V0.15（2026-07-31，P4.2 完成同步）：記錄 P4.2 closure commit、App Shell 與導覽完成範圍、P4.3 為下一正式階段及 P5 尚未開始；既有 domain、資料庫、安全與列印契約不變。
 - V0.14（2026-07-29）：新增 DEC-060，正式將跨模組 UI／UX 與操作流程重整定為 P4，將庫存／生產藍圖順延並歸屬 P5，原 P4～P8 第一階段後續 roadmap 順延為 P6～P10；保留既有後端契約與第一階段庫存排除，domain change 必須獨立核准。

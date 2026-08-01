@@ -1,5 +1,27 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { PageHeader } from "@/components/app-shell/page-header";
+import pageStyles from "@/components/app-shell/page-contract.module.css";
+import {
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Input,
+  LinkButton,
+  Pagination,
+  Select,
+  StatusBadge as SharedStatusBadge,
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableContainer,
+  TableEmptyRow,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui";
 import type {
   DeliveryNoteActorDto,
   DeliveryNoteDetailDto,
@@ -98,136 +120,111 @@ export function DeliveryNoteListView({
 
   return (
     <>
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="text-sm font-semibold text-teal-700">P3.2 銷貨單</p>
-          <h1 className="mt-1 text-3xl font-bold text-slate-950">銷貨單清單</h1>
-          <p className="mt-2 text-sm text-slate-500">
-            目前公司：{company.code}－{company.name}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Link href="/" className="rounded-lg border border-slate-300 px-4 py-2">
-            返回首頁
-          </Link>
-          <Link
-            href="/sales-orders"
-            className="rounded-lg bg-teal-700 px-4 py-2 text-white"
-          >
-            前往銷售訂單
-          </Link>
-        </div>
-      </header>
+      <PageHeader
+        containerVariant="wide"
+        context="銷貨作業"
+        title="銷貨單清單"
+        description="查詢銷貨進度與來源訂單。"
+        metadata={[{ label: "目前公司", value: `${company.code}－${company.name}` }]}
+        actions={
+          <>
+            <LinkButton href="/" variant="secondary">返回首頁</LinkButton>
+            <LinkButton href="/sales-orders">前往銷售訂單</LinkButton>
+          </>
+        }
+      />
 
-      <form className="mt-8 grid gap-3 rounded-2xl border border-slate-200 bg-white p-5 lg:grid-cols-6">
-        <input
-          name="deliveryNoteNumber"
-          defaultValue={query.deliveryNoteNumber}
-          placeholder="銷貨單號"
-          className="rounded-lg border border-slate-300 px-3 py-2"
-        />
-        <input
-          name="customerKeyword"
-          defaultValue={query.customerKeyword}
-          placeholder="客戶名稱"
-          className="rounded-lg border border-slate-300 px-3 py-2"
-        />
-        <select
-          name="status"
-          defaultValue={query.status}
-          className="rounded-lg border border-slate-300 px-3 py-2"
-        >
-          <option value="ALL">全部狀態</option>
-          <option value="ACTIVE">有效</option>
-          <option value="SHIPPED">已出貨</option>
-          <option value="RECEIVABLE_CREATED">已建立應收</option>
-          <option value="VOIDED">已作廢</option>
-        </select>
-        <input
-          aria-label="銷貨日起日"
-          type="date"
-          name="deliveryNoteDateFrom"
-          defaultValue={query.deliveryNoteDateFrom}
-          className="rounded-lg border border-slate-300 px-3 py-2"
-        />
-        <input
-          aria-label="銷貨日迄日"
-          type="date"
-          name="deliveryNoteDateTo"
-          defaultValue={query.deliveryNoteDateTo}
-          className="rounded-lg border border-slate-300 px-3 py-2"
-        />
-        <button className="rounded-lg bg-slate-900 px-4 py-2 text-white">
-          查詢
-        </button>
-      </form>
+      <Card>
+        <form className={pageStyles.filterGrid}>
+          <Field label="銷貨單號">
+            <Input name="deliveryNoteNumber" defaultValue={query.deliveryNoteNumber} />
+          </Field>
+          <Field label="客戶名稱">
+            <Input name="customerKeyword" defaultValue={query.customerKeyword} />
+          </Field>
+          <Field label="狀態">
+            <Select name="status" defaultValue={query.status}>
+              <option value="ALL">全部狀態</option>
+              <option value="ACTIVE">有效</option>
+              <option value="SHIPPED">已出貨</option>
+              <option value="RECEIVABLE_CREATED">已建立應收</option>
+              <option value="VOIDED">已作廢</option>
+            </Select>
+          </Field>
+          <Field label="銷貨日起日">
+            <Input type="date" name="deliveryNoteDateFrom" defaultValue={query.deliveryNoteDateFrom} />
+          </Field>
+          <Field label="銷貨日迄日">
+            <Input type="date" name="deliveryNoteDateTo" defaultValue={query.deliveryNoteDateTo} />
+          </Field>
+          <Button type="submit">查詢</Button>
+        </form>
+      </Card>
 
-      <section className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white">
-        <div className="hidden grid-cols-[1.25fr_1fr_1fr_1fr_0.8fr_1fr_1fr] gap-3 border-b bg-slate-50 px-5 py-3 text-xs font-semibold text-slate-500 lg:grid">
-          <span>銷貨單</span>
-          <span>公司</span>
-          <span>訂單</span>
-          <span>客戶</span>
-          <span>狀態</span>
-          <span>建立者</span>
-          <span>建立時間</span>
-        </div>
-        <div className="divide-y divide-slate-100">
-          {items.map((note) => (
-            <Link
-              key={note.id}
-              href={`/delivery-notes/${note.id}`}
-              className="grid gap-2 px-5 py-4 hover:bg-slate-50 lg:grid-cols-[1.25fr_1fr_1fr_1fr_0.8fr_1fr_1fr] lg:items-center"
-            >
-              <div>
-                <strong className="text-slate-950">{note.deliveryNoteNumber}</strong>
-                <p className="text-xs text-slate-500">{note.deliveryNoteDate}</p>
-              </div>
-              <span>{company.code}</span>
-              <span>{note.salesOrderNumber}</span>
-              <span>{note.customer.name ?? "—"}</span>
-              <StatusBadge status={note.status} />
-              <span>{note.createdBy.username}</span>
-              <span className="text-sm text-slate-600">
-                {formatTimestamp(note.createdAt)}
-              </span>
-              {note.status === "VOIDED" ? (
-                <p className="lg:col-span-7 text-sm text-rose-700">
-                  作廢：{note.voidReason ?? "未提供原因"}（
-                  {formatTimestamp(note.voidedAt)}）
-                </p>
-              ) : null}
-            </Link>
-          ))}
-          {items.length === 0 ? (
-            <div className="px-5 py-14 text-center">
-              <p className="font-semibold text-slate-700">查無銷貨單</p>
-              <p className="mt-1 text-sm text-slate-500">
-                請調整篩選條件，或由已確認的銷售訂單建立銷貨單。
-              </p>
-            </div>
-          ) : null}
-        </div>
-      </section>
+      <TableContainer>
+        <Table>
+          <TableCaption>銷貨單查詢結果</TableCaption>
+          <TableHeader>
+            <TableRow>
+              <TableHead>銷貨單</TableHead>
+              <TableHead>公司</TableHead>
+              <TableHead>訂單</TableHead>
+              <TableHead>客戶</TableHead>
+              <TableHead>狀態</TableHead>
+              <TableHead>建立者</TableHead>
+              <TableHead>建立時間</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {items.map((note) => (
+              <TableRow key={note.id}>
+                <TableCell monospace>
+                  <Link href={`/delivery-notes/${note.id}`} className={pageStyles.tableLink}>
+                    {note.deliveryNoteNumber}
+                  </Link>
+                  <div className={pageStyles.tableSubtext}>{note.deliveryNoteDate}</div>
+                  {note.status === "VOIDED" ? (
+                    <div className={`${pageStyles.tableSubtext} ${pageStyles.dangerText}`}>
+                      作廢：{note.voidReason ?? "未提供原因"}（{formatTimestamp(note.voidedAt)}）
+                    </div>
+                  ) : null}
+                </TableCell>
+                <TableCell monospace>{company.code}</TableCell>
+                <TableCell monospace>{note.salesOrderNumber}</TableCell>
+                <TableCell>{note.customer.name ?? "—"}</TableCell>
+                <TableCell>
+                  <SharedStatusBadge
+                    label={STATUS_LABELS[note.status] ?? note.status}
+                    tone={note.status === "VOIDED" ? "danger" : note.status === "ACTIVE" ? "success" : "info"}
+                  />
+                </TableCell>
+                <TableCell>{note.createdBy.username}</TableCell>
+                <TableCell>{formatTimestamp(note.createdAt)}</TableCell>
+              </TableRow>
+            ))}
+            {items.length === 0 ? (
+              <TableEmptyRow colSpan={7}>
+                <EmptyState
+                  variant="no-results"
+                  title="查無銷貨單"
+                  description="請調整篩選條件，或由已確認的銷售訂單建立銷貨單。"
+                />
+              </TableEmptyRow>
+            ) : null}
+          </TableBody>
+        </Table>
+      </TableContainer>
 
-      <footer className="mt-4 flex items-center justify-between text-sm text-slate-600">
-        <span>共 {total} 筆</span>
-        <div className="flex items-center gap-3">
-          {page > 1 ? (
-            <Link href={pageHref(page - 1)} className="rounded-lg border px-3 py-2">
-              上一頁
-            </Link>
-          ) : null}
-          <span>
-            第 {page}／{totalPages} 頁
-          </span>
-          {page < totalPages ? (
-            <Link href={pageHref(page + 1)} className="rounded-lg border px-3 py-2">
-              下一頁
-            </Link>
-          ) : null}
-        </div>
-      </footer>
+      <div className={pageStyles.tableFooter}>
+        <p className={pageStyles.resultCount}>共 {total} 筆</p>
+        <Pagination
+          currentPage={page}
+          totalPages={totalPages}
+          previousHref={page > 1 ? pageHref(page - 1) : undefined}
+          nextHref={page < totalPages ? pageHref(page + 1) : undefined}
+          label="銷貨單清單分頁"
+        />
+      </div>
     </>
   );
 }

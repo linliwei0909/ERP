@@ -1,0 +1,143 @@
+body {
+  min-width: 320px;
+}
+
+.showcase {
+  display: grid;
+  width: min(100% - 32px, 920px);
+  gap: 24px;
+  margin: 0 auto;
+  padding: 32px 0;
+}
+
+.showcase header,
+.showcase section {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  padding: 20px;
+}
+
+.showcase h1 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 25px;
+  font-weight: 600;
+}
+
+.showcase h2 {
+  margin: 0 0 14px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.showcase p {
+  margin: 8px 0 0;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+}
+
+.showcase .showcase-kicker {
+  margin: 0 0 6px;
+  color: var(--color-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.showcase-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.showcase-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.showcase-grid label {
+  display: grid;
+  gap: 6px;
+  color: var(--color-text);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.showcase-grid small,
+.showcase-error {
+  color: var(--color-danger);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.showcase-wide {
+  grid-column: 1 / -1;
+}
+
+.showcase-feedback-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.showcase-empty-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.showcase-skeletons {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+}
+
+.showcase-skeletons > :last-child {
+  grid-column: 1 / -1;
+}
+
+.showcase-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.showcase-pagination-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.showcase [aria-label="銷售訂單資料區"] + nav,
+.showcase [aria-label="銷售訂單資料區"] ~ [aria-label="空資料區"] {
+  margin-top: 14px;
+}
+
+@media (max-width: 560px) {
+  .showcase {
+    width: min(100% - 24px, 920px);
+    padding-block: 16px;
+  }
+
+  .showcase header,
+  .showcase section {
+    padding: 16px;
+  }
+
+  .showcase-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .showcase-feedback-grid,
+  .showcase-empty-grid,
+  .showcase-card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .showcase-wide {
+    grid-column: auto;
+  }
+}

@@ -1,13 +1,13 @@
 # Ragic 本地端系統開發階段與任務拆分
 
-文件狀態：P1～P3.3 已完成正式結案；P4.1、P4.2 已完成；下一正式階段為 P4.3；P5 尚未開始
-同步基線：`DECISIONS.md` V0.15（含 DEC-060 與 P4.2 完成同步）
-版本日期：2026-07-31
+文件狀態：P1～P3.3 已完成正式結案；P4.1、P4.2、P4.3 已完成；下一階段 P4.4；P5 尚未開始
+同步基線：`DECISIONS.md` V0.16（含 DEC-060、DEC-061 與 P4.3 規格治理同步）
+版本日期：2026-08-01
 
 ## 1. 執行原則
 
 - 第一階段固定採 Ragic 本地端重建規格，不加入庫存、批號、分批出貨、出庫依賴或正式會計過帳。
-- `OPEN_QUESTIONS.md` 保留 OQ-005、OQ-044、OQ-045；OQ-046～OQ-050 已由 DEC-057 決議，OQ-051 已由 DEC-058 裁定 P3.3 第一版排除。第一階段以「銷貨單已回收」的人工確認作為建立應收條件，不實作正式電子簽收。
+- `OPEN_QUESTIONS.md` 保留 OQ-005、OQ-044、OQ-045，以及部分未決的 OQ-053、OQ-054；OQ-052 已由 DEC-061 關閉。OQ-053 只保留 company-context route 遷移細節，OQ-054 只保留完整 route 順序與 legacy layout 例外。OQ-046～OQ-050 已由 DEC-057 決議，OQ-051 已由 DEC-058 裁定 P3.3 第一版排除。
 - 新決議先更新 `DECISIONS.md`，再同步規格、資料庫設計、計畫與程式。
 - 所有跨單據操作使用資料庫 transaction；核心規則必須有測試；重要狀態異動保留 audit log。
 - 每次只實作指定模組，不提前實作後續模組。
@@ -215,7 +215,11 @@ P3.1 完成條件已達成：訂單取號、草稿、確認、修訂、作廢、
 
 - P4.1 現況盤點與 UX 藍圖。
 - [2026-07-31 完成] P4.2 App Shell 與導覽；closure commit `29e68fff4cbd005443c0d228563a81e36ecf403d`。範圍包含 authenticated App Shell、navigation、company switcher、user menu、breadcrumb、responsive shell 與 accessibility baseline。
-- P4.3 Design System 與共用元件。
+- [2026-08-01 完成 P4.3a] Design Tokens 與基礎控制項。
+- [2026-08-01 完成 P4.3b] Form 與 Feedback。
+- [2026-08-01 完成 P4.3c] Data Display 與 Overlay。
+- [2026-08-01 完成 P4.3d] Page Contract 與四組代表頁面整合。
+- [2026-08-01 完成 P4.3e] Design System總體驗證與closure；P4.3完成，下一正式階段為P4.4。
 - P4.4 主檔 UI 重整。
 - P4.5 銷售訂單 UI 重整。
 - P4.6 銷貨單與列印 UI 重整。
@@ -223,7 +227,21 @@ P3.1 完成條件已達成：訂單取號、草稿、確認、修訂、作廢、
 
 P4 詳細範圍、技術邊界、角色、流程、元件與驗收條件以 `docs/P4_UI_UX_BLUEPRINT.md` 為準。P4 原則上保留既有 backend domain、schema、state machine、RBAC、company scope、transaction、locking、audit、idempotency、formal-print、reprint、immutable snapshot、pricing 與 freight 契約。真正 domain change 必須另立 decision 與獨立任務。
 
-P4.2 沒有變更 Prisma schema、migration、RBAC mapping、session model、transaction、audit、idempotency、formal print 或 P5。下一正式階段為 P4.3；P5 尚未開始。
+P4.3 以 `docs/P4_3_DESIGN_SYSTEM_SPEC.md` 為正式實作規格。V4 是唯一核准視覺基準；P4.3a 僅建立 semantic tokens、Button、LinkButton、IconButton、Input、Textarea、Select、Checkbox、最小 repository-native SVG icon contract、必要測試與 implementation validation。Field／feedback 屬 P4.3b，data display／Dialog 屬 P4.3c，PageHeader／PageContainer 與代表頁整合屬 P4.3d，P4.3e 只做總體 closure。每一切片自身都必須完成 lint、typecheck、unit tests、production build 與 validation。
+
+P4.3a 已完成：semantic tokens 與 system font stack 位於 `globals.css`，server-safe primitives 位於 `web/src/components/ui/`，並以單一 CSS Module 共用樣式；DOM interaction tests 僅在個別測試檔使用 jsdom 與 React Testing Library。實作未加入業務頁、未重做 P4.2 App Shell，也未修改資料庫或後端契約。驗證紀錄見 `docs/P4_3A_DESIGN_TOKENS_BASE_CONTROLS_IMPLEMENTATION_VALIDATION.md`。
+
+P4.3b 已完成：Field／FieldError／ErrorSummary／FormActions 建立欄位與提交錯誤語意；Alert／EmptyState／LoadingState／Skeleton 建立有限 feedback 與 loading contract；新增四個 repository-native feedback icons，沿用 P4.3a styling 與測試環境，沒有新增 dependency、client wrapper 或業務頁整合。驗證紀錄見 `docs/P4_3B_FORM_FEEDBACK_IMPLEMENTATION_VALIDATION.md`。
+
+P4.3c 已完成：Card／Section、native Table composition primitives、caller-provided href Pagination、五 tone StatusBadge、semantic DescriptionList 均維持 server-safe；Dialog／ConfirmDialog 以原生 `<dialog>`、portal 與最小 client boundary 實作 focus containment、Escape／cancel、backdrop、focus return、pending 與 reduced-motion。Dialog 與既有 MobileNavDrawer 共用 reference-counted body scroll lock；沒有新增 dependency、DataTable engine、正式 route 或業務頁遷移。驗證紀錄見 `docs/P4_3C_DATA_DISPLAY_OVERLAY_IMPLEMENTATION_VALIDATION.md`。
+
+P4.3d 已完成：PageContainer 正式化 standard／wide／full 並保留 default／narrow compatibility；PageHeader 支援 context、actions、metadata 與 width 宣告。App Shell 繼續持有唯一 outer container，透過 server-safe CSS 協調 Breadcrumb 與代表頁寬度。Home、Customers list、Admin Item create/list、Delivery Notes list 四組只做 presentation integration，保留既有 query、authorization、field names、payload、href 與 local company selector；驗證紀錄見 `docs/P4_3D_PAGE_CONTRACT_REPRESENTATIVE_INTEGRATION_VALIDATION.md`。
+
+P4.3e 已完成：重新交叉驗證component inventory、V4 tokens、Server／Client boundary、PageContainer／PageHeader、adoption與static contracts；全新0001～0012 disposable schema的四組representative routes、desktop／360px、Dialog／focus／reduced-motion、lint、typecheck、302 tests及37-unit production build均通過。Closure紀錄見 `docs/P4_3E_DESIGN_SYSTEM_CLOSURE_VALIDATION.md`。
+
+依 DEC-061，未來系統管理採 `SYSTEM_ADMIN`／`COMPANY_ADMIN` 雙層治理，但現有後端仍使用 `ADMIN`／`ORDER_ENTRY` 與既有 authorization contract。P4.3 只固定 UI／資訊架構；不得修改 RBAC、session、schema、migration 或 authorization implementation。
+
+P4.2與P4.3都沒有變更 Prisma schema、migration、RBAC mapping、session model、transaction、audit、idempotency、formal print 或 P5。P4.3只完成Design System與四組representative integration；下一正式階段為P4.4，P5尚未開始。
 
 完成條件：P4.1～P4.7 依序完成；登入、公司切換、主檔、訂單、銷貨單、正式列印、PDF、補印、權限、session、API failure、keyboard 與支援 viewport 通過完整驗收。
 
@@ -374,10 +392,16 @@ P4.2 沒有變更 Prisma schema、migration、RBAC mapping、session model、tra
 
 ## 6. 本輪交付限制
 
-P4.2.x Closure 只補強 disposable Test DB safety、P4.2 文件狀態與兩個 authenticated special-state main landmarks；不得開始 P4.3 或 P5，也不得變更 schema、migration、package、lockfile、RBAC、session、API、state machine、transaction、audit、idempotency 或 formal print。
+本輪只完成 P4.3e Design System總體closure、正確migration schema下的代表route smoke、跨切片browser／accessibility／quality gate驗證、最小P4.3缺陷修正與closure文件；不開始P4.4～P4.7或P5，不全面遷移業務頁，也不修改schema、migration、RBAC、session、authorization、API、state machine、transaction、audit、idempotency或formal print。
 
 ## 7. 變更紀錄
 
+- V0.23（2026-08-01，P4.3e closure）：完成P4.3a～P4.3d跨切片重驗、component／token／boundary／adoption／static contract audit、全新0001～0012 disposable DB與四組route smoke、desktop／360px／Dialog／reduced-motion、lint、typecheck、32 files／302 tests及37-unit build；P4.3完成，P4.4～P4.7、後端、資料庫與P5未開始或未變更。
+- V0.22（2026-08-01，P4.3d 完成同步）：完成 PageContainer formal variants 與 legacy compatibility、PageHeader 正式 API、App Shell 單一 container 寬度協調，以及四組代表頁 presentation integration、SSR／integration／desktop／360px 驗證；P4.3e、全面 route migration、後端及資料庫均未開始或未變更。
+- V0.21（2026-08-01，P4.3c 完成同步）：完成 Card／Section、native Table primitives、Pagination、StatusBadge、DescriptionList、native Dialog／ConfirmDialog、共享 body scroll lock、SSR／DOM／keyboard tests、360px／reduced-motion 視覺驗證與完整品質 gate；P4.3d～P4.3e、業務頁遷移、後端及資料庫均未開始或未變更。
+- V0.20（2026-08-01，P4.3b 完成同步）：完成 Field、FieldError、ErrorSummary、FormActions、Alert、EmptyState、LoadingState、Skeleton、feedback SVG icons、SSR／DOM tests、360px／reduced-motion 視覺驗證與完整品質 gate；P4.3c～P4.3e、業務頁遷移、後端及資料庫均未開始或未變更。
+- V0.19（2026-08-01，P4.3a 完成同步）：完成 V4 semantic tokens、system font、server-safe 基礎控制項、repository-native SVG icons、DOM／accessibility tests、隔離視覺驗證與品質 gate；P4.3b～P4.3e、業務頁遷移、後端及資料庫均未開始或未變更。
+- V0.18（2026-08-01，P4.3 規格治理）：同步 DEC-061、V4 唯一視覺基準、P4.3a～P4.3e 邊界、每切片品質 gate，以及 OQ-052 關閉與 OQ-053／054 部分未決狀態；P4.3a 程式實作尚未開始。
 - V0.17（2026-07-31，P4.2 完成同步）：記錄 P4.2 closure commit `29e68fff4cbd005443c0d228563a81e36ecf403d`、App Shell 與導覽完成範圍、P4.3 為下一正式階段及 P5 尚未開始；後端與資料庫契約不變。
 - V0.16（2026-07-29，P4.1 UI／UX 規劃）：同步 DEC-060，將 P4 正式改為 ERP UI／UX 與操作流程重整、庫存／生產歸屬 P5，原應收至切換 roadmap 順延為 P6～P10；本輪只做文件規劃，未開始 P4.2 或 P5。
 - V0.15（2026-07-28，P3.3e lock-order 補正）：依 DEC-058 將正式列印與補印修正為 `idempotency → Sales Order → Delivery Note`，完成鎖後 identity 重驗證、deadlock matrix、fresh 0001–0012、schema diff、unit、完整 DB 與 build；P4 未開始。
