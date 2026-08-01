@@ -1,8 +1,19 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
+import { PageHeader } from "@/components/app-shell/page-header";
+import pageStyles from "@/components/app-shell/page-contract.module.css";
+import {
+  Card,
+  DescriptionDetails,
+  DescriptionItem,
+  DescriptionList,
+  DescriptionTerm,
+  LinkButton,
+  StatusBadge,
+} from "@/components/ui";
 import { getPageRequestContext } from "@/lib/auth/request-context";
 import { getItem } from "@/lib/items/service";
 import { prisma } from "@/lib/prisma";
+import itemStyles from "../item-ui.module.css";
 
 export default async function ItemDetailPage({
   params,
@@ -31,49 +42,38 @@ export default async function ItemDetailPage({
   );
 
   return (
-    <main className="mx-auto min-h-screen max-w-4xl px-6 py-12">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-semibold text-teal-700">品項明細</p>
-          <h1 className="text-3xl font-bold">{item.name}</h1>
-        </div>
-        <Link
-          href={`/items?companyId=${companyId}`}
-          className="rounded-lg border px-4 py-2"
-        >
-          返回清單
-        </Link>
-      </div>
-      <dl className="mt-8 grid gap-4 rounded-2xl border bg-white p-6 md:grid-cols-2">
-        <div>
-          <dt className="text-sm text-slate-500">品項代碼</dt>
-          <dd className="font-medium">{item.code}</dd>
-        </div>
-        <div>
-          <dt className="text-sm text-slate-500">公司品項代碼</dt>
-          <dd className="font-medium">{relation?.companyItemCode ?? "—"}</dd>
-        </div>
-        <div>
-          <dt className="text-sm text-slate-500">類型</dt>
-          <dd>{item.itemType === "PRODUCT" ? "產品" : "原物料"}</dd>
-        </div>
-        <div>
-          <dt className="text-sm text-slate-500">基本單位</dt>
-          <dd>{item.baseUnit}</dd>
-        </div>
-        <div>
-          <dt className="text-sm text-slate-500">條碼</dt>
-          <dd>{item.barcode ?? "—"}</dd>
-        </div>
-        <div className="md:col-span-2">
-          <dt className="text-sm text-slate-500">規格</dt>
-          <dd className="whitespace-pre-wrap">{item.specification ?? "—"}</dd>
-        </div>
-        <div className="md:col-span-2">
-          <dt className="text-sm text-slate-500">說明</dt>
-          <dd className="whitespace-pre-wrap">{item.description ?? "—"}</dd>
-        </div>
-      </dl>
-    </main>
+    <div className={pageStyles.pageStack}>
+      <PageHeader
+        containerVariant="standard"
+        context="品項明細"
+        title={item.name}
+        description="檢視品項基本資料與目前公司的品項代碼。"
+        status={
+          <StatusBadge
+            label={item.itemType === "PRODUCT" ? "產品" : "原物料"}
+            tone={item.itemType === "PRODUCT" ? "success" : "info"}
+          />
+        }
+        actions={
+          <LinkButton
+            href={`/items?companyId=${companyId}`}
+            variant="secondary"
+          >
+            返回清單
+          </LinkButton>
+        }
+      />
+      <Card>
+        <DescriptionList columns={2}>
+          <DescriptionItem><DescriptionTerm>品項代碼</DescriptionTerm><DescriptionDetails>{item.code}</DescriptionDetails></DescriptionItem>
+          <DescriptionItem><DescriptionTerm>公司品項代碼</DescriptionTerm><DescriptionDetails>{relation?.companyItemCode ?? "—"}</DescriptionDetails></DescriptionItem>
+          <DescriptionItem><DescriptionTerm>類型</DescriptionTerm><DescriptionDetails>{item.itemType === "PRODUCT" ? "產品" : "原物料"}</DescriptionDetails></DescriptionItem>
+          <DescriptionItem><DescriptionTerm>基本單位</DescriptionTerm><DescriptionDetails>{item.baseUnit}</DescriptionDetails></DescriptionItem>
+          <DescriptionItem><DescriptionTerm>條碼</DescriptionTerm><DescriptionDetails>{item.barcode ?? "—"}</DescriptionDetails></DescriptionItem>
+          <DescriptionItem className={pageStyles.fullSpan}><DescriptionTerm>規格</DescriptionTerm><DescriptionDetails className={itemStyles.preWrap}>{item.specification ?? "—"}</DescriptionDetails></DescriptionItem>
+          <DescriptionItem className={pageStyles.fullSpan}><DescriptionTerm>說明</DescriptionTerm><DescriptionDetails className={itemStyles.preWrap}>{item.description ?? "—"}</DescriptionDetails></DescriptionItem>
+        </DescriptionList>
+      </Card>
+    </div>
   );
 }

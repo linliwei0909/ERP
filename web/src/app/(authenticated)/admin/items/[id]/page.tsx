@@ -1,5 +1,7 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
+import { PageHeader } from "@/components/app-shell/page-header";
+import pageStyles from "@/components/app-shell/page-contract.module.css";
+import { LinkButton, StatusBadge } from "@/components/ui";
 import { requireAdminWithAudit } from "@/lib/auth/authorization";
 import { getPageRequestContext } from "@/lib/auth/request-context";
 import { getItem } from "@/lib/items/service";
@@ -36,24 +38,32 @@ export default async function AdminItemDetailPage({
   const serializedItem = JSON.parse(JSON.stringify(item)) as ManagedItem;
 
   return (
-    <main className="mx-auto min-h-screen max-w-6xl px-6 py-12">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-semibold text-teal-700">品項主檔管理</p>
-          <h1 className="text-3xl font-bold">{item.name}</h1>
-        </div>
-        <Link
-          href={`/admin/items?companyId=${companyId}`}
-          className="rounded-lg border px-4 py-2"
-        >
-          返回清單
-        </Link>
-      </div>
+    <div className={pageStyles.pageStack}>
+      <PageHeader
+        containerVariant="standard"
+        context="品項主檔管理"
+        title={item.name}
+        description="維護品項基本資料、狀態與公司授權。"
+        status={
+          <StatusBadge
+            label={item.status === "ACTIVE" ? "有效" : "停用"}
+            tone={item.status === "ACTIVE" ? "success" : "neutral"}
+          />
+        }
+        actions={
+          <LinkButton
+            href={`/admin/items?companyId=${companyId}`}
+            variant="secondary"
+          >
+            返回清單
+          </LinkButton>
+        }
+      />
       <ItemManagerClient
         item={serializedItem}
         companies={context.authorizedCompanies}
         selectedCompanyId={companyId}
       />
-    </main>
+    </div>
   );
 }

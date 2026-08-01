@@ -108,7 +108,6 @@ describe("P4.3d representative page integration", () => {
   it("does not duplicate page padding or max-width in representative routes", () => {
     for (const path of [
       "src/app/(authenticated)/page.tsx",
-      "src/app/(authenticated)/admin/items/page.tsx",
       "src/app/(authenticated)/delivery-notes/page.tsx",
     ]) {
       const page = source(path);
@@ -119,10 +118,13 @@ describe("P4.3d representative page integration", () => {
       );
     }
 
-    const customers = source(
+    for (const path of [
       "src/app/(authenticated)/customers/customer-list-view.tsx",
-    );
-    expect(customers).not.toMatch(/max-w-|min-h-screen|px-6|py-12/);
-    expect(customers).not.toContain("<main");
+      "src/app/(authenticated)/admin/items/page.tsx",
+    ]) {
+      const migratedPage = source(path);
+      expect(migratedPage).not.toMatch(/max-w-|min-h-screen|px-6|py-12/);
+      expect(migratedPage).not.toContain("<main");
+    }
   });
 });
