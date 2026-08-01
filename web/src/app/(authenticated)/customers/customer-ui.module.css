@@ -1,0 +1,55 @@
+.cardGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.detailText,
+.mutedText {
+  margin: var(--space-2) 0 0;
+  overflow-wrap: anywhere;
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+
+.mutedText {
+  color: var(--color-text-secondary);
+}
+
+.formStack {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.compactList {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.relationRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  padding-block: var(--space-2);
+}
+
+.relationRow:last-child {
+  border-bottom: 0;
+}
+
+@media (max-width: 40rem) {
+  .cardGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .relationRow {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

@@ -1,6 +1,17 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import pageStyles from "@/components/app-shell/page-contract.module.css";
+import {
+  Alert,
+  Button,
+  Card,
+  Field,
+  FormActions,
+  Input,
+  Section,
+  Select,
+} from "@/components/ui";
 
 async function errorMessage(response: Response): Promise<string> {
   const body = (await response.json().catch(() => null)) as
@@ -62,52 +73,48 @@ export function CustomerCreateClient({
   }
 
   return (
-    <section className="mt-6 rounded-2xl border bg-white p-6">
-      <h2 className="text-xl font-bold">建立客戶</h2>
-      {message ? <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-800">{message}</p> : null}
-      <form onSubmit={submit} className="mt-4 grid gap-4 md:grid-cols-2">
-        <label className="text-sm font-medium">
-          客戶類型
-          <select
+    <Card>
+      <Section title="建立客戶" description="建立客戶基本資料與目前公司的客戶代碼。">
+      {message ? <Alert tone="danger" title="無法建立客戶">{message}</Alert> : null}
+      <form onSubmit={submit} className={pageStyles.formGrid}>
+        <Field label="客戶類型">
+          <Select
             value={customerType}
             onChange={(event) =>
               setCustomerType(event.target.value as "DOMESTIC" | "FOREIGN")
             }
-            className="mt-1 w-full rounded-lg border px-3 py-2"
           >
             <option value="DOMESTIC">境內</option>
             <option value="FOREIGN">境外</option>
-          </select>
-        </label>
-        <label className="text-sm font-medium">
-          公司客戶代碼
-          <input name="customerCode" required maxLength={50} className="mt-1 w-full rounded-lg border px-3 py-2" />
-        </label>
-        <label className="text-sm font-medium md:col-span-2">
-          客戶名稱
-          <input name="name" required maxLength={200} className="mt-1 w-full rounded-lg border px-3 py-2" />
-        </label>
+          </Select>
+        </Field>
+        <Field label="公司客戶代碼" required>
+          <Input name="customerCode" required maxLength={50} />
+        </Field>
+        <Field label="客戶名稱" required className={pageStyles.fullSpan}>
+          <Input name="name" required maxLength={200} />
+        </Field>
         {customerType === "DOMESTIC" ? (
-          <label className="text-sm font-medium">
-            統一編號（可空白）
-            <input name="taxId" maxLength={32} className="mt-1 w-full rounded-lg border px-3 py-2" />
-          </label>
+          <Field label="統一編號" description="可留空。">
+            <Input name="taxId" maxLength={32} />
+          </Field>
         ) : (
           <>
-            <label className="text-sm font-medium">
-              國別碼
-              <input name="countryCode" required minLength={2} maxLength={2} className="mt-1 w-full rounded-lg border px-3 py-2 uppercase" />
-            </label>
-            <label className="text-sm font-medium">
-              境外識別碼
-              <input name="foreignIdentifier" required maxLength={100} className="mt-1 w-full rounded-lg border px-3 py-2" />
-            </label>
+            <Field label="國別碼" required>
+              <Input name="countryCode" required minLength={2} maxLength={2} className="uppercase" />
+            </Field>
+            <Field label="境外識別碼" required>
+              <Input name="foreignIdentifier" required maxLength={100} />
+            </Field>
           </>
         )}
-        <button disabled={busy} className="rounded-lg bg-slate-900 px-4 py-2 text-white disabled:opacity-50 md:col-span-2 md:justify-self-start">
-          {busy ? "建立中…" : "建立客戶"}
-        </button>
+        <FormActions
+          className={pageStyles.fullSpan}
+          align="start"
+          primary={<Button type="submit" pending={busy} pendingLabel="建立中…">建立客戶</Button>}
+        />
       </form>
-    </section>
+      </Section>
+    </Card>
   );
 }

@@ -1,5 +1,26 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
+import { PageHeader } from "@/components/app-shell/page-header";
+import pageStyles from "@/components/app-shell/page-contract.module.css";
+import {
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  Input,
+  LinkButton,
+  Pagination,
+  Select,
+  StatusBadge,
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableContainer,
+  TableEmptyRow,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui";
 import { requireAdminWithAudit } from "@/lib/auth/authorization";
 import { getPageRequestContext } from "@/lib/auth/request-context";
 import { listCustomers } from "@/lib/customers/service";
@@ -48,83 +69,76 @@ export default async function AdminCustomersPage({
   };
 
   return (
-    <main className="mx-auto min-h-screen max-w-6xl px-6 py-12">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-semibold text-teal-700">P2.2 管理員功能</p>
-          <h1 className="text-3xl font-bold">客戶主檔管理</h1>
-        </div>
-        <Link href="/" className="rounded-lg border px-4 py-2">返回首頁</Link>
-      </div>
+    <div className={pageStyles.pageStack}>
+      <PageHeader
+        containerVariant="wide"
+        context="主檔管理"
+        title="客戶主檔管理"
+        description="查詢、建立與維護授權公司範圍內的客戶資料。"
+      />
 
-      <form className="mt-8 grid gap-3 rounded-2xl border bg-white p-5 md:grid-cols-4">
-        <select name="companyId" defaultValue={companyId} className="rounded-lg border px-3 py-2">
-          {context.authorizedCompanies.map((company) => (
-            <option key={company.id} value={company.id}>{company.code}－{company.name}</option>
-          ))}
-        </select>
-        <input name="search" defaultValue={query.search} placeholder="名稱、統編或客戶代碼" className="rounded-lg border px-3 py-2 md:col-span-2" />
-        <select name="status" defaultValue={query.status ?? "ACTIVE"} className="rounded-lg border px-3 py-2">
-          <option value="ACTIVE">有效</option>
-          <option value="INACTIVE">停用</option>
-          <option value="ALL">全部</option>
-        </select>
-        <button className="rounded-lg bg-slate-900 px-4 py-2 text-white md:col-span-4 md:justify-self-start">搜尋</button>
-      </form>
+      <Card>
+        <form className={pageStyles.adminFilters}>
+          <Field label="公司">
+            <Select name="companyId" defaultValue={companyId}>
+              {context.authorizedCompanies.map((company) => (
+                <option key={company.id} value={company.id}>{company.code}－{company.name}</option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="搜尋">
+            <Input name="search" defaultValue={query.search} placeholder="名稱、統編或客戶代碼" />
+          </Field>
+          <Field label="狀態">
+            <Select name="status" defaultValue={query.status ?? "ACTIVE"}>
+              <option value="ACTIVE">有效</option>
+              <option value="INACTIVE">停用</option>
+              <option value="ALL">全部</option>
+            </Select>
+          </Field>
+          <Button type="submit">搜尋</Button>
+        </form>
+      </Card>
 
       <CustomerCreateClient selectedCompanyId={companyId} />
 
-      <section className="mt-6 rounded-2xl border bg-white p-6">
-        <h2 className="text-xl font-bold">客戶清單</h2>
-        <div className="mt-4 divide-y">
+      <TableContainer>
+        <Table>
+          <TableCaption>客戶管理清單</TableCaption>
+          <TableHeader>
+            <TableRow>
+              <TableHead>公司客戶代碼</TableHead>
+              <TableHead>客戶名稱</TableHead>
+              <TableHead>類型</TableHead>
+              <TableHead>狀態</TableHead>
+              <TableHead align="right">操作</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
           {result.items.map((customer) => (
-            <div key={customer.id} className="flex items-center justify-between py-3">
-              <div>
-                <div className="font-semibold">{customer.companyRelations[0]?.customerCode}－{customer.name}</div>
-                <div className="text-sm text-slate-500">{customer.customerType === "DOMESTIC" ? "境內" : "境外"}／{customer.status === "ACTIVE" ? "有效" : "停用"}</div>
-              </div>
-              <Link className="rounded-lg border px-3 py-2 text-sm" href={`/admin/customers/${customer.id}?companyId=${companyId}`}>管理</Link>
-            </div>
+            <TableRow key={customer.id}>
+              <TableCell monospace>{customer.companyRelations[0]?.customerCode ?? "—"}</TableCell>
+              <TableCell>{customer.name}</TableCell>
+              <TableCell>{customer.customerType === "DOMESTIC" ? "境內" : "境外"}</TableCell>
+              <TableCell><StatusBadge label={customer.status === "ACTIVE" ? "有效" : "停用"} tone={customer.status === "ACTIVE" ? "success" : "neutral"} /></TableCell>
+              <TableCell align="right"><LinkButton size="small" variant="secondary" href={`/admin/customers/${customer.id}?companyId=${companyId}`}>管理</LinkButton></TableCell>
+            </TableRow>
           ))}
-          {result.items.length === 0 ? <p className="py-4 text-sm text-slate-500">查無資料。</p> : null}
-        </div>
-      </section>
+          {result.items.length === 0 ? <TableEmptyRow colSpan={5}><EmptyState variant="no-results" title="查無客戶資料" description="請調整公司、搜尋字詞或狀態後再試一次。" /></TableEmptyRow> : null}
+          </TableBody>
+        </Table>
+      </TableContainer>
 
-      <nav className="mt-5 flex items-center justify-between text-sm">
-        <Link
-          aria-disabled={result.pagination.page <= 1}
-          className={
-            result.pagination.page <= 1
-              ? "pointer-events-none text-slate-300"
-              : "underline"
-          }
-          href={pageHref(Math.max(1, result.pagination.page - 1))}
-        >
-          上一頁
-        </Link>
-        <span>
-          第 {result.pagination.page} / {result.pagination.totalPages} 頁，共{" "}
-          {result.pagination.total} 筆
-        </span>
-        <Link
-          aria-disabled={
-            result.pagination.page >= result.pagination.totalPages
-          }
-          className={
-            result.pagination.page >= result.pagination.totalPages
-              ? "pointer-events-none text-slate-300"
-              : "underline"
-          }
-          href={pageHref(
-            Math.min(
-              result.pagination.totalPages,
-              result.pagination.page + 1,
-            ),
-          )}
-        >
-          下一頁
-        </Link>
-      </nav>
-    </main>
+      <div className={pageStyles.tableFooter}>
+        <p className={pageStyles.resultCount}>共 {result.pagination.total} 筆</p>
+        <Pagination
+          currentPage={result.pagination.page}
+          totalPages={result.pagination.totalPages}
+          previousHref={result.pagination.page > 1 ? pageHref(result.pagination.page - 1) : undefined}
+          nextHref={result.pagination.page < result.pagination.totalPages ? pageHref(result.pagination.page + 1) : undefined}
+          label="客戶管理清單分頁"
+        />
+      </div>
+    </div>
   );
 }

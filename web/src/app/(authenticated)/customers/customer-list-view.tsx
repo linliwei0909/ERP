@@ -59,6 +59,7 @@ export function CustomersListView({
   companyId,
   result,
 }: CustomersListViewProps) {
+  const hasSearchFilter = Boolean(query.search?.trim());
   const pageHref = (page: number) => {
     const params = new URLSearchParams({
       companyId,
@@ -70,7 +71,7 @@ export function CustomersListView({
   };
 
   return (
-    <main className={pageStyles.pageStack}>
+    <div className={pageStyles.pageStack}>
       <PageHeader
         containerVariant="wide"
         context="客戶主檔"
@@ -148,9 +149,17 @@ export function CustomersListView({
             {result.items.length === 0 ? (
               <TableEmptyRow colSpan={4}>
                 <EmptyState
-                  variant="no-results"
-                  title="查無可使用客戶"
-                  description="請調整公司或搜尋條件後再試一次。"
+                  variant={hasSearchFilter ? "no-results" : "no-data"}
+                  title={
+                    hasSearchFilter
+                      ? "查無符合條件的客戶"
+                      : "尚無可使用客戶"
+                  }
+                  description={
+                    hasSearchFilter
+                      ? "請調整搜尋條件後再試一次。"
+                      : "目前公司尚無可供查詢的有效客戶。"
+                  }
                 />
               </TableEmptyRow>
             ) : null}
@@ -176,6 +185,6 @@ export function CustomersListView({
           label="客戶清單分頁"
         />
       </div>
-    </main>
+    </div>
   );
 }

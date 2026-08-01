@@ -1,6 +1,21 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import pageStyles from "@/components/app-shell/page-contract.module.css";
+import {
+  Alert,
+  Button,
+  Card,
+  Checkbox,
+  EmptyState,
+  Field,
+  FormActions,
+  Input,
+  Section,
+  Select,
+  StatusBadge,
+} from "@/components/ui";
+import customerStyles from "../../../customers/customer-ui.module.css";
 
 type Company = { id: string; code: string; name: string };
 type Relation = {
@@ -89,8 +104,11 @@ function ContactForm({
   contact?: Contact;
   onBusy: (message: string | null) => void;
 }) {
+  const [pending, setPending] = useState(false);
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setPending(true);
     onBusy("儲存聯絡人中…");
     const form = new FormData(event.currentTarget);
     try {
@@ -117,25 +135,25 @@ function ContactForm({
       window.location.reload();
     } catch (error) {
       onBusy(error instanceof Error ? error.message : "儲存失敗");
+      setPending(false);
     }
   }
 
   return (
-    <form onSubmit={submit} className="grid gap-3 rounded-xl border p-4 md:grid-cols-3">
-      <input name="name" required defaultValue={contact?.name} placeholder="姓名*" className="rounded-lg border px-3 py-2" />
-      <input name="department" defaultValue={contact?.department ?? ""} placeholder="部門" className="rounded-lg border px-3 py-2" />
-      <input name="jobTitle" defaultValue={contact?.jobTitle ?? ""} placeholder="職稱" className="rounded-lg border px-3 py-2" />
-      <input name="phone" defaultValue={contact?.phone ?? ""} placeholder="電話" className="rounded-lg border px-3 py-2" />
-      <input name="mobile" defaultValue={contact?.mobile ?? ""} placeholder="手機" className="rounded-lg border px-3 py-2" />
-      <input name="email" type="email" defaultValue={contact?.email ?? ""} placeholder="Email" className="rounded-lg border px-3 py-2" />
-      <input name="notes" defaultValue={contact?.notes ?? ""} placeholder="備註" className="rounded-lg border px-3 py-2 md:col-span-2" />
-      <select name="status" defaultValue={contact?.status ?? "ACTIVE"} className="rounded-lg border px-3 py-2">
-        <option value="ACTIVE">有效</option>
-        <option value="INACTIVE">停用</option>
-      </select>
-      <label className="text-sm"><input name="isPrimary" type="checkbox" defaultChecked={contact?.isPrimary} /> 設為主要聯絡人</label>
-      <button className="rounded-lg bg-slate-900 px-3 py-2 text-white md:justify-self-start">{contact ? "儲存聯絡人" : "新增聯絡人"}</button>
-    </form>
+    <Card variant="subtle" padding="small">
+      <form onSubmit={submit} className={pageStyles.formGrid}>
+        <Field label="姓名" required><Input name="name" required defaultValue={contact?.name} /></Field>
+        <Field label="部門"><Input name="department" defaultValue={contact?.department ?? ""} /></Field>
+        <Field label="職稱"><Input name="jobTitle" defaultValue={contact?.jobTitle ?? ""} /></Field>
+        <Field label="電話"><Input name="phone" defaultValue={contact?.phone ?? ""} /></Field>
+        <Field label="手機"><Input name="mobile" defaultValue={contact?.mobile ?? ""} /></Field>
+        <Field label="電子郵件"><Input name="email" type="email" defaultValue={contact?.email ?? ""} /></Field>
+        <Field label="備註"><Input name="notes" defaultValue={contact?.notes ?? ""} /></Field>
+        <Field label="狀態"><Select name="status" defaultValue={contact?.status ?? "ACTIVE"}><option value="ACTIVE">有效</option><option value="INACTIVE">停用</option></Select></Field>
+        <Checkbox name="isPrimary" defaultChecked={contact?.isPrimary} label="設為主要聯絡人" />
+        <FormActions className={pageStyles.fullSpan} align="start" primary={<Button type="submit" pending={pending} pendingLabel="儲存中…">{contact ? "儲存聯絡人" : "新增聯絡人"}</Button>} />
+      </form>
+    </Card>
   );
 }
 
@@ -150,8 +168,11 @@ function LocationForm({
   location?: Location;
   onBusy: (message: string | null) => void;
 }) {
+  const [pending, setPending] = useState(false);
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setPending(true);
     onBusy("儲存送貨地點中…");
     const form = new FormData(event.currentTarget);
     try {
@@ -180,27 +201,27 @@ function LocationForm({
       window.location.reload();
     } catch (error) {
       onBusy(error instanceof Error ? error.message : "儲存失敗");
+      setPending(false);
     }
   }
 
   return (
-    <form onSubmit={submit} className="grid gap-3 rounded-xl border p-4 md:grid-cols-4">
-      <input name="code" required defaultValue={location?.code} placeholder="地點代碼*" className="rounded-lg border px-3 py-2" />
-      <input name="name" required defaultValue={location?.name} placeholder="地點名稱*" className="rounded-lg border px-3 py-2" />
-      <input name="recipientName" required defaultValue={location?.recipientName} placeholder="收件人*" className="rounded-lg border px-3 py-2" />
-      <input name="phone" required defaultValue={location?.phone} placeholder="電話*" className="rounded-lg border px-3 py-2" />
-      <input name="postalCode" defaultValue={location?.postalCode ?? ""} placeholder="郵遞區號" className="rounded-lg border px-3 py-2" />
-      <input name="city" defaultValue={location?.city ?? ""} placeholder="城市" className="rounded-lg border px-3 py-2" />
-      <input name="district" defaultValue={location?.district ?? ""} placeholder="行政區" className="rounded-lg border px-3 py-2" />
-      <input name="addressLine" required defaultValue={location?.addressLine} placeholder="地址*" className="rounded-lg border px-3 py-2" />
-      <input name="notes" defaultValue={location?.notes ?? ""} placeholder="備註" className="rounded-lg border px-3 py-2 md:col-span-2" />
-      <select name="status" defaultValue={location?.status ?? "ACTIVE"} className="rounded-lg border px-3 py-2">
-        <option value="ACTIVE">有效</option>
-        <option value="INACTIVE">停用</option>
-      </select>
-      <label className="text-sm"><input name="isDefault" type="checkbox" defaultChecked={location?.isDefault} /> 設為預設地點</label>
-      <button className="rounded-lg bg-slate-900 px-3 py-2 text-white md:justify-self-start">{location ? "儲存地點" : "新增地點"}</button>
-    </form>
+    <Card variant="subtle" padding="small">
+      <form onSubmit={submit} className={pageStyles.formGrid}>
+        <Field label="地點代碼" required><Input name="code" required defaultValue={location?.code} /></Field>
+        <Field label="地點名稱" required><Input name="name" required defaultValue={location?.name} /></Field>
+        <Field label="收件人" required><Input name="recipientName" required defaultValue={location?.recipientName} /></Field>
+        <Field label="電話" required><Input name="phone" required defaultValue={location?.phone} /></Field>
+        <Field label="郵遞區號"><Input name="postalCode" defaultValue={location?.postalCode ?? ""} /></Field>
+        <Field label="城市"><Input name="city" defaultValue={location?.city ?? ""} /></Field>
+        <Field label="行政區"><Input name="district" defaultValue={location?.district ?? ""} /></Field>
+        <Field label="地址" required><Input name="addressLine" required defaultValue={location?.addressLine} /></Field>
+        <Field label="備註"><Input name="notes" defaultValue={location?.notes ?? ""} /></Field>
+        <Field label="狀態"><Select name="status" defaultValue={location?.status ?? "ACTIVE"}><option value="ACTIVE">有效</option><option value="INACTIVE">停用</option></Select></Field>
+        <Checkbox name="isDefault" defaultChecked={location?.isDefault} label="設為預設地點" />
+        <FormActions className={pageStyles.fullSpan} align="start" primary={<Button type="submit" pending={pending} pendingLabel="儲存中…">{location ? "儲存地點" : "新增地點"}</Button>} />
+      </form>
+    </Card>
   );
 }
 
@@ -215,9 +236,12 @@ export function CustomerManagerClient({
 }) {
   const [customerType, setCustomerType] = useState(customer.customerType);
   const [message, setMessage] = useState<string | null>(null);
+  const [customerPending, setCustomerPending] = useState(false);
+  const [relationPending, setRelationPending] = useState(false);
 
   async function updateCustomer(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setCustomerPending(true);
     setMessage("儲存客戶中…");
     const form = new FormData(event.currentTarget);
     const customerValue =
@@ -243,11 +267,13 @@ export function CustomerManagerClient({
       window.location.reload();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "儲存失敗");
+      setCustomerPending(false);
     }
   }
 
   async function assignCompany(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setRelationPending(true);
     setMessage("儲存公司授權中…");
     const form = new FormData(event.currentTarget);
     try {
@@ -261,66 +287,63 @@ export function CustomerManagerClient({
       window.location.reload();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "儲存失敗");
+      setRelationPending(false);
     }
   }
 
   return (
     <>
-      {message ? <p role="status" className="mt-5 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{message}</p> : null}
-      <section className="mt-6 rounded-2xl border bg-white p-6">
-        <h2 className="text-xl font-bold">客戶基本資料</h2>
-        <form onSubmit={updateCustomer} className="mt-4 grid gap-3 md:grid-cols-3">
-          <select value={customerType} onChange={(event) => setCustomerType(event.target.value as "DOMESTIC" | "FOREIGN")} className="rounded-lg border px-3 py-2">
-            <option value="DOMESTIC">境內</option>
-            <option value="FOREIGN">境外</option>
-          </select>
-          <input name="name" required defaultValue={customer.name} placeholder="客戶名稱" className="rounded-lg border px-3 py-2" />
-          <select name="status" defaultValue={customer.status} className="rounded-lg border px-3 py-2">
-            <option value="ACTIVE">有效</option>
-            <option value="INACTIVE">停用</option>
-          </select>
+      {message ? <Alert tone={message.endsWith("中…") ? "info" : "danger"} title={message.endsWith("中…") ? "處理中" : "操作失敗"}>{message}</Alert> : null}
+      <Card>
+        <Section title="客戶基本資料" description="維持既有客戶類型、識別資料與狀態規則。">
+        <form onSubmit={updateCustomer} className={pageStyles.formGrid}>
+          <Field label="客戶類型"><Select value={customerType} onChange={(event) => setCustomerType(event.target.value as "DOMESTIC" | "FOREIGN")}><option value="DOMESTIC">境內</option><option value="FOREIGN">境外</option></Select></Field>
+          <Field label="客戶名稱" required><Input name="name" required defaultValue={customer.name} /></Field>
+          <Field label="狀態"><Select name="status" defaultValue={customer.status}><option value="ACTIVE">有效</option><option value="INACTIVE">停用</option></Select></Field>
           {customerType === "DOMESTIC" ? (
-            <input name="taxId" defaultValue={customer.taxId ?? ""} placeholder="統一編號" className="rounded-lg border px-3 py-2" />
+            <Field label="統一編號"><Input name="taxId" defaultValue={customer.taxId ?? ""} /></Field>
           ) : (
             <>
-              <input name="countryCode" required defaultValue={customer.countryCode ?? ""} placeholder="國別碼" maxLength={2} className="rounded-lg border px-3 py-2 uppercase" />
-              <input name="foreignIdentifier" required defaultValue={customer.foreignIdentifier ?? ""} placeholder="境外識別碼" className="rounded-lg border px-3 py-2" />
+              <Field label="國別碼" required><Input name="countryCode" required defaultValue={customer.countryCode ?? ""} maxLength={2} className="uppercase" /></Field>
+              <Field label="境外識別碼" required><Input name="foreignIdentifier" required defaultValue={customer.foreignIdentifier ?? ""} /></Field>
             </>
           )}
-          <button className="rounded-lg bg-slate-900 px-4 py-2 text-white md:col-span-3 md:justify-self-start">儲存客戶</button>
+          <FormActions className={pageStyles.fullSpan} align="start" primary={<Button type="submit" pending={customerPending} pendingLabel="儲存中…">儲存客戶</Button>} />
         </form>
-      </section>
+        </Section>
+      </Card>
 
-      <section className="mt-6 rounded-2xl border bg-white p-6">
-        <h2 className="text-xl font-bold">公司授權</h2>
-        <ul className="mt-3 text-sm">
-          {customer.companyRelations.map((relation) => <li key={relation.id}>{relation.company.code}：{relation.customerCode}（{relation.status === "ACTIVE" ? "有效" : "停用"}）</li>)}
-        </ul>
-        <form onSubmit={assignCompany} className="mt-4 grid gap-3 md:grid-cols-4">
-          <select name="companyId" defaultValue={selectedCompanyId} className="rounded-lg border px-3 py-2">
-            {companies.map((company) => <option key={company.id} value={company.id}>{company.code}－{company.name}</option>)}
-          </select>
-          <input name="customerCode" required placeholder="公司客戶代碼" className="rounded-lg border px-3 py-2" />
-          <select name="status" defaultValue="ACTIVE" className="rounded-lg border px-3 py-2"><option value="ACTIVE">有效</option><option value="INACTIVE">停用</option></select>
-          <button className="rounded-lg bg-slate-900 px-4 py-2 text-white">新增或更新授權</button>
+      <Card>
+        <Section title="公司授權" description="管理客戶在既有授權公司中的代碼與有效狀態。">
+        {customer.companyRelations.length > 0 ? <ul className={customerStyles.compactList}>
+          {customer.companyRelations.map((relation) => <li className={customerStyles.relationRow} key={relation.id}><span>{relation.company.code}－{relation.company.name}：<strong>{relation.customerCode}</strong></span><StatusBadge label={relation.status === "ACTIVE" ? "有效" : "停用"} tone={relation.status === "ACTIVE" ? "success" : "neutral"} /></li>)}
+        </ul> : <EmptyState variant="no-data" title="尚無公司授權" />}
+        <form onSubmit={assignCompany} className={pageStyles.formGrid}>
+          <Field label="公司"><Select name="companyId" defaultValue={selectedCompanyId}>{companies.map((company) => <option key={company.id} value={company.id}>{company.code}－{company.name}</option>)}</Select></Field>
+          <Field label="公司客戶代碼" required><Input name="customerCode" required /></Field>
+          <Field label="狀態"><Select name="status" defaultValue="ACTIVE"><option value="ACTIVE">有效</option><option value="INACTIVE">停用</option></Select></Field>
+          <FormActions className={pageStyles.fullSpan} align="start" primary={<Button type="submit" pending={relationPending} pendingLabel="儲存中…">新增或更新授權</Button>} />
         </form>
-      </section>
+        </Section>
+      </Card>
 
-      <section className="mt-6 rounded-2xl border bg-white p-6">
-        <h2 className="text-xl font-bold">聯絡人</h2>
-        <div className="mt-4 space-y-3">
+      <Card>
+        <Section title="聯絡人" description="新增或維護聯絡方式；電話、手機或電子郵件至少一項必填的既有驗證維持不變。">
+        <div className={customerStyles.formStack}>
           <ContactForm customerId={customer.id} companyId={selectedCompanyId} onBusy={setMessage} />
           {customer.contacts.map((contact) => <ContactForm key={contact.id} customerId={customer.id} companyId={selectedCompanyId} contact={contact} onBusy={setMessage} />)}
         </div>
-      </section>
+        </Section>
+      </Card>
 
-      <section className="mt-6 rounded-2xl border bg-white p-6">
-        <h2 className="text-xl font-bold">送貨地點</h2>
-        <div className="mt-4 space-y-3">
+      <Card>
+        <Section title="送貨地點" description="新增或維護結構化地址與預設地點。">
+        <div className={customerStyles.formStack}>
           <LocationForm customerId={customer.id} companyId={selectedCompanyId} onBusy={setMessage} />
           {customer.deliveryLocations.map((location) => <LocationForm key={location.id} customerId={customer.id} companyId={selectedCompanyId} location={location} onBusy={setMessage} />)}
         </div>
-      </section>
+        </Section>
+      </Card>
     </>
   );
 }

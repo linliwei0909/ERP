@@ -71,7 +71,7 @@ describe("P4.3d representative page integration", () => {
     expect(html).toContain("搜尋");
     expect(html).toContain("<table");
     expect(html).toContain("客戶查詢結果");
-    expect(html).toContain("查無可使用客戶");
+    expect(html).toContain("查無符合條件的客戶");
     expect(html).toContain('aria-label="客戶清單分頁"');
     expect(html).toContain("companyId=company-a");
     expect(html).toContain("search=%E6%B8%AC%E8%A9%A6");
@@ -108,7 +108,6 @@ describe("P4.3d representative page integration", () => {
   it("does not duplicate page padding or max-width in representative routes", () => {
     for (const path of [
       "src/app/(authenticated)/page.tsx",
-      "src/app/(authenticated)/customers/customer-list-view.tsx",
       "src/app/(authenticated)/admin/items/page.tsx",
       "src/app/(authenticated)/delivery-notes/page.tsx",
     ]) {
@@ -119,5 +118,11 @@ describe("P4.3d representative page integration", () => {
         page.match(/<\/main>/g)?.length,
       );
     }
+
+    const customers = source(
+      "src/app/(authenticated)/customers/customer-list-view.tsx",
+    );
+    expect(customers).not.toMatch(/max-w-|min-h-screen|px-6|py-12/);
+    expect(customers).not.toContain("<main");
   });
 });
