@@ -113,6 +113,10 @@ P4.3e已完成Design System總體closure：26個UI TypeScript source／56條rela
 
 P5 Inventory and Production 仍是後續擴充，文件為 `docs/P5_INVENTORY_PRODUCTION_BLUEPRINT.md`。P4 不預先建立 P5 schema、API、route 或 UI；P5 開始前需重新完成 domain review。
 
+P4.4 以 `docs/P4_4_MASTERS_ADMIN_UI_PLAN.md` 為 execution contract，依 Customers、Items、Pricing、Company Settings／Users／Admin、Closure 切片遷移既有 routes。一般 Masters 頁優先使用 Shell active company；local `companyId` selector 只有在逐 route 證明 query、filter、pagination、redirect、permission 與 API target 不變時才可移除，否則保留並記錄 OQ-053。P4.4 不建立平行 API、跨公司 management scope、新 role code、schema 或 migration。
+
+P4.4 route smoke如有需要，只能使用通過repository safety guard的全新disposable DB。CI保留guard固定55432與dedicated role，將Actions host mapping、DB URLs及database name對齊正式contract。兩個Delivery Note DB tests以Vitest只固定`Date`至明確Asia/Taipei日期並在`afterEach`restore；production date、sequence、service、schema與migration均未修改。Targeted與full fresh DB、12/12 migrations、302 unit、149 DB、schema diff及build已通過。
+
 ## 5. 模組邊界
 
 | 模組 | 主要責任 | 禁止事項 |
@@ -312,6 +316,9 @@ P3.2a 已完成 Prisma schema、`0010_p3_delivery_notes`、custom SQL、fresh DB
 
 ## 20. 變更紀錄
 
+- V0.24（2026-08-01，P4.4 preflight ready）：記錄Delivery Note test-only fixed clock、CI 55432／guard-compliant database、targeted/full fresh DB及完整quality gates通過；production behavior、schema、migration與P4.4 UI未變更。
+- V0.23（2026-08-01，P4.4 CI alignment blocked）：記錄CI 55432／guard-compliant database候選與fresh DB證據；guard未弱化，但2個既有date-sensitive DB assertions阻擋完整gates，未修改tests/application/schema/migration且未開始P4.4a。
+- V0.22（2026-08-01，P4.4 preflight）：同步 Masters／Admin presentation切片、active-company保守裁量、既有後端邊界與disposable DB/CI能力缺口；P4.4a、production UI、schema、migration、RBAC、session及API均未開始或未變更。
 - V0.21（2026-08-01，P4.3e closure）：記錄component inventory、V4 tokens、Server／Client boundary、Page contract與adoption matrix重驗，正確0001～0012 disposable schema route smoke、desktop／360px／Dialog／reduced-motion及完整quality gates通過；修正User Menu 44px觸控高度。P4.4～P4.7、schema、migration、RBAC、session、domain、formal print與P5未開始或未變更。
 - V0.20（2026-08-01，P4.3d 工程同步）：記錄 PageContainer formal／legacy variant、PageHeader API、App Shell 單一 container寬度協調與四組代表頁 presentation integration完成；未修改 query、mutation、authorization、session、schema、formal print、dependency或 P5。
 - V0.19（2026-08-01，P4.3c 工程同步）：記錄 server-safe Card／Section／native data display primitives、native Dialog／ConfirmDialog client boundary、portal／focus／pending／reduced-motion contract及與 Drawer 共用的 reference-counted body scroll lock完成；未建立 DataTable engine、業務頁整合、新 dependency、後端、資料庫或 P5。

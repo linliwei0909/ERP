@@ -1,7 +1,7 @@
 # Ragic 本地端系統待確認事項
 
 文件狀態：未決事項清單  
-版本：V0.16
+版本：V0.17
 版本日期：2026-08-01
 
 ## 1. 使用方式
@@ -50,6 +50,7 @@ P3.1 的公司法定資訊、單據公司縮寫、訂單號、未稅金額、人
 
 ## 5. 變更紀錄
 
+- V0.17（2026-08-01，P4.4 preflight）：Master Plan已固定route順序、adoption matrix與保守company-context裁量；OQ-053／054仍維持部分未決，逐route只有在證明query/filter/pagination/redirect/permission/API target不變時才移除local selector，否則保留並記錄validation，不修改session或authorization。
 - V0.16（2026-08-01）：P4.3e closure確認OQ-053的local company selector與OQ-054的其餘route／legacy layout工作仍須於P4.4前決定；兩題維持部分未決，未因Design System完成而關閉或擴張治理決策。
 - V0.15（2026-08-01）：依 P4.3d 實作證據更新 OQ-053／054；確認 local company selector仍需 P4.4 route遷移，並記錄 formal page contract與四組代表頁已落地，兩題均未關閉或擴張治理決策。
 - V0.14（2026-08-01）：依 DEC-061 關閉 OQ-052；OQ-053 固定 active company／「管理公司」雙 context 邊界並只保留 route 細節；OQ-054 固定 P4.3d 代表頁及 P4.4～P4.6 全面遷移邊界並只保留順序與例外。

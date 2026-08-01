@@ -220,7 +220,7 @@ P3.1 完成條件已達成：訂單取號、草稿、確認、修訂、作廢、
 - [2026-08-01 完成 P4.3c] Data Display 與 Overlay。
 - [2026-08-01 完成 P4.3d] Page Contract 與四組代表頁面整合。
 - [2026-08-01 完成 P4.3e] Design System總體驗證與closure；P4.3完成，下一正式階段為P4.4。
-- P4.4 主檔 UI 重整。
+- [2026-08-01 Preflight 完成／Ready for Orchestration] P4.4 主檔 UI 重整；依 `docs/P4_4_MASTERS_ADMIN_UI_PLAN.md` 分為 Customers、Items、Pricing、Company Settings／Users／Admin 與 Closure 五個獨立切片。
 - P4.5 銷售訂單 UI 重整。
 - P4.6 銷貨單與列印 UI 重整。
 - P4.7 完整 UX 驗證與結案。
@@ -242,6 +242,8 @@ P4.3e 已完成：重新交叉驗證component inventory、V4 tokens、Server／C
 依 DEC-061，未來系統管理採 `SYSTEM_ADMIN`／`COMPANY_ADMIN` 雙層治理，但現有後端仍使用 `ADMIN`／`ORDER_ENTRY` 與既有 authorization contract。P4.3 只固定 UI／資訊架構；不得修改 RBAC、session、schema、migration 或 authorization implementation。
 
 P4.2與P4.3都沒有變更 Prisma schema、migration、RBAC mapping、session model、transaction、audit、idempotency、formal print 或 P5。P4.3只完成Design System與四組representative integration；下一正式階段為P4.4，P5尚未開始。
+
+P4.4 preflight 已固定完整 route/adoption matrix、active-company 保守裁量、每切片 quality gates、獨立 commit、feature branch／Draft PR 與 fail-fast 邊界；尚未開始 P4.4a。CI已將DB host port與URL統一為55432並採guard-compliant database name；兩個delivery-note月份相依tests以固定Asia/Taipei clock且自動restore的test-only方式修正。Targeted及full fresh DB、12/12 migrations、lint、typecheck、302 unit、149 DB、schema diff與37頁build均通過，guard與production behavior未變。
 
 完成條件：P4.1～P4.7 依序完成；登入、公司切換、主檔、訂單、銷貨單、正式列印、PDF、補印、權限、session、API failure、keyboard 與支援 viewport 通過完整驗收。
 
@@ -396,6 +398,9 @@ P4.2與P4.3都沒有變更 Prisma schema、migration、RBAC mapping、session mo
 
 ## 7. 變更紀錄
 
+- V0.26（2026-08-01，P4.4 preflight ready）：以test-only fixed clock移除兩個Delivery Note月份相依assertion，完成targeted與full fresh DB、12/12 migrations、lint、typecheck、302 unit、149 DB、schema diff與37頁build；CI對齊55432及guard-compliant database name，P4.4a仍未開始。
+- V0.25（2026-08-01，P4.4 CI alignment blocked）：完成55432與guard-compliant CI database name候選修正及fresh DB驗證；12/12 migrations、lint、typecheck、302 unit tests與DB safety通過，但149個DB tests有2個既有月份硬編碼assertion失敗，故未完成schema diff/build、未commit/push且不開始P4.4a。
+- V0.24（2026-08-01，P4.4 preflight）：建立 P4.4 Masters／Admin Master Plan、完整 route/adoption inventory、company context裁量、切片/commit/Draft PR/CI/disposable DB/fail-fast contract；P4.4a尚未開始，未修改production UI、tests、dependency、schema或migration。
 - V0.23（2026-08-01，P4.3e closure）：完成P4.3a～P4.3d跨切片重驗、component／token／boundary／adoption／static contract audit、全新0001～0012 disposable DB與四組route smoke、desktop／360px／Dialog／reduced-motion、lint、typecheck、32 files／302 tests及37-unit build；P4.3完成，P4.4～P4.7、後端、資料庫與P5未開始或未變更。
 - V0.22（2026-08-01，P4.3d 完成同步）：完成 PageContainer formal variants 與 legacy compatibility、PageHeader 正式 API、App Shell 單一 container 寬度協調，以及四組代表頁 presentation integration、SSR／integration／desktop／360px 驗證；P4.3e、全面 route migration、後端及資料庫均未開始或未變更。
 - V0.21（2026-08-01，P4.3c 完成同步）：完成 Card／Section、native Table primitives、Pagination、StatusBadge、DescriptionList、native Dialog／ConfirmDialog、共享 body scroll lock、SSR／DOM／keyboard tests、360px／reduced-motion 視覺驗證與完整品質 gate；P4.3d～P4.3e、業務頁遷移、後端及資料庫均未開始或未變更。
