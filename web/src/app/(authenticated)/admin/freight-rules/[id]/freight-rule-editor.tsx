@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import pageStyles from "@/components/app-shell/page-contract.module.css";
+import { Alert, Button, Card, Field, FormActions, Input, Section, Select } from "@/components/ui";
 
 type FreightRuleValue = {
   id: string;
@@ -23,12 +25,14 @@ export function FreightRuleEditor({
 }) {
   const [mode, setMode] = useState(value.mode);
   const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
 
   return (
-    <form
-      className="mt-8 grid gap-4 rounded-2xl border bg-white p-6 md:grid-cols-2"
+    <Card><Section title="規則資料" description="保留既有運費模式、金額與 half-open 有效期間。"><form
+      className={pageStyles.formGrid}
       onSubmit={async (event) => {
         event.preventDefault();
+        setBusy(true);
         setMessage("");
         const form = new FormData(event.currentTarget);
         const response = await fetch(`/api/admin/freight-rules/${value.id}`, {
@@ -59,12 +63,12 @@ export function FreightRuleEditor({
         setMessage(
           response.ok ? "已更新運費規則" : payload.error?.message ?? "更新失敗",
         );
+        if (!response.ok) setBusy(false);
         if (response.ok) window.location.reload();
       }}
     >
-      <label className="text-sm">
-        計價方式
-        <select
+      {message ? <Alert tone={message === "已更新運費規則" ? "success" : "danger"} title={message === "已更新運費規則" ? "更新成功" : "更新失敗"}>{message}</Alert> : null}
+      <Field label="計價方式"><Select
           value={mode}
           onChange={(event) =>
             setMode(
@@ -74,75 +78,46 @@ export function FreightRuleEditor({
                 | "FIXED_PER_LOCATION",
             )
           }
-          className="mt-1 w-full rounded-lg border px-3 py-2"
         >
           <option value="NO_CHARGE">不收運費</option>
           <option value="QUANTITY_BASED">按數量收費</option>
           <option value="FIXED_PER_LOCATION">地點固定金額</option>
-        </select>
-      </label>
+        </Select></Field>
       {mode === "QUANTITY_BASED" ? (
-        <label className="text-sm">
-          每單位運費（元）
-          <input
+        <Field label="每單位運費（元）" required><Input
             name="unitFreight"
             defaultValue={value.unitFreight ?? ""}
             required
             inputMode="numeric"
-            className="mt-1 w-full rounded-lg border px-3 py-2"
-          />
-        </label>
+          /></Field>
       ) : null}
       {mode === "FIXED_PER_LOCATION" ? (
-        <label className="text-sm">
-          固定運費（元）
-          <input
+        <Field label="固定運費（元）" required><Input
             name="fixedFreight"
             defaultValue={value.fixedFreight ?? ""}
             required
             inputMode="numeric"
-            className="mt-1 w-full rounded-lg border px-3 py-2"
-          />
-        </label>
+          /></Field>
       ) : null}
-      <label className="text-sm">
-        生效日
-        <input
+      <Field label="生效日" required><Input
           name="validFrom"
           type="date"
           defaultValue={value.validFrom}
           required
-          className="mt-1 w-full rounded-lg border px-3 py-2"
-        />
-      </label>
-      <label className="text-sm">
-        失效日（不含）
-        <input
+        /></Field>
+      <Field label="失效日（不含）"><Input
           name="validTo"
           type="date"
           defaultValue={value.validTo ?? ""}
-          className="mt-1 w-full rounded-lg border px-3 py-2"
-        />
-      </label>
-      <label className="text-sm">
-        狀態
-        <select
+        /></Field>
+      <Field label="狀態"><Select
           name="status"
           defaultValue={value.status}
-          className="mt-1 w-full rounded-lg border px-3 py-2"
         >
           <option value="ACTIVE">有效</option>
           <option value="INACTIVE">停用</option>
-        </select>
-      </label>
-      <div className="flex items-end">
-        <button className="rounded-lg bg-teal-700 px-4 py-2 text-white">
-          儲存
-        </button>
-      </div>
-      {message ? (
-        <p className="text-sm text-slate-700 md:col-span-2">{message}</p>
-      ) : null}
-    </form>
+        </Select></Field>
+      <FormActions className={pageStyles.fullSpan} align="start" primary={<Button type="submit" pending={busy} pendingLabel="儲存中…">儲存規則</Button>} />
+    </form></Section></Card>
   );
 }

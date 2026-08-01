@@ -1,8 +1,12 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
+import { PageHeader } from "@/components/app-shell/page-header";
+import pageStyles from "@/components/app-shell/page-contract.module.css";
+import { Button, Card, Checkbox, EmptyState, Field, FormActions, Input, Section, Select, StatusBadge } from "@/components/ui";
 import { requireAdminWithAudit } from "@/lib/auth/authorization";
 import { getPageRequestContext } from "@/lib/auth/request-context";
 import { prisma } from "@/lib/prisma";
+import { UserActionButton } from "./user-action-button";
+import userStyles from "./users-ui.module.css";
 
 export default async function UsersPage() {
   let context;
@@ -34,55 +38,34 @@ export default async function UsersPage() {
   ]);
 
   return (
-    <main className="mx-auto min-h-screen max-w-6xl px-6 py-12">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-semibold text-teal-700">管理員功能</p>
-          <h1 className="text-3xl font-bold">使用者管理</h1>
-        </div>
-        <Link href="/" className="rounded-lg border px-4 py-2">
-          返回首頁
-        </Link>
-      </div>
+    <div className={pageStyles.pageStack}>
+      <PageHeader containerVariant="wide" context="管理員功能" title="使用者管理" description="管理既有角色、公司授權、預設公司、狀態與 Session。" />
 
-      <section className="mt-8 rounded-2xl border bg-white p-6">
-        <h2 className="text-xl font-bold">建立使用者</h2>
+      <Card><Section title="建立使用者" description="建立帳號並指派既有角色與公司範圍。">
         <form
           method="post"
           action="/api/admin/users"
-          className="mt-4 grid gap-4 md:grid-cols-2"
+          className={pageStyles.formGrid}
         >
-          <label className="text-sm font-medium">
-            帳號
-            <input
+          <Field label="帳號" required><Input
               name="username"
               required
-              className="mt-1 w-full rounded-lg border px-3 py-2"
-            />
-          </label>
-          <label className="text-sm font-medium">
-            初始密碼
-            <input
+            /></Field>
+          <Field label="初始密碼" required><Input
               type="password"
               name="password"
               minLength={12}
               required
-              className="mt-1 w-full rounded-lg border px-3 py-2"
-            />
-          </label>
+            /></Field>
           <fieldset>
             <legend className="text-sm font-medium">角色</legend>
             <div className="mt-2 space-y-2">
               {roles.map((role) => (
-                <label key={role.id} className="block text-sm">
-                  <input
-                    type="checkbox"
+                <Checkbox key={role.id}
                     name="roleCodes"
                     value={role.code}
-                    className="mr-2"
+                    label={role.name}
                   />
-                  {role.name}
-                </label>
               ))}
             </div>
           </fieldset>
@@ -90,23 +73,16 @@ export default async function UsersPage() {
             <legend className="text-sm font-medium">公司授權</legend>
             <div className="mt-2 space-y-2">
               {companies.map((company) => (
-                <label key={company.id} className="block text-sm">
-                  <input
-                    type="checkbox"
+                <Checkbox key={company.id}
                     name="companyIds"
                     value={company.id}
-                    className="mr-2"
+                    label={`${company.code}－${company.name}`}
                   />
-                  {company.code}－{company.name}
-                </label>
               ))}
             </div>
           </fieldset>
-          <label className="text-sm font-medium">
-            預設公司
-            <select
+          <Field label="預設公司"><Select
               name="defaultCompanyId"
-              className="mt-1 w-full rounded-lg border px-3 py-2"
             >
               <option value="">無</option>
               {companies.map((company) => (
@@ -114,29 +90,25 @@ export default async function UsersPage() {
                   {company.code}－{company.name}
                 </option>
               ))}
-            </select>
-          </label>
-          <div className="flex items-end">
-            <button className="rounded-lg bg-slate-900 px-4 py-2 text-white">
-              建立使用者
-            </button>
-          </div>
+            </Select></Field>
+          <FormActions className={pageStyles.fullSpan} align="start" primary={<Button type="submit">建立使用者</Button>} />
         </form>
-      </section>
+      </Section></Card>
 
-      <section className="mt-8 space-y-4">
-        {users.map((user) => (
-          <article key={user.id} className="rounded-2xl border bg-white p-6">
-            <div className="flex flex-wrap items-start justify-between gap-4">
+      <Section title="使用者清單" description={`共 ${users.length} 位使用者`}>
+        {users.length === 0 ? <EmptyState variant="no-data" title="尚無使用者" /> : users.map((user) => (
+          <Card key={user.id}>
+            <article className={pageStyles.pageStack}>
+            <div className={userStyles.userHeader}>
               <div>
                 <h2 className="text-lg font-bold">{user.username}</h2>
-                <p className="text-sm text-slate-500">
-                  {user.status === "ACTIVE" ? "啟用" : "停用"} ·{" "}
+                <StatusBadge label={user.status === "ACTIVE" ? "啟用" : "停用"} tone={user.status === "ACTIVE" ? "success" : "neutral"} />
+                <p className={userStyles.metaText}>
                   {user.roleAssignments
                     .map((assignment) => assignment.role.name)
                     .join("、") || "無角色"}
                 </p>
-                <p className="mt-1 text-sm text-slate-500">
+                <p className={userStyles.metaText}>
                   公司：
                   {user.companyScopes
                     .map((scope) => scope.company.name)
@@ -146,7 +118,7 @@ export default async function UsersPage() {
                     : ""}
                 </p>
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div className={userStyles.actionRow}>
                 <form
                   method="post"
                   action={`/api/admin/users/${user.id}/status`}
@@ -157,9 +129,7 @@ export default async function UsersPage() {
                     value={user.status === "ACTIVE" ? "INACTIVE" : "ACTIVE"}
                   />
                   <input type="hidden" name="reason" value="管理員操作" />
-                  <button className="rounded-lg border px-3 py-2 text-sm">
-                    {user.status === "ACTIVE" ? "停用" : "重新啟用"}
-                  </button>
+                  <UserActionButton label={user.status === "ACTIVE" ? "停用" : "重新啟用"} title={user.status === "ACTIVE" ? "停用使用者" : "重新啟用使用者"} description={`確定要${user.status === "ACTIVE" ? "停用" : "重新啟用"} ${user.username}？`} destructive={user.status === "ACTIVE"} />
                 </form>
                 <form
                   method="post"
@@ -170,9 +140,7 @@ export default async function UsersPage() {
                     name="reason"
                     value="管理員撤銷全部 Session"
                   />
-                  <button className="rounded-lg border px-3 py-2 text-sm">
-                    撤銷全部 Session
-                  </button>
+                  <UserActionButton label="撤銷全部 Session" title="撤銷全部 Session" description={`確定撤銷 ${user.username} 的全部 Session？`} destructive />
                 </form>
               </div>
             </div>
@@ -180,49 +148,38 @@ export default async function UsersPage() {
             <form
               method="post"
               action={`/api/admin/users/${user.id}/access`}
-              className="mt-5 grid gap-4 border-t pt-5 md:grid-cols-3"
+              className={userStyles.accessGrid}
             >
               <fieldset>
                 <legend className="text-sm font-medium">角色</legend>
                 {roles.map((role) => (
-                  <label key={role.id} className="mt-2 block text-sm">
-                    <input
-                      type="checkbox"
+                  <Checkbox key={role.id}
                       name="roleCodes"
                       value={role.code}
                       defaultChecked={user.roleAssignments.some(
                         (assignment) => assignment.roleId === role.id,
                       )}
-                      className="mr-2"
+                      label={role.name}
                     />
-                    {role.name}
-                  </label>
                 ))}
               </fieldset>
               <fieldset>
                 <legend className="text-sm font-medium">公司</legend>
                 {companies.map((company) => (
-                  <label key={company.id} className="mt-2 block text-sm">
-                    <input
-                      type="checkbox"
+                  <Checkbox key={company.id}
                       name="companyIds"
                       value={company.id}
                       defaultChecked={user.companyScopes.some(
                         (scope) => scope.companyId === company.id,
                       )}
-                      className="mr-2"
+                      label={company.name}
                     />
-                    {company.name}
-                  </label>
                 ))}
               </fieldset>
               <div>
-                <label className="text-sm font-medium">
-                  預設公司
-                  <select
+                <Field label="預設公司"><Select
                     name="defaultCompanyId"
                     defaultValue={user.defaultCompanyId ?? ""}
-                    className="mt-1 w-full rounded-lg border px-3 py-2"
                   >
                     <option value="">無</option>
                     {companies.map((company) => (
@@ -230,21 +187,19 @@ export default async function UsersPage() {
                         {company.name}
                       </option>
                     ))}
-                  </select>
-                </label>
+                  </Select></Field>
                 <input
                   type="hidden"
                   name="reason"
                   value="管理員更新角色及公司授權"
                 />
-                <button className="mt-4 rounded-lg bg-slate-900 px-4 py-2 text-sm text-white">
-                  更新授權
-                </button>
+                <Button type="submit">更新授權</Button>
               </div>
             </form>
-          </article>
+            </article>
+          </Card>
         ))}
-      </section>
-    </main>
+      </Section>
+    </div>
   );
 }

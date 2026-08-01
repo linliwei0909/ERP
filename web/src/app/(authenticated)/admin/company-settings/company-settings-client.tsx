@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import pageStyles from "@/components/app-shell/page-contract.module.css";
+import { Alert, Button, Card, ConfirmDialog, EmptyState, Field, FormActions, Input, Section, Select, StatusBadge } from "@/components/ui";
 import type { CompanySettingHistoryEntry } from "@/lib/company-settings/service";
 import { COMPANY_SETTING_KEYS } from "@/lib/company-settings/registry";
 import type { CompanySettingKey } from "@/lib/company-settings/registry";
@@ -59,6 +61,7 @@ export function CompanySettingsClient({
 }) {
   const [message, setMessage] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [cancelId, setCancelId] = useState<string | null>(null);
   const minimumDate = tomorrowDate();
 
   function selectCompany(companyId: string) {
@@ -130,10 +133,9 @@ export function CompanySettingsClient({
     }
   }
 
-  async function cancelVersion(id: string) {
-    if (!window.confirm("確定取消這個尚未生效的版本？")) {
-      return;
-    }
+  async function cancelVersion() {
+    const id = cancelId;
+    if (!id) return;
     setMessage(null);
     setBusyId(id);
 
@@ -150,72 +152,51 @@ export function CompanySettingsClient({
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "取消失敗");
       setBusyId(null);
+      setCancelId(null);
     }
   }
 
   return (
     <>
-      <section className="mt-8 rounded-2xl border bg-white p-6">
-        <label className="text-sm font-medium">
-          管理公司
-          <select
+      <Card>
+        <Section title="管理範圍" description="選擇授權公司與既有設定鍵。">
+        <div className={pageStyles.formGrid}>
+          <Field label="管理公司"><Select
             value={selectedCompanyId}
             onChange={(event) => selectCompany(event.target.value)}
-            className="mt-1 block w-full max-w-md rounded-lg border px-3 py-2"
           >
             {companies.map((company) => (
               <option key={company.id} value={company.id}>
                 {company.code}－{company.name}
               </option>
             ))}
-          </select>
-        </label>
-        <label className="mt-4 block text-sm font-medium">
-          設定鍵
-          <select
+          </Select></Field>
+          <Field label="設定鍵"><Select
             value={selectedSettingKey}
             onChange={(event) => selectSetting(event.target.value)}
-            className="mt-1 block w-full max-w-md rounded-lg border px-3 py-2"
           >
             {Object.values(COMPANY_SETTING_KEYS).map((key) => (
               <option key={key} value={key}>
                 {key}
               </option>
             ))}
-          </select>
-        </label>
+          </Select></Field>
+        </div>
         {selectedSettingKey === COMPANY_SETTING_KEYS.BILLING_CUTOFF_DAY ? (
-          <p className="mt-4 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            短月份規則：超過當月最後一天時，以當月最後一天為準。
-          </p>
+          <Alert tone="warning" title="短月份規則">超過當月最後一天時，以當月最後一天為準。</Alert>
         ) : null}
-        {message ? (
-          <p
-            role="alert"
-            className="mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-800"
-          >
-            {message}
-          </p>
-        ) : null}
-      </section>
+        {message ? <Alert tone="danger" title="操作失敗">{message}</Alert> : null}
+        </Section>
+      </Card>
 
-      <section className="mt-6 rounded-2xl border bg-white p-6">
-        <h2 className="text-xl font-bold">新增未來版本</h2>
-        <form
-          onSubmit={createVersion}
-          className="mt-4 grid gap-4 md:grid-cols-3"
-        >
-          <label className="text-sm font-medium">
-            設定鍵
-            <input
+      <Card>
+        <Section title="新增未來版本" description="新版本必須從明日或未來日期生效。">
+        <form onSubmit={createVersion} className={pageStyles.formGrid}>
+          <Field label="設定鍵"><Input
               value={selectedSettingKey}
               readOnly
-              className="mt-1 w-full rounded-lg border bg-slate-50 px-3 py-2"
-            />
-          </label>
-          <label className="text-sm font-medium">
-            設定值
-            <input
+            /></Field>
+          <Field label="設定值" required><Input
               type={
                 selectedSettingKey ===
                 COMPANY_SETTING_KEYS.BILLING_CUTOFF_DAY
@@ -242,40 +223,30 @@ export function CompanySettingsClient({
                   : undefined
               }
               required
-              className="mt-1 w-full rounded-lg border px-3 py-2"
-            />
-          </label>
-          <label className="text-sm font-medium">
-            生效日
-            <input
+            /></Field>
+          <Field label="生效日" required><Input
               type="date"
               name="effectiveFrom"
               min={minimumDate}
               required
-              className="mt-1 w-full rounded-lg border px-3 py-2"
-            />
-          </label>
-          <button
-            disabled={busyId !== null}
-            className="rounded-lg bg-slate-900 px-4 py-2 text-white disabled:opacity-50 md:col-span-3 md:justify-self-start"
-          >
-            {busyId === "create" ? "新增中…" : "新增版本"}
-          </button>
+            /></Field>
+          <FormActions className={pageStyles.fullSpan} align="start" primary={<Button type="submit" pending={busyId === "create"} disabled={busyId !== null} pendingLabel="新增中…">新增版本</Button>} />
         </form>
-      </section>
+        </Section>
+      </Card>
 
-      <section className="mt-6 rounded-2xl border bg-white p-6">
-        <h2 className="text-xl font-bold">設定歷程</h2>
-        <div className="mt-4 space-y-4">
+      <Card>
+        <Section title="設定歷程" description="已生效版本唯讀；尚未生效版本可修改或取消。">
+        <div className={pageStyles.pageStack}>
           {history.length === 0 ? (
-            <p className="text-sm text-slate-500">尚無設定版本。</p>
+            <EmptyState variant="no-data" title="尚無設定版本" />
           ) : (
             history.map((entry) => (
               <article
                 key={`${entry.id}-${entry.state}-${entry.cancelledAt ?? ""}`}
-                className="rounded-xl border p-4"
+                className={pageStyles.pageStack}
               >
-                <div className="grid gap-3 text-sm md:grid-cols-4">
+                <div className={pageStyles.formGrid}>
                   <div>
                     <div className="text-slate-500">設定鍵</div>
                     <div className="font-medium">{entry.settingKey}</div>
@@ -292,24 +263,16 @@ export function CompanySettingsClient({
                   </div>
                   <div>
                     <div className="text-slate-500">狀態</div>
-                    <div className="font-medium">
-                      {entry.state === "EFFECTIVE"
-                        ? "已生效"
-                        : entry.state === "FUTURE"
-                          ? "尚未生效"
-                          : "已取消"}
-                    </div>
+                    <StatusBadge label={entry.state === "EFFECTIVE" ? "已生效" : entry.state === "FUTURE" ? "尚未生效" : "已取消"} tone={entry.state === "EFFECTIVE" ? "success" : entry.state === "FUTURE" ? "info" : "neutral"} />
                   </div>
                 </div>
 
                 {entry.state === "FUTURE" ? (
                   <form
                     onSubmit={(event) => updateVersion(event, entry.id)}
-                    className="mt-4 grid gap-3 border-t pt-4 md:grid-cols-3"
+                    className={pageStyles.formGrid}
                   >
-                    <label className="text-sm font-medium">
-                      修改設定值
-                      <input
+                    <Field label="修改設定值" required><Input
                         type={
                           selectedSettingKey ===
                           COMPANY_SETTING_KEYS.BILLING_CUTOFF_DAY
@@ -337,36 +300,15 @@ export function CompanySettingsClient({
                         }
                         defaultValue={String(entry.settingValue)}
                         required
-                        className="mt-1 w-full rounded-lg border px-3 py-2"
-                      />
-                    </label>
-                    <label className="text-sm font-medium">
-                      修改生效日
-                      <input
+                      /></Field>
+                    <Field label="修改生效日" required><Input
                         type="date"
                         name="effectiveFrom"
                         min={minimumDate}
                         defaultValue={entry.effectiveFrom}
                         required
-                        className="mt-1 w-full rounded-lg border px-3 py-2"
-                      />
-                    </label>
-                    <div className="flex items-end gap-2">
-                      <button
-                        disabled={busyId !== null}
-                        className="rounded-lg bg-slate-900 px-4 py-2 text-white disabled:opacity-50"
-                      >
-                        儲存修改
-                      </button>
-                      <button
-                        type="button"
-                        disabled={busyId !== null}
-                        onClick={() => cancelVersion(entry.id)}
-                        className="rounded-lg border border-red-300 px-4 py-2 text-red-700 disabled:opacity-50"
-                      >
-                        取消版本
-                      </button>
-                    </div>
+                      /></Field>
+                    <FormActions className={pageStyles.fullSpan} align="start" primary={<Button type="submit" pending={busyId === entry.id} disabled={busyId !== null} pendingLabel="儲存中…">儲存修改</Button>} destructive={<Button type="button" variant="destructive" disabled={busyId !== null} onClick={() => setCancelId(entry.id)}>取消版本</Button>} />
                   </form>
                 ) : (
                   <p className="mt-4 border-t pt-3 text-sm text-slate-500">
@@ -379,7 +321,9 @@ export function CompanySettingsClient({
             ))
           )}
         </div>
-      </section>
+        </Section>
+      </Card>
+      <ConfirmDialog open={cancelId !== null} title="取消未生效版本" description="確定取消這個尚未生效的版本？" confirmLabel="取消版本" destructive pending={cancelId !== null && busyId === cancelId} onCancel={() => setCancelId(null)} onConfirm={() => void cancelVersion()} />
     </>
   );
 }

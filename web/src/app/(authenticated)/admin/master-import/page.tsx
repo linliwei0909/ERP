@@ -1,5 +1,7 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
+import { PageHeader } from "@/components/app-shell/page-header";
+import pageStyles from "@/components/app-shell/page-contract.module.css";
+import { Button, Card, EmptyState, Field, LinkButton, Select, StatusBadge, Table, TableBody, TableCaption, TableCell, TableContainer, TableEmptyRow, TableHead, TableHeader, TableRow } from "@/components/ui";
 import { requireAdminWithAudit } from "@/lib/auth/authorization";
 import { getPageRequestContext } from "@/lib/auth/request-context";
 import { listMigrationBatches } from "@/lib/master-import/service";
@@ -35,75 +37,48 @@ export default async function AdminMasterImportPage({
   const { context, companyId, batches } = data;
 
   return (
-    <main className="mx-auto min-h-screen max-w-6xl px-6 py-12">
-      <div className="flex justify-between gap-4">
-        <div>
-          <p className="text-sm font-semibold text-teal-700">P2.6 管理員功能</p>
-          <h1 className="text-3xl font-bold">主檔匯入管理</h1>
-        </div>
-        <Link href="/" className="rounded-lg border px-4 py-2">
-          返回首頁
-        </Link>
-      </div>
-      <form className="mt-8 rounded-2xl border bg-white p-5">
-        <label className="text-sm">
-          匯入公司
-          <select
+    <div className={pageStyles.pageStack}>
+      <PageHeader containerVariant="wide" context="管理員功能" title="主檔匯入管理" description="建立 dry-run 或核准範圍內的正式匯入批次。" />
+      <Card><form className={pageStyles.filterGrid}>
+        <Field label="匯入公司"><Select
             name="companyId"
             defaultValue={companyId}
-            className="ml-3 rounded-lg border px-3 py-2"
           >
             {context.authorizedCompanies.map((company) => (
               <option key={company.id} value={company.id}>
                 {company.code}－{company.name}
               </option>
             ))}
-          </select>
-        </label>
-        <button className="ml-3 rounded-lg border px-4 py-2">切換</button>
-      </form>
+          </Select></Field>
+        <Button type="submit" variant="secondary">切換</Button>
+      </form></Card>
       <MasterImportClient companyId={companyId} />
-      <section className="mt-6 overflow-x-auto rounded-2xl border bg-white p-6">
-        <h2 className="text-lg font-semibold">最近批次</h2>
-        <table className="mt-4 w-full text-left text-sm">
-          <thead>
-            <tr className="border-b">
-              <th className="py-2">時間</th>
-              <th>Entity</th>
-              <th>模式</th>
-              <th>狀態</th>
-              <th>筆數</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
+      <TableContainer><Table><TableCaption>最近匯入批次</TableCaption><TableHeader><TableRow><TableHead>時間</TableHead><TableHead>Entity</TableHead><TableHead>模式</TableHead><TableHead>狀態</TableHead><TableHead>筆數</TableHead><TableHead>操作</TableHead></TableRow></TableHeader><TableBody>
             {batches.map((batch) => (
-              <tr key={batch.id} className="border-b">
-                <td className="py-3">
+              <TableRow key={batch.id}>
+                <TableCell>
                   {batch.startedAt.toLocaleString("zh-TW")}
-                </td>
-                <td>{batch.entityType}</td>
-                <td>{batch.dryRun ? "Dry-run" : "正式匯入"}</td>
-                <td>{statusLabels[batch.status] ?? batch.status}</td>
-                <td>
+                </TableCell>
+                <TableCell>{batch.entityType}</TableCell>
+                <TableCell>{batch.dryRun ? "Dry-run" : "正式匯入"}</TableCell>
+                <TableCell><StatusBadge label={statusLabels[batch.status] ?? batch.status} tone={batch.status === "COMPLETED" ? "success" : batch.status === "FAILED" || batch.status === "COMPLETED_WITH_ERRORS" ? "danger" : "info"} /></TableCell>
+                <TableCell>
                   {batch.importedCount}/{batch.totalCount}
-                </td>
-                <td className="text-right">
-                  <Link
+                </TableCell>
+                <TableCell>
+                  <LinkButton
                     href={`/admin/master-import/${batch.id}?companyId=${companyId}`}
-                    className="rounded-lg border px-3 py-2"
+                    variant="secondary" size="small"
                   >
                     查看
-                  </Link>
-                </td>
-              </tr>
+                  </LinkButton>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
         {batches.length === 0 ? (
-          <p className="py-4 text-slate-500">尚無匯入批次。</p>
+          <TableEmptyRow colSpan={6}><EmptyState variant="no-data" title="尚無匯入批次" /></TableEmptyRow>
         ) : null}
-      </section>
-    </main>
+      </TableBody></Table></TableContainer>
+    </div>
   );
 }
