@@ -1,5 +1,7 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
+import { PageHeader } from "@/components/app-shell/page-header";
+import pageStyles from "@/components/app-shell/page-contract.module.css";
+import { LinkButton, StatusBadge } from "@/components/ui";
 import { requireAdminWithAudit } from "@/lib/auth/authorization";
 import { getPageRequestContext } from "@/lib/auth/request-context";
 import { getCustomer } from "@/lib/customers/service";
@@ -35,24 +37,25 @@ export default async function AdminCustomerDetailPage({
   ) as Parameters<typeof CustomerManagerClient>[0]["customer"];
 
   return (
-    <main className="mx-auto min-h-screen max-w-6xl px-6 py-12">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-semibold text-teal-700">客戶主檔管理</p>
-          <h1 className="text-3xl font-bold">{customer.name}</h1>
-        </div>
-        <Link
+    <div className={pageStyles.pageStack}>
+      <PageHeader
+        containerVariant="wide"
+        context="客戶主檔管理"
+        title={customer.name}
+        description="維護客戶基本資料、公司授權、聯絡人與送貨地點。"
+        status={<StatusBadge label={customer.status === "ACTIVE" ? "有效" : "停用"} tone={customer.status === "ACTIVE" ? "success" : "neutral"} />}
+        actions={<LinkButton
+          variant="secondary"
           href={`/admin/customers?companyId=${companyId}`}
-          className="rounded-lg border px-4 py-2"
         >
           返回清單
-        </Link>
-      </div>
+        </LinkButton>}
+      />
       <CustomerManagerClient
         customer={serializedCustomer}
         companies={context.authorizedCompanies}
         selectedCompanyId={companyId}
       />
-    </main>
+    </div>
   );
 }

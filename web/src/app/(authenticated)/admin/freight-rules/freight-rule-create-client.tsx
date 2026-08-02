@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import pageStyles from "@/components/app-shell/page-contract.module.css";
+import { Alert, Button, Card, Field, FormActions, Input, Section, Select } from "@/components/ui";
 
 type LocationOption = {
   id: string;
@@ -19,12 +21,14 @@ export function FreightRuleCreateClient({
     "NO_CHARGE" | "QUANTITY_BASED" | "FIXED_PER_LOCATION"
   >("NO_CHARGE");
   const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
 
   return (
-    <form
-      className="mt-6 grid gap-3 rounded-2xl border bg-white p-5 md:grid-cols-3"
+    <Card><Section title="新增運費規則" description="失效日採不含該日的既有期間規則。"><form
+      className={pageStyles.formGrid}
       onSubmit={async (event) => {
         event.preventDefault();
+        setBusy(true);
         setMessage("");
         const form = new FormData(event.currentTarget);
         const location = locations.find(
@@ -32,47 +36,51 @@ export function FreightRuleCreateClient({
         );
         if (!location) {
           setMessage("請選擇送貨地點");
+          setBusy(false);
           return;
         }
-        const response = await fetch("/api/admin/freight-rules", {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            "idempotency-key": crypto.randomUUID(),
-          },
-          body: JSON.stringify({
-            companyId,
-            freightRule: {
-              customerId: location.customerId,
-              deliveryLocationId: location.id,
-              mode,
-              unitFreight:
-                mode === "QUANTITY_BASED" ? form.get("unitFreight") : null,
-              fixedFreight:
-                mode === "FIXED_PER_LOCATION"
-                  ? form.get("fixedFreight")
-                  : null,
-              validFrom: form.get("validFrom"),
-              validTo: form.get("validTo") || null,
-              status: "ACTIVE",
+        try {
+          const response = await fetch("/api/admin/freight-rules", {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "idempotency-key": crypto.randomUUID(),
             },
-          }),
-        });
-        const payload = await response.json();
-        if (!response.ok) {
-          setMessage(payload.error?.message ?? "新增失敗");
-          return;
+            body: JSON.stringify({
+              companyId,
+              freightRule: {
+                customerId: location.customerId,
+                deliveryLocationId: location.id,
+                mode,
+                unitFreight:
+                  mode === "QUANTITY_BASED" ? form.get("unitFreight") : null,
+                fixedFreight:
+                  mode === "FIXED_PER_LOCATION"
+                    ? form.get("fixedFreight")
+                    : null,
+                validFrom: form.get("validFrom"),
+                validTo: form.get("validTo") || null,
+                status: "ACTIVE",
+              },
+            }),
+          });
+          const payload = await response.json();
+          if (!response.ok) {
+            setMessage(payload.error?.message ?? "新增失敗");
+            return;
+          }
+          window.location.reload();
+        } catch (error) {
+          setMessage(error instanceof Error ? error.message : "新增失敗");
+        } finally {
+          setBusy(false);
         }
-        window.location.reload();
       }}
     >
-      <h2 className="text-lg font-semibold md:col-span-3">新增運費規則</h2>
-      <label className="text-sm">
-        客戶與送貨地點
-        <select
+      {message ? <Alert tone="danger" title="新增失敗">{message}</Alert> : null}
+      <Field label="客戶與送貨地點" required><Select
           name="deliveryLocationId"
           required
-          className="mt-1 w-full rounded-lg border px-3 py-2"
         >
           <option value="">請選擇</option>
           {locations.map((entry) => (
@@ -80,11 +88,8 @@ export function FreightRuleCreateClient({
               {entry.label}
             </option>
           ))}
-        </select>
-      </label>
-      <label className="text-sm">
-        計價方式
-        <select
+        </Select></Field>
+      <Field label="計價方式"><Select
           name="mode"
           value={mode}
           onChange={(event) =>
@@ -95,60 +100,35 @@ export function FreightRuleCreateClient({
                 | "FIXED_PER_LOCATION",
             )
           }
-          className="mt-1 w-full rounded-lg border px-3 py-2"
         >
           <option value="NO_CHARGE">不收運費</option>
           <option value="QUANTITY_BASED">按數量收費</option>
           <option value="FIXED_PER_LOCATION">地點固定金額</option>
-        </select>
-      </label>
+        </Select></Field>
       {mode === "QUANTITY_BASED" ? (
-        <label className="text-sm">
-          每單位運費（元）
-          <input
+        <Field label="每單位運費（元）" required><Input
             name="unitFreight"
             inputMode="numeric"
             required
-            className="mt-1 w-full rounded-lg border px-3 py-2"
-          />
-        </label>
+          /></Field>
       ) : null}
       {mode === "FIXED_PER_LOCATION" ? (
-        <label className="text-sm">
-          固定運費（元）
-          <input
+        <Field label="固定運費（元）" required><Input
             name="fixedFreight"
             inputMode="numeric"
             required
-            className="mt-1 w-full rounded-lg border px-3 py-2"
-          />
-        </label>
+          /></Field>
       ) : null}
-      <label className="text-sm">
-        生效日
-        <input
+      <Field label="生效日" required><Input
           name="validFrom"
           type="date"
           required
-          className="mt-1 w-full rounded-lg border px-3 py-2"
-        />
-      </label>
-      <label className="text-sm">
-        失效日（不含）
-        <input
+        /></Field>
+      <Field label="失效日（不含）"><Input
           name="validTo"
           type="date"
-          className="mt-1 w-full rounded-lg border px-3 py-2"
-        />
-      </label>
-      <div className="flex items-end">
-        <button className="rounded-lg bg-teal-700 px-4 py-2 text-white">
-          新增規則
-        </button>
-      </div>
-      {message ? (
-        <p className="text-sm text-red-700 md:col-span-3">{message}</p>
-      ) : null}
-    </form>
+        /></Field>
+      <FormActions className={pageStyles.fullSpan} align="start" primary={<Button type="submit" pending={busy} pendingLabel="新增中…">新增規則</Button>} />
+    </form></Section></Card>
   );
 }

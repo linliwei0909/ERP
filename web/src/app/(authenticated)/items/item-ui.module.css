@@ -1,0 +1,29 @@
+.formStack {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.companyHeader {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.companyName {
+  margin: 0;
+  font-weight: 650;
+}
+
+.preWrap {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 40rem) {
+  .companyHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

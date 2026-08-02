@@ -1,5 +1,7 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
+import { PageHeader } from "@/components/app-shell/page-header";
+import pageStyles from "@/components/app-shell/page-contract.module.css";
+import { LinkButton, StatusBadge } from "@/components/ui";
 import { requireAdminWithAudit } from "@/lib/auth/authorization";
 import { getPageRequestContext } from "@/lib/auth/request-context";
 import { listCustomers } from "@/lib/customers/service";
@@ -40,14 +42,14 @@ export default async function PricingDetailPage({ params, searchParams }: {
     })),
   };
   return (
-    <main className="mx-auto min-h-screen max-w-6xl px-6 py-12">
-      <div className="flex justify-between"><div><p className="text-sm font-semibold text-teal-700">正式價格管理</p><h1 className="text-3xl font-bold">{data.priceList.name}</h1></div><Link href={`/admin/pricing?companyId=${data.companyId}`} className="rounded-lg border px-4 py-2">返回清單</Link></div>
+    <div className={pageStyles.pageStack}>
+      <PageHeader containerVariant="standard" context="正式價格管理" title={data.priceList.name} description="維護價格表、品項價格版本與客戶指派期間。" status={<StatusBadge label={data.priceList.status === "ACTIVE" ? "有效" : "停用"} tone={data.priceList.status === "ACTIVE" ? "success" : "neutral"} />} actions={<LinkButton href={`/admin/pricing?companyId=${data.companyId}`} variant="secondary">返回清單</LinkButton>} />
       <PricingManagerClient
         priceList={managed}
         companyId={data.companyId}
         items={data.items.items.map((item) => ({ id: item.id, label: `${item.code}－${item.name}` }))}
         customers={data.customers.items.map((customer) => ({ id: customer.id, label: customer.name }))}
       />
-    </main>
+    </div>
   );
 }

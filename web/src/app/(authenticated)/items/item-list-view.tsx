@@ -21,28 +21,28 @@ import {
   TableRow,
 } from "@/components/ui";
 
-export type CustomerListQuery = {
+export type ItemListQuery = {
   companyId?: string;
   search?: string;
-  status?: string;
+  itemType?: string;
   page?: string;
 };
 
-export type CustomersListViewProps = {
+type ItemsListViewProps = {
   context: {
     authorizedCompanies: Array<{ id: string; code: string; name: string }>;
   };
-  query: CustomerListQuery;
+  query: ItemListQuery;
   companyId: string;
   result: {
     items: Array<{
       id: string;
+      code: string;
       name: string;
-      customerType: string;
-      taxId: string | null;
-      countryCode: string | null;
-      foreignIdentifier: string | null;
-      companyRelations: Array<{ customerCode: string }>;
+      itemType: string;
+      baseUnit: string;
+      barcode: string | null;
+      companyRelations: Array<{ companyItemCode: string }>;
     }>;
     pagination: {
       page: number;
@@ -53,34 +53,35 @@ export type CustomersListViewProps = {
   };
 };
 
-export function CustomersListView({
+export function ItemsListView({
   context,
   query,
   companyId,
   result,
-}: CustomersListViewProps) {
-  const hasSearchFilter = Boolean(query.search?.trim());
+}: ItemsListViewProps) {
+  const hasFilter = Boolean(query.search?.trim()) ||
+    (query.itemType !== undefined && query.itemType !== "ALL");
   const pageHref = (page: number) => {
     const params = new URLSearchParams({
       companyId,
       search: query.search ?? "",
-      status: query.status ?? "ACTIVE",
+      itemType: query.itemType ?? "ALL",
       page: String(page),
     });
-    return `/customers?${params.toString()}`;
+    return `/items?${params.toString()}`;
   };
 
   return (
     <div className={pageStyles.pageStack}>
       <PageHeader
         containerVariant="wide"
-        context="客戶主檔"
-        title="客戶查詢"
-        description="依公司與關鍵字查詢可使用的客戶。"
+        context="品項主檔"
+        title="可銷售品項查詢"
+        description="依公司、關鍵字與品項類型查詢可銷售品項。"
       />
 
       <Card>
-        <form className={`${pageStyles.filterGrid} ${pageStyles.customerFilters}`}>
+        <form className={pageStyles.filterGrid}>
           <Field label="公司">
             <Select name="companyId" defaultValue={companyId}>
               {context.authorizedCompanies.map((company) => (
@@ -94,71 +95,65 @@ export function CustomersListView({
             <Input
               name="search"
               defaultValue={query.search}
-              placeholder="客戶名稱、統編或公司客戶代碼"
+              placeholder="品項名稱、代碼、公司品項代碼或條碼"
             />
           </Field>
-          <input type="hidden" name="status" value="ACTIVE" />
+          <Field label="品項類型">
+            <Select name="itemType" defaultValue={query.itemType ?? "ALL"}>
+              <option value="ALL">全部</option>
+              <option value="PRODUCT">產品</option>
+              <option value="RAW_MATERIAL">原物料</option>
+            </Select>
+          </Field>
           <Button type="submit">查詢</Button>
         </form>
       </Card>
 
       <TableContainer>
         <Table>
-          <TableCaption>客戶查詢結果</TableCaption>
+          <TableCaption>可銷售品項查詢結果</TableCaption>
           <TableHeader>
             <TableRow>
-              <TableHead>公司客戶代碼</TableHead>
-              <TableHead>客戶名稱</TableHead>
+              <TableHead>公司品項代碼</TableHead>
+              <TableHead>品項</TableHead>
               <TableHead>類型</TableHead>
-              <TableHead>識別資料</TableHead>
+              <TableHead>基本單位</TableHead>
+              <TableHead>條碼</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {result.items.map((customer) => (
-              <TableRow key={customer.id}>
+            {result.items.map((item) => (
+              <TableRow key={item.id}>
                 <TableCell monospace>
-                  {customer.companyRelations[0]?.customerCode ?? "—"}
+                  {item.companyRelations[0]?.companyItemCode ?? "—"}
                 </TableCell>
                 <TableCell>
                   <Link
                     className={pageStyles.tableLink}
-                    href={`/customers/${customer.id}?companyId=${companyId}`}
+                    href={`/items/${item.id}?companyId=${companyId}`}
                   >
-                    {customer.name}
+                    {item.code}－{item.name}
                   </Link>
                 </TableCell>
                 <TableCell>
                   <StatusBadge
-                    label={
-                      customer.customerType === "DOMESTIC" ? "境內" : "境外"
-                    }
-                    tone={
-                      customer.customerType === "DOMESTIC" ? "success" : "info"
-                    }
+                    label={item.itemType === "PRODUCT" ? "產品" : "原物料"}
+                    tone={item.itemType === "PRODUCT" ? "success" : "info"}
                   />
                 </TableCell>
-                <TableCell>
-                  {customer.taxId ??
-                    ([customer.countryCode, customer.foreignIdentifier]
-                      .filter(Boolean)
-                      .join(" / ") ||
-                      "—")}
-                </TableCell>
+                <TableCell>{item.baseUnit}</TableCell>
+                <TableCell>{item.barcode ?? "—"}</TableCell>
               </TableRow>
             ))}
             {result.items.length === 0 ? (
-              <TableEmptyRow colSpan={4}>
+              <TableEmptyRow colSpan={5}>
                 <EmptyState
-                  variant={hasSearchFilter ? "no-results" : "no-data"}
-                  title={
-                    hasSearchFilter
-                      ? "查無符合條件的客戶"
-                      : "尚無可使用客戶"
-                  }
+                  variant={hasFilter ? "no-results" : "no-data"}
+                  title={hasFilter ? "查無符合條件的品項" : "尚無可銷售品項"}
                   description={
-                    hasSearchFilter
-                      ? "請調整搜尋條件後再試一次。"
-                      : "目前公司尚無可供查詢的有效客戶。"
+                    hasFilter
+                      ? "請調整搜尋或品項類型後再試一次。"
+                      : "目前公司尚無可供查詢的可銷售品項。"
                   }
                 />
               </TableEmptyRow>
@@ -182,7 +177,7 @@ export function CustomersListView({
               ? pageHref(result.pagination.page + 1)
               : undefined
           }
-          label="客戶清單分頁"
+          label="品項清單分頁"
         />
       </div>
     </div>

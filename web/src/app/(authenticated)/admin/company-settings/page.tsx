@@ -1,5 +1,6 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
+import { PageHeader } from "@/components/app-shell/page-header";
+import pageStyles from "@/components/app-shell/page-contract.module.css";
 import { getPageRequestContext } from "@/lib/auth/request-context";
 import {
   assertCompanySettingKey,
@@ -36,22 +37,14 @@ export default async function CompanySettingsPage({
   }
 
   return (
-    <main className="mx-auto min-h-screen max-w-6xl px-6 py-12">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-semibold text-teal-700">P2.1</p>
-          <h1 className="text-3xl font-bold">公司參數管理</h1>
-        </div>
-        <Link href="/" className="rounded-lg border px-4 py-2">
-          返回首頁
-        </Link>
-      </div>
+    <div className={pageStyles.pageStack}>
+      <PageHeader containerVariant="standard" context="管理員功能" title="公司參數管理" description="管理公司參數的未來版本與生效歷程。" />
       <CompanySettingsClient
         companies={pageData.context.authorizedCompanies}
         selectedCompanyId={pageData.companyId}
         selectedSettingKey={pageData.settingKey}
         history={pageData.history}
       />
-    </main>
+    </div>
   );
 }

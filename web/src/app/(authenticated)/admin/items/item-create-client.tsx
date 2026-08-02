@@ -34,43 +34,48 @@ export function ItemCreateClient({
     setBusy(true);
     setMessage(null);
     const form = new FormData(event.currentTarget);
-    const response = await fetch("/api/items", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "idempotency-key": crypto.randomUUID(),
-      },
-      body: JSON.stringify({
-        companyId: selectedCompanyId,
-        item: {
-          code: form.get("code"),
-          name: form.get("name"),
-          description: form.get("description"),
-          specification: form.get("specification"),
-          baseUnit: form.get("baseUnit"),
-          barcode: form.get("barcode"),
-          itemType: form.get("itemType"),
-          salesEnabled: form.get("salesEnabled") === "on",
-          purchaseEnabled: false,
-          inventoryEnabled: false,
-          productionEnabled: false,
+    try {
+      const response = await fetch("/api/items", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": crypto.randomUUID(),
         },
-        companyRelation: {
-          companyItemCode: form.get("companyItemCode"),
-          salesEnabled: form.get("companySalesEnabled") === "on",
-          status: "ACTIVE",
-        },
-      }),
-    });
-    if (!response.ok) {
-      setMessage(await errorMessage(response));
+        body: JSON.stringify({
+          companyId: selectedCompanyId,
+          item: {
+            code: form.get("code"),
+            name: form.get("name"),
+            description: form.get("description"),
+            specification: form.get("specification"),
+            baseUnit: form.get("baseUnit"),
+            barcode: form.get("barcode"),
+            itemType: form.get("itemType"),
+            salesEnabled: form.get("salesEnabled") === "on",
+            purchaseEnabled: false,
+            inventoryEnabled: false,
+            productionEnabled: false,
+          },
+          companyRelation: {
+            companyItemCode: form.get("companyItemCode"),
+            salesEnabled: form.get("companySalesEnabled") === "on",
+            status: "ACTIVE",
+          },
+        }),
+      });
+      if (!response.ok) {
+        setMessage(await errorMessage(response));
+        return;
+      }
+      const result = (await response.json()) as { id: string };
+      window.location.assign(
+        `/admin/items/${result.id}?companyId=${selectedCompanyId}`,
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "操作失敗");
+    } finally {
       setBusy(false);
-      return;
     }
-    const result = (await response.json()) as { id: string };
-    window.location.assign(
-      `/admin/items/${result.id}?companyId=${selectedCompanyId}`,
-    );
   }
 
   return (

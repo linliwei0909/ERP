@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import pageStyles from "@/components/app-shell/page-contract.module.css";
+import { Alert, Button, Card, ConfirmDialog, Field, FormActions, Input, Section, Select } from "@/components/ui";
 import { IMPLEMENTED_IMPORTERS } from "@/lib/master-import/contracts";
 
 const entityLabels = {
@@ -25,6 +27,8 @@ export function MasterImportClient({
     useState<keyof typeof entityLabels>("customers");
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [form, setForm] = useState<HTMLFormElement | null>(null);
   const executable = IMPLEMENTED_IMPORTERS.includes(
     entityType as (typeof IMPLEMENTED_IMPORTERS)[number],
   );
@@ -45,87 +49,56 @@ export function MasterImportClient({
       const payload = await response.json();
       if (!response.ok) {
         setMessage(payload.error?.message ?? "匯入處理失敗");
+        if (!dryRun) setConfirmOpen(false);
         return;
       }
       window.location.href = `/admin/master-import/${payload.batch.id}?companyId=${companyId}`;
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "匯入處理失敗");
+      if (!dryRun) setConfirmOpen(false);
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <form
-      className="mt-6 grid gap-4 rounded-2xl border bg-white p-6 md:grid-cols-2"
+    <Card><Section title="建立匯入批次" description="先執行 dry-run；只有既有 importer 可執行正式匯入。"><form
+      className={pageStyles.formGrid}
       onSubmit={(event) => {
         event.preventDefault();
         void submit(event.currentTarget, true);
       }}
     >
-      <h2 className="text-lg font-semibold md:col-span-2">建立匯入批次</h2>
-      <label className="text-sm">
-        來源系統
-        <input
+      {message ? <Alert tone="danger" title="匯入處理失敗">{message}</Alert> : null}
+      <Field label="來源系統" required><Input
           name="sourceSystem"
           defaultValue="RAGIC"
           required
           maxLength={50}
-          className="mt-1 w-full rounded-lg border px-3 py-2"
-        />
-      </label>
-      <label className="text-sm">
-        Entity
-        <select
+        /></Field>
+      <Field label="Entity"><Select
           name="entityType"
           value={entityType}
           onChange={(event) =>
             setEntityType(event.target.value as keyof typeof entityLabels)
           }
-          className="mt-1 w-full rounded-lg border px-3 py-2"
         >
           {Object.entries(entityLabels).map(([value, label]) => (
             <option key={value} value={value}>
               {label}
             </option>
           ))}
-        </select>
-      </label>
-      <label className="text-sm md:col-span-2">
-        CSV 檔案
-        <input
+        </Select></Field>
+      <Field label="CSV 檔案" required className={pageStyles.fullSpan}><Input
           name="file"
           type="file"
           accept=".csv,text/csv"
           required
-          className="mt-1 block w-full rounded-lg border px-3 py-2"
-        />
-      </label>
-      <p className="text-sm text-slate-600 md:col-span-2">
+        /></Field>
+      <Alert tone="info" className={pageStyles.fullSpan} title="執行範圍">
         Dry-run 不寫入正式主檔。正式匯入目前僅開放客戶、客戶公司關係、品項與品項公司關係；其餘六類只提供契約驗證。
-      </p>
-      <div className="flex gap-3 md:col-span-2">
-        <button
-          disabled={submitting}
-          className="rounded-lg border border-teal-700 px-4 py-2 text-teal-800 disabled:opacity-50"
-        >
-          執行 Dry-run
-        </button>
-        <button
-          type="button"
-          disabled={submitting || !executable}
-          onClick={(event) => {
-            const form = event.currentTarget.form;
-            if (form && window.confirm("確認執行正式匯入？")) {
-              void submit(form, false);
-            }
-          }}
-          className="rounded-lg bg-slate-900 px-4 py-2 text-white disabled:opacity-40"
-        >
-          確認正式匯入
-        </button>
-      </div>
-      {message ? (
-        <p className="text-sm text-red-700 md:col-span-2">{message}</p>
-      ) : null}
-    </form>
+      </Alert>
+      <FormActions className={pageStyles.fullSpan} align="start" primary={<Button type="submit" pending={submitting} pendingLabel="執行中…">執行 Dry-run</Button>} secondary={<Button type="button" variant="secondary" disabled={submitting || !executable} onClick={(event) => { setForm(event.currentTarget.form); setConfirmOpen(true); }}>確認正式匯入</Button>} />
+    </form></Section><ConfirmDialog open={confirmOpen} title="確認正式匯入" description="正式匯入會寫入核准範圍內的主檔資料，確定繼續？" confirmLabel="執行正式匯入" pending={submitting} onCancel={() => setConfirmOpen(false)} onConfirm={() => { if (form) void submit(form, false); }} /></Card>
   );
 }

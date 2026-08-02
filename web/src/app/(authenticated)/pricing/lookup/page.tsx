@@ -1,5 +1,19 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
+import { PageHeader } from "@/components/app-shell/page-header";
+import pageStyles from "@/components/app-shell/page-contract.module.css";
+import {
+  Alert,
+  Button,
+  Card,
+  DescriptionDetails,
+  DescriptionItem,
+  DescriptionList,
+  DescriptionTerm,
+  Field,
+  Input,
+  Select,
+  Section,
+} from "@/components/ui";
 import { getPageRequestContext } from "@/lib/auth/request-context";
 import { listCustomers } from "@/lib/customers/service";
 import { listSaleableItems } from "@/lib/items/service";
@@ -32,18 +46,35 @@ export default async function PriceLookupPage({ searchParams }: {
     }
     data = { context, query, companyId, customers, items, result, notFound };
   } catch { redirect("/"); }
+
   return (
-    <main className="mx-auto min-h-screen max-w-5xl px-6 py-12">
-      <div className="flex justify-between"><div><p className="text-sm font-semibold text-teal-700">P2.4</p><h1 className="text-3xl font-bold">正式價格查詢</h1></div><Link href="/" className="rounded-lg border px-4 py-2">返回首頁</Link></div>
-      <form className="mt-8 grid gap-3 rounded-2xl border bg-white p-6 md:grid-cols-4">
-        <select name="companyId" defaultValue={data.companyId} className="rounded-lg border px-3 py-2">{data.context.authorizedCompanies.map((company) => <option key={company.id} value={company.id}>{company.code}－{company.name}</option>)}</select>
-        <select name="customerId" required defaultValue={data.query.customerId ?? ""} className="rounded-lg border px-3 py-2"><option value="" disabled>選擇客戶</option>{data.customers.items.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}</select>
-        <select name="itemId" required defaultValue={data.query.itemId ?? ""} className="rounded-lg border px-3 py-2"><option value="" disabled>選擇品項</option>{data.items.items.map((item) => <option key={item.id} value={item.id}>{item.code}－{item.name}</option>)}</select>
-        <input name="effectiveDate" required type="date" defaultValue={data.query.effectiveDate ?? ""} className="rounded-lg border px-3 py-2" />
-        <button className="rounded-lg bg-slate-900 px-4 py-2 text-white md:col-span-4 md:justify-self-start">查詢正式價格</button>
-      </form>
-      {data.result ? <section className="mt-6 rounded-2xl border bg-emerald-50 p-6"><p className="text-sm text-emerald-800">有效未稅單價</p><p className="mt-2 text-3xl font-bold">{data.result.unitPrice}</p><p className="mt-2 text-sm">有效期間：{data.result.validFrom} ～ {data.result.validTo ?? "無期限"}</p></section> : null}
-      {data.notFound ? <p role="alert" className="mt-6 rounded-2xl border bg-amber-50 p-6 text-amber-900">PRICE_NOT_FOUND：指定條件找不到有效正式價格。</p> : null}
-    </main>
+    <div className={pageStyles.pageStack}>
+      <PageHeader
+        containerVariant="standard"
+        context="正式價格"
+        title="正式價格查詢"
+        description="依公司、客戶、品項與生效日查詢唯一有效的未稅單價。"
+      />
+      <Card>
+        <form className={pageStyles.formGrid}>
+          <Field label="公司"><Select name="companyId" defaultValue={data.companyId}>{data.context.authorizedCompanies.map((company) => <option key={company.id} value={company.id}>{company.code}－{company.name}</option>)}</Select></Field>
+          <Field label="客戶" required><Select name="customerId" required defaultValue={data.query.customerId ?? ""}><option value="" disabled>選擇客戶</option>{data.customers.items.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}</Select></Field>
+          <Field label="品項" required><Select name="itemId" required defaultValue={data.query.itemId ?? ""}><option value="" disabled>選擇品項</option>{data.items.items.map((item) => <option key={item.id} value={item.id}>{item.code}－{item.name}</option>)}</Select></Field>
+          <Field label="生效日" required><Input name="effectiveDate" required type="date" defaultValue={data.query.effectiveDate ?? ""} /></Field>
+          <div className={pageStyles.fullSpan}><Button type="submit">查詢正式價格</Button></div>
+        </form>
+      </Card>
+      {data.result ? (
+        <Card>
+          <Section title="查詢結果" description="符合指定條件的正式價格版本。">
+            <DescriptionList columns={2}>
+              <DescriptionItem><DescriptionTerm>有效未稅單價</DescriptionTerm><DescriptionDetails>{data.result.unitPrice}</DescriptionDetails></DescriptionItem>
+              <DescriptionItem><DescriptionTerm>有效期間</DescriptionTerm><DescriptionDetails>{data.result.validFrom} ～ {data.result.validTo ?? "無期限"}</DescriptionDetails></DescriptionItem>
+            </DescriptionList>
+          </Section>
+        </Card>
+      ) : null}
+      {data.notFound ? <Alert role="alert" tone="warning" title="找不到正式價格">PRICE_NOT_FOUND：指定條件找不到有效正式價格。</Alert> : null}
+    </div>
   );
 }

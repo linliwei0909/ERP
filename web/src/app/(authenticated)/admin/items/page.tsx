@@ -65,7 +65,7 @@ export default async function AdminItemsPage({
   };
 
   return (
-    <main className={pageStyles.pageStack}>
+    <div className={pageStyles.pageStack}>
       <PageHeader
         containerVariant="standard"
         context="管理員功能"
@@ -148,6 +148,6 @@ export default async function AdminItemsPage({
         nextHref={result.pagination.page < result.pagination.totalPages ? pageHref(result.pagination.page + 1) : undefined}
         label="品項清單分頁"
       />
-    </main>
+    </div>
   );
 }

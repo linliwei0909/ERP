@@ -1,5 +1,7 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
+import { PageHeader } from "@/components/app-shell/page-header";
+import pageStyles from "@/components/app-shell/page-contract.module.css";
+import { Button, Card, EmptyState, Field, LinkButton, Pagination, Section, Select, StatusBadge } from "@/components/ui";
 import { requireAdminWithAudit } from "@/lib/auth/authorization";
 import { getPageRequestContext } from "@/lib/auth/request-context";
 import { listFreightRules } from "@/lib/freight/service";
@@ -60,34 +62,28 @@ export default async function AdminFreightRulesPage({
       label: `${relation.customerCode}－${relation.customer.name}／${location.code}－${location.name}`,
     })),
   );
+  const pageHref = (page: number) => {
+    const params = new URLSearchParams({ companyId, customerId: query.customerId ?? "", status: query.status ?? "ALL", page: String(page) });
+    return `/admin/freight-rules?${params.toString()}`;
+  };
 
   return (
-    <main className="mx-auto min-h-screen max-w-6xl px-6 py-12">
-      <div className="flex justify-between">
-        <div>
-          <p className="text-sm font-semibold text-teal-700">P2.5 管理員功能</p>
-          <h1 className="text-3xl font-bold">運費規則管理</h1>
-        </div>
-        <Link href="/" className="rounded-lg border px-4 py-2">
-          返回首頁
-        </Link>
-      </div>
-      <form className="mt-8 grid gap-3 rounded-2xl border bg-white p-5 md:grid-cols-3">
-        <select
+    <div className={pageStyles.pageStack}>
+      <PageHeader containerVariant="wide" context="管理員功能" title="運費規則管理" description="管理客戶送貨地點的運費模式與有效期間。" />
+      <Card><form className={pageStyles.filterGrid}>
+        <Field label="公司"><Select
           name="companyId"
           defaultValue={companyId}
-          className="rounded-lg border px-3 py-2"
         >
           {context.authorizedCompanies.map((company) => (
             <option key={company.id} value={company.id}>
               {company.code}－{company.name}
             </option>
           ))}
-        </select>
-        <select
+        </Select></Field>
+        <Field label="客戶"><Select
           name="customerId"
           defaultValue={query.customerId ?? ""}
-          className="rounded-lg border px-3 py-2"
         >
           <option value="">全部客戶</option>
           {customerRelations.map((relation) => (
@@ -95,47 +91,45 @@ export default async function AdminFreightRulesPage({
               {relation.customerCode}－{relation.customer.name}
             </option>
           ))}
-        </select>
-        <select
+        </Select></Field>
+        <Field label="狀態"><Select
           name="status"
           defaultValue={query.status ?? "ALL"}
-          className="rounded-lg border px-3 py-2"
         >
           <option value="ALL">全部狀態</option>
           <option value="ACTIVE">有效</option>
           <option value="INACTIVE">停用</option>
-        </select>
-        <button className="rounded-lg bg-slate-900 px-4 py-2 text-white md:col-span-3 md:justify-self-start">
-          查詢
-        </button>
-      </form>
+        </Select></Field>
+        <Button type="submit">查詢</Button>
+      </form></Card>
       <FreightRuleCreateClient companyId={companyId} locations={locations} />
-      <section className="mt-6 divide-y rounded-2xl border bg-white p-6">
+      <Card><Section title="運費規則清單" description={`共 ${result.pagination.total} 筆`}>
         {result.items.map((entry) => (
-          <div key={entry.id} className="flex items-center justify-between py-3">
+          <div key={entry.id} className={pageStyles.listRow}>
             <div>
               <p className="font-semibold">
                 {entry.customerCompany.customer.name}／
                 {entry.deliveryLocation.code}－{entry.deliveryLocation.name}
               </p>
-              <p className="text-sm text-slate-500">
+              <div className={pageStyles.tableSubtext}>
                 {modeLabels[entry.mode]}｜{toDateText(entry.validFrom)} ～{" "}
                 {entry.validTo ? toDateText(entry.validTo) : "無期限"}｜
-                {entry.status === "ACTIVE" ? "有效" : "停用"}
-              </p>
+                <StatusBadge label={entry.status === "ACTIVE" ? "有效" : "停用"} tone={entry.status === "ACTIVE" ? "success" : "neutral"} />
+              </div>
             </div>
-            <Link
+            <LinkButton
               href={`/admin/freight-rules/${entry.id}?companyId=${companyId}`}
-              className="rounded-lg border px-3 py-2"
+              variant="secondary" size="small"
             >
               管理
-            </Link>
+            </LinkButton>
           </div>
         ))}
         {result.items.length === 0 ? (
-          <p className="py-4 text-slate-500">查無資料。</p>
+          <EmptyState variant="no-data" title="尚無運費規則" />
         ) : null}
-      </section>
-    </main>
+      </Section></Card>
+      <Pagination currentPage={result.pagination.page} totalPages={result.pagination.totalPages} previousHref={result.pagination.page > 1 ? pageHref(result.pagination.page - 1) : undefined} nextHref={result.pagination.page < result.pagination.totalPages ? pageHref(result.pagination.page + 1) : undefined} label="運費規則清單分頁" />
+    </div>
   );
 }
