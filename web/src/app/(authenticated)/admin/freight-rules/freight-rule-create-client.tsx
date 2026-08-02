@@ -39,37 +39,42 @@ export function FreightRuleCreateClient({
           setBusy(false);
           return;
         }
-        const response = await fetch("/api/admin/freight-rules", {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            "idempotency-key": crypto.randomUUID(),
-          },
-          body: JSON.stringify({
-            companyId,
-            freightRule: {
-              customerId: location.customerId,
-              deliveryLocationId: location.id,
-              mode,
-              unitFreight:
-                mode === "QUANTITY_BASED" ? form.get("unitFreight") : null,
-              fixedFreight:
-                mode === "FIXED_PER_LOCATION"
-                  ? form.get("fixedFreight")
-                  : null,
-              validFrom: form.get("validFrom"),
-              validTo: form.get("validTo") || null,
-              status: "ACTIVE",
+        try {
+          const response = await fetch("/api/admin/freight-rules", {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              "idempotency-key": crypto.randomUUID(),
             },
-          }),
-        });
-        const payload = await response.json();
-        if (!response.ok) {
-          setMessage(payload.error?.message ?? "新增失敗");
+            body: JSON.stringify({
+              companyId,
+              freightRule: {
+                customerId: location.customerId,
+                deliveryLocationId: location.id,
+                mode,
+                unitFreight:
+                  mode === "QUANTITY_BASED" ? form.get("unitFreight") : null,
+                fixedFreight:
+                  mode === "FIXED_PER_LOCATION"
+                    ? form.get("fixedFreight")
+                    : null,
+                validFrom: form.get("validFrom"),
+                validTo: form.get("validTo") || null,
+                status: "ACTIVE",
+              },
+            }),
+          });
+          const payload = await response.json();
+          if (!response.ok) {
+            setMessage(payload.error?.message ?? "新增失敗");
+            return;
+          }
+          window.location.reload();
+        } catch (error) {
+          setMessage(error instanceof Error ? error.message : "新增失敗");
+        } finally {
           setBusy(false);
-          return;
         }
-        window.location.reload();
       }}
     >
       {message ? <Alert tone="danger" title="新增失敗">{message}</Alert> : null}

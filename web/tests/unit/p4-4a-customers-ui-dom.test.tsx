@@ -147,6 +147,21 @@ describe("P4.4a Customers DOM interaction", () => {
     expect(submit.getAttribute("aria-busy")).toBeNull();
   });
 
+  it("recovers customer create after a rejected fetch", async () => {
+    let rejectRequest!: (reason: Error) => void;
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>((_resolve, reject) => {
+      rejectRequest = reject;
+    })));
+    render(<CustomerCreateClient selectedCompanyId="company-a" />);
+    const submit = screen.getByRole("button", { name: "建立客戶" });
+    fireEvent.submit(submit.closest("form")!);
+    await waitFor(() => expect(submit.getAttribute("aria-busy")).toBe("true"));
+    rejectRequest(new Error("網路連線失敗"));
+    expect((await screen.findByRole("alert")).textContent).toContain("網路連線失敗");
+    await waitFor(() => expect((submit as HTMLButtonElement).disabled).toBe(false));
+    expect(submit.getAttribute("aria-busy")).toBeNull();
+  });
+
   it("preserves manager endpoints, method selection and payload construction", async () => {
     const fetchMock = vi.fn(async () => failedResponse("測試拒絕"));
     vi.stubGlobal("fetch", fetchMock);

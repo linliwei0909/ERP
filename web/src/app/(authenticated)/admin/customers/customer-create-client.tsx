@@ -49,27 +49,32 @@ export function CustomerCreateClient({
             countryCode: form.get("countryCode"),
             foreignIdentifier: form.get("foreignIdentifier"),
           };
-    const response = await fetch("/api/customers", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "idempotency-key": crypto.randomUUID(),
-      },
-      body: JSON.stringify({
-        companyId: selectedCompanyId,
-        customer,
-        customerCode: form.get("customerCode"),
-      }),
-    });
-    if (!response.ok) {
-      setMessage(await errorMessage(response));
+    try {
+      const response = await fetch("/api/customers", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": crypto.randomUUID(),
+        },
+        body: JSON.stringify({
+          companyId: selectedCompanyId,
+          customer,
+          customerCode: form.get("customerCode"),
+        }),
+      });
+      if (!response.ok) {
+        setMessage(await errorMessage(response));
+        return;
+      }
+      const result = (await response.json()) as { id: string };
+      window.location.assign(
+        `/admin/customers/${result.id}?companyId=${selectedCompanyId}`,
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "操作失敗");
+    } finally {
       setBusy(false);
-      return;
     }
-    const result = (await response.json()) as { id: string };
-    window.location.assign(
-      `/admin/customers/${result.id}?companyId=${selectedCompanyId}`,
-    );
   }
 
   return (

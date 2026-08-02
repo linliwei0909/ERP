@@ -12,17 +12,23 @@ export function PriceListCreateClient({ companyId }: { companyId: string }) {
     setBusy(true);
     setMessage(null);
     const form = new FormData(event.currentTarget);
-    const response = await fetch("/api/admin/price-lists", {
-      method: "POST",
-      headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
-      body: JSON.stringify({
-        companyId,
-        priceList: { code: form.get("code"), name: form.get("name") },
-      }),
-    });
-    const body = await response.json();
-    if (!response.ok) { setBusy(false); return setMessage(body.error?.message ?? "操作失敗"); }
-    window.location.assign(`/admin/pricing/${body.id}?companyId=${companyId}`);
+    try {
+      const response = await fetch("/api/admin/price-lists", {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": crypto.randomUUID() },
+        body: JSON.stringify({
+          companyId,
+          priceList: { code: form.get("code"), name: form.get("name") },
+        }),
+      });
+      const body = await response.json();
+      if (!response.ok) return setMessage(body.error?.message ?? "操作失敗");
+      window.location.assign(`/admin/pricing/${body.id}?companyId=${companyId}`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "操作失敗");
+    } finally {
+      setBusy(false);
+    }
   }
   return (
     <Card>

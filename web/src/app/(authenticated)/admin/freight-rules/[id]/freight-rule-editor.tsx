@@ -35,36 +35,41 @@ export function FreightRuleEditor({
         setBusy(true);
         setMessage("");
         const form = new FormData(event.currentTarget);
-        const response = await fetch(`/api/admin/freight-rules/${value.id}`, {
-          method: "PATCH",
-          headers: {
-            "content-type": "application/json",
-            "idempotency-key": crypto.randomUUID(),
-          },
-          body: JSON.stringify({
-            companyId,
-            freightRule: {
-              customerId: value.customerId,
-              deliveryLocationId: value.deliveryLocationId,
-              mode,
-              unitFreight:
-                mode === "QUANTITY_BASED" ? form.get("unitFreight") : null,
-              fixedFreight:
-                mode === "FIXED_PER_LOCATION"
-                  ? form.get("fixedFreight")
-                  : null,
-              validFrom: form.get("validFrom"),
-              validTo: form.get("validTo") || null,
-              status: form.get("status"),
+        try {
+          const response = await fetch(`/api/admin/freight-rules/${value.id}`, {
+            method: "PATCH",
+            headers: {
+              "content-type": "application/json",
+              "idempotency-key": crypto.randomUUID(),
             },
-          }),
-        });
-        const payload = await response.json();
-        setMessage(
-          response.ok ? "已更新運費規則" : payload.error?.message ?? "更新失敗",
-        );
-        if (!response.ok) setBusy(false);
-        if (response.ok) window.location.reload();
+            body: JSON.stringify({
+              companyId,
+              freightRule: {
+                customerId: value.customerId,
+                deliveryLocationId: value.deliveryLocationId,
+                mode,
+                unitFreight:
+                  mode === "QUANTITY_BASED" ? form.get("unitFreight") : null,
+                fixedFreight:
+                  mode === "FIXED_PER_LOCATION"
+                    ? form.get("fixedFreight")
+                    : null,
+                validFrom: form.get("validFrom"),
+                validTo: form.get("validTo") || null,
+                status: form.get("status"),
+              },
+            }),
+          });
+          const payload = await response.json();
+          setMessage(
+            response.ok ? "已更新運費規則" : payload.error?.message ?? "更新失敗",
+          );
+          if (response.ok) window.location.reload();
+        } catch (error) {
+          setMessage(error instanceof Error ? error.message : "更新失敗");
+        } finally {
+          setBusy(false);
+        }
       }}
     >
       {message ? <Alert tone={message === "已更新運費規則" ? "success" : "danger"} title={message === "已更新運費規則" ? "更新成功" : "更新失敗"}>{message}</Alert> : null}

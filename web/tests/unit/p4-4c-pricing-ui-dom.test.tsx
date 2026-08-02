@@ -34,6 +34,23 @@ describe("P4.4c Pricing DOM interaction", () => {
     expect((await screen.findByRole("alert")).textContent).toContain("價格表代碼重複");
   });
 
+  it("recovers price-list create after a rejected fetch", async () => {
+    let rejectRequest!: (reason: Error) => void;
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>((_resolve, reject) => {
+      rejectRequest = reject;
+    })));
+    render(<PriceListCreateClient companyId="company-a" />);
+    fireEvent.change(screen.getByLabelText(/價格表代碼/), { target: { value: "RETAIL" } });
+    fireEvent.change(screen.getByLabelText(/價格表名稱/), { target: { value: "零售價" } });
+    const submit = screen.getByRole("button", { name: "建立價格表" });
+    fireEvent.submit(submit.closest("form")!);
+    await waitFor(() => expect(submit.getAttribute("aria-busy")).toBe("true"));
+    rejectRequest(new Error("網路連線失敗"));
+    expect((await screen.findByRole("alert")).textContent).toContain("網路連線失敗");
+    await waitFor(() => expect((submit as HTMLButtonElement).disabled).toBe(false));
+    expect(submit.getAttribute("aria-busy")).toBeNull();
+  });
+
   it("preserves all manager methods, targets and validity payloads", async () => {
     const fetchMock = vi.fn().mockResolvedValue(failedResponse("測試錯誤"));
     vi.stubGlobal("fetch", fetchMock);

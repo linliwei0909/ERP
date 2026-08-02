@@ -64,3 +64,25 @@ Tests鎖定 Company endpoints/ConfirmDialog、Users native actions/fields/confir
 ## 5. Scope proof
 
 產品 diff只位於六個既有 Admin routes/clients及Users presentation CSS/client button；另含P4.4d tests與本文件。沒有跨入Pricing或其他slice domain，也沒有實作DEC-061未來角色。受保護Blueprint未開啟、搜尋、讀取、引用、修改、移動、刪除、stage或commit。
+
+## 6. Draft PR review follow-up
+
+2026-08-02 依 Draft PR #1 review findings補強失敗復原：
+
+- Master Import正式匯入在HTTP error或exception時關閉`ConfirmDialog`，讓既有danger Alert立即可見；trigger恢復後可重新開啟dialog。成功redirect、endpoint、multipart `FormData`、`sourceSystem`、`entityType`、file、`companyId`、`dryRun`及idempotency key保持。
+- Freight create／edit以`try`／`catch`／`finally`處理HTTP error、JSON exception與rejected fetch；失敗顯示既有danger Alert並清除pending／`aria-busy`。endpoint、method、payload、mode、half-open有效期間、domain validation及成功reload保持。
+- 全P4.4 pending／busy掃描另發現並修正Price List create、Customer create、Item create及Item edit／company relation的同型exception recovery；其餘Customer manager、Company Settings及Pricing manager已有等價catch recovery，不需修改。
+
+新增DOM evidence：正式匯入失敗後dialog關閉、Alert可見且可重試；Freight create／edit rejected fetch後button恢復、`aria-busy`移除且danger Alert可見。
+
+Follow-up gates：
+
+```text
+targeted DOM  PASS: 4 files / 15 tests
+lint          PASS
+typecheck     PASS
+unit          PASS: 40 non-print files / 327 tests + 1 print file / 12 tests
+build         PASS: 37 / 37 static generation units
+```
+
+Build仍只有既有Delivery Note font／NFT tracing warning。此follow-up不需要DB，未建立或連接database；沒有修改schema、migration、API contract、RBAC、domain rule或其他階段內容。

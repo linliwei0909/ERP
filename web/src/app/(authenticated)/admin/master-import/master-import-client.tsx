@@ -49,9 +49,13 @@ export function MasterImportClient({
       const payload = await response.json();
       if (!response.ok) {
         setMessage(payload.error?.message ?? "匯入處理失敗");
+        if (!dryRun) setConfirmOpen(false);
         return;
       }
       window.location.href = `/admin/master-import/${payload.batch.id}?companyId=${companyId}`;
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "匯入處理失敗");
+      if (!dryRun) setConfirmOpen(false);
     } finally {
       setSubmitting(false);
     }

@@ -109,3 +109,9 @@ P4.4 全部差異只包含 Masters／Admin presentation、page contract、ARIA�
 ## 9. Closure decision
 
 P4.4a～P4.4e 的核准範圍、行為保持、company context、automated gates、fresh migration/schema diff 與 desktop／360px browser evidence均完成。P4.4 Masters／Admin UI migration 可建立 Draft PR；不得 merge，且 OQ-053／OQ-054 與 P4.7 人工 accessibility smoke仍保持後續工作。
+
+## 10. Draft PR failure-recovery follow-up
+
+Draft PR #1 review後完成跨切片pending／busy exception audit。修正範圍限於既有presentation clients：Master Import、Freight create/edit、Price List create、Customer create、Item create及Item edit/company relation。所有受影響handler在HTTP error、JSON exception或rejected fetch後都顯示既有danger Alert並恢復button／移除`aria-busy`；Master Import正式匯入失敗時另關閉ConfirmDialog，使Alert可見並允許重試。
+
+沒有改變endpoint、method、payload、FormData、effective dates、domain validation、permission、company context或成功redirect/reload。Targeted DOM為4 files／15 tests PASS；完整lint、typecheck、41 files／339 tests及37／37 production build均PASS。Build warning仍只有既有Delivery Note font／NFT tracing項目。此presentation-only follow-up不需要DB tests，未建立database。

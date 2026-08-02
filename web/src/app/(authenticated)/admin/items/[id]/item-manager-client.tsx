@@ -68,36 +68,41 @@ export function ItemManagerClient({
     setBusy(true);
     setMessage(null);
     const form = new FormData(event.currentTarget);
-    const response = await fetch(`/api/items/${item.id}`, {
-      method: "PATCH",
-      headers: {
-        "content-type": "application/json",
-        "idempotency-key": crypto.randomUUID(),
-      },
-      body: JSON.stringify({
-        companyId: selectedCompanyId,
-        item: {
-          code: form.get("code"),
-          name: form.get("name"),
-          description: form.get("description"),
-          specification: form.get("specification"),
-          baseUnit: form.get("baseUnit"),
-          barcode: form.get("barcode"),
-          itemType: form.get("itemType"),
-          salesEnabled: form.get("salesEnabled") === "on",
-          purchaseEnabled: item.purchaseEnabled,
-          inventoryEnabled: item.inventoryEnabled,
-          productionEnabled: item.productionEnabled,
-          status: form.get("status"),
+    try {
+      const response = await fetch(`/api/items/${item.id}`, {
+        method: "PATCH",
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": crypto.randomUUID(),
         },
-      }),
-    });
-    if (!response.ok) {
-      setMessage(await responseMessage(response));
+        body: JSON.stringify({
+          companyId: selectedCompanyId,
+          item: {
+            code: form.get("code"),
+            name: form.get("name"),
+            description: form.get("description"),
+            specification: form.get("specification"),
+            baseUnit: form.get("baseUnit"),
+            barcode: form.get("barcode"),
+            itemType: form.get("itemType"),
+            salesEnabled: form.get("salesEnabled") === "on",
+            purchaseEnabled: item.purchaseEnabled,
+            inventoryEnabled: item.inventoryEnabled,
+            productionEnabled: item.productionEnabled,
+            status: form.get("status"),
+          },
+        }),
+      });
+      if (!response.ok) {
+        setMessage(await responseMessage(response));
+        return;
+      }
+      window.location.reload();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "操作失敗");
+    } finally {
       setBusy(false);
-      return;
     }
-    window.location.reload();
   }
 
   async function saveCompanyRelation(
@@ -108,27 +113,32 @@ export function ItemManagerClient({
     setBusy(true);
     setMessage(null);
     const form = new FormData(event.currentTarget);
-    const response = await fetch(`/api/items/${item.id}/companies`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "idempotency-key": crypto.randomUUID(),
-      },
-      body: JSON.stringify({
-        companyId,
-        relation: {
-          companyItemCode: form.get("companyItemCode"),
-          salesEnabled: form.get("salesEnabled") === "on",
-          status: form.get("status"),
+    try {
+      const response = await fetch(`/api/items/${item.id}/companies`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": crypto.randomUUID(),
         },
-      }),
-    });
-    if (!response.ok) {
-      setMessage(await responseMessage(response));
+        body: JSON.stringify({
+          companyId,
+          relation: {
+            companyItemCode: form.get("companyItemCode"),
+            salesEnabled: form.get("salesEnabled") === "on",
+            status: form.get("status"),
+          },
+        }),
+      });
+      if (!response.ok) {
+        setMessage(await responseMessage(response));
+        return;
+      }
+      window.location.reload();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "操作失敗");
+    } finally {
       setBusy(false);
-      return;
     }
-    window.location.reload();
   }
 
   return (

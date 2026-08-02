@@ -3,6 +3,9 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { CompanySettingsClient } from "../../src/app/(authenticated)/admin/company-settings/company-settings-client";
+import { FreightRuleCreateClient } from "../../src/app/(authenticated)/admin/freight-rules/freight-rule-create-client";
+import { FreightRuleEditor } from "../../src/app/(authenticated)/admin/freight-rules/[id]/freight-rule-editor";
+import { MasterImportClient } from "../../src/app/(authenticated)/admin/master-import/master-import-client";
 import { UserActionButton } from "../../src/app/(authenticated)/admin/users/user-action-button";
 
 const originalShowModal = HTMLDialogElement.prototype.showModal;
@@ -44,5 +47,76 @@ describe("P4.4d Admin DOM interaction", () => {
     const buttons = screen.getAllByRole("button", { name: "撤銷全部 Session" });
     fireEvent.click(buttons[buttons.length - 1]);
     expect(submit).toHaveBeenCalledTimes(1);
+  });
+
+  it("closes the formal import dialog on failure and exposes a retryable alert", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      json: async () => ({ error: { message: "正式匯入失敗測試" } }),
+    } as Response);
+    vi.stubGlobal("fetch", fetchMock);
+    render(<MasterImportClient companyId="company-a" />);
+
+    const trigger = screen.getByRole("button", { name: "確認正式匯入" });
+    fireEvent.click(trigger);
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "執行正式匯入" }));
+
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "正式匯入失敗測試",
+    );
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect((trigger as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(trigger);
+    expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+
+  it("recovers freight create and edit actions after rejected fetches", async () => {
+    let rejectRequest!: (reason: Error) => void;
+    const fetchMock = vi.fn(() => new Promise<Response>((_resolve, reject) => {
+      rejectRequest = reject;
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(
+      <FreightRuleCreateClient
+        companyId="company-a"
+        locations={[{ id: "location-a", customerId: "customer-a", label: "客戶／地點" }]}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText(/客戶與送貨地點/), {
+      target: { value: "location-a" },
+    });
+    const create = screen.getByRole("button", { name: "新增規則" });
+    fireEvent.submit(create.closest("form")!);
+    await waitFor(() => expect(create.getAttribute("aria-busy")).toBe("true"));
+    rejectRequest(new Error("網路連線失敗"));
+    expect((await screen.findByRole("alert")).textContent).toContain("網路連線失敗");
+    await waitFor(() => expect((create as HTMLButtonElement).disabled).toBe(false));
+    expect(create.getAttribute("aria-busy")).toBeNull();
+
+    cleanup();
+    render(
+      <FreightRuleEditor
+        companyId="company-a"
+        value={{
+          id: "freight-a",
+          customerId: "customer-a",
+          deliveryLocationId: "location-a",
+          mode: "NO_CHARGE",
+          unitFreight: null,
+          fixedFreight: null,
+          validFrom: "2026-08-01",
+          validTo: null,
+          status: "ACTIVE",
+        }}
+      />,
+    );
+    const edit = screen.getByRole("button", { name: "儲存規則" });
+    fireEvent.submit(edit.closest("form")!);
+    await waitFor(() => expect(edit.getAttribute("aria-busy")).toBe("true"));
+    rejectRequest(new Error("網路連線失敗"));
+    expect((await screen.findByRole("alert")).textContent).toContain("網路連線失敗");
+    await waitFor(() => expect((edit as HTMLButtonElement).disabled).toBe(false));
+    expect(edit.getAttribute("aria-busy")).toBeNull();
   });
 });

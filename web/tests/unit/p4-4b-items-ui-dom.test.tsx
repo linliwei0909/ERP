@@ -92,6 +92,38 @@ describe("P4.4b Items DOM interaction", () => {
     await waitFor(() => expect((submit as HTMLButtonElement).disabled).toBe(false));
   });
 
+  it("recovers item create and edit after rejected fetches", async () => {
+    let rejectRequest!: (reason: Error) => void;
+    const fetchMock = vi.fn(() => new Promise<Response>((_resolve, reject) => {
+      rejectRequest = reject;
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<ItemCreateClient selectedCompanyId="company-a" />);
+    const create = screen.getByRole("button", { name: "建立品項" });
+    fireEvent.submit(create.closest("form")!);
+    await waitFor(() => expect(create.getAttribute("aria-busy")).toBe("true"));
+    rejectRequest(new Error("網路連線失敗"));
+    expect((await screen.findByRole("alert")).textContent).toContain("網路連線失敗");
+    await waitFor(() => expect((create as HTMLButtonElement).disabled).toBe(false));
+    expect(create.getAttribute("aria-busy")).toBeNull();
+
+    cleanup();
+    render(
+      <ItemManagerClient
+        item={managedItem}
+        companies={[{ id: "company-a", code: "A", name: "甲公司" }]}
+        selectedCompanyId="company-a"
+      />,
+    );
+    const edit = screen.getByRole("button", { name: "儲存品項" });
+    fireEvent.submit(edit.closest("form")!);
+    await waitFor(() => expect(edit.getAttribute("aria-busy")).toBe("true"));
+    rejectRequest(new Error("網路連線失敗"));
+    expect((await screen.findByRole("alert")).textContent).toContain("網路連線失敗");
+    await waitFor(() => expect((edit as HTMLButtonElement).disabled).toBe(false));
+    expect(edit.getAttribute("aria-busy")).toBeNull();
+  });
+
   it("preserves item PATCH payload and company relation POST target", async () => {
     const fetchMock = vi.fn().mockResolvedValue(failedResponse("測試錯誤"));
     vi.stubGlobal("fetch", fetchMock);
