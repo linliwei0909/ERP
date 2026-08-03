@@ -1,7 +1,30 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
+import pageStyles from "@/components/app-shell/page-contract.module.css";
+import {
+  Alert,
+  Button,
+  Card,
+  EmptyState,
+  Field,
+  FormActions,
+  Input,
+  Section,
+  Select,
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableContainer,
+  TableEmptyRow,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui";
+import { ItemCombobox } from "./item-combobox";
+import soStyles from "./sales-orders-ui.module.css";
 
 type CustomerOption = {
   id: string;
@@ -50,6 +73,40 @@ function idempotencyHeaders() {
   };
 }
 
+type RequestOutcome<T = unknown> =
+  | { ok: true; value: T }
+  | { ok: false; message: string };
+
+async function performRequest<T = unknown>(
+  url: string,
+  method: "POST" | "PATCH",
+  body: unknown,
+): Promise<RequestOutcome<T>> {
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method,
+      headers: idempotencyHeaders(),
+      body: JSON.stringify(body),
+    });
+  } catch {
+    return { ok: false, message: "網路連線異常，請稍後再試一次" };
+  }
+  let value: unknown;
+  try {
+    value = await response.json();
+  } catch {
+    return { ok: false, message: "伺服器回應格式異常，請稍後再試一次" };
+  }
+  if (!response.ok) {
+    const message =
+      (value as { error?: { message?: string } } | null)?.error?.message ??
+      "操作失敗";
+    return { ok: false, message };
+  }
+  return { ok: true, value: value as T };
+}
+
 export function canStartSalesOrderRevision(status: string): boolean {
   return status === "CONFIRMED" || status === "DELIVERY_CREATED";
 }
@@ -74,14 +131,11 @@ export function SalesOrderEditor({
   const [customerId, setCustomerId] = useState(
     initial?.customerId ?? customers[0]?.id ?? "",
   );
-  const selectedCustomer = useMemo(
-    () => customers.find((customer) => customer.id === customerId),
-    [customerId, customers],
+  const selectedCustomer = customers.find(
+    (customer) => customer.id === customerId,
   );
   const [deliveryLocationId, setDeliveryLocationId] = useState(
-    initial?.deliveryLocationId ??
-      selectedCustomer?.locations[0]?.id ??
-      "",
+    initial?.deliveryLocationId ?? selectedCustomer?.locations[0]?.id ?? "",
   );
   const [customerContactId, setCustomerContactId] = useState(
     initial?.customerContactId ?? "",
@@ -99,6 +153,8 @@ export function SalesOrderEditor({
       },
     ],
   );
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const editable = !initial || initial.status === "DRAFT";
 
@@ -119,34 +175,47 @@ export function SalesOrderEditor({
     };
   }
 
-  async function request(
-    url: string,
-    method: "POST" | "PATCH",
-    body: unknown,
-  ) {
-    setMessage("處理中…");
-    const response = await fetch(url, {
-      method,
-      headers: idempotencyHeaders(),
-      body: JSON.stringify(body),
-    });
-    const value = await response.json();
-    if (!response.ok) {
-      setMessage(value.error?.message ?? "操作失敗");
-      return null;
-    }
-    setMessage("操作完成");
-    return value;
+  function addLine() {
+    setLines((current) => [
+      ...current,
+      {
+        itemId: items[0]?.id ?? "",
+        quantity: "1",
+        unitPrice: "",
+        manualPriceReason: "",
+      },
+    ]);
+  }
+
+  function removeLine(index: number) {
+    setLines((current) => current.filter((_, position) => position !== index));
+  }
+
+  function updateLine(index: number, patch: Partial<EditorLine>) {
+    setLines((current) =>
+      current.map((entry, position) =>
+        position === index ? { ...entry, ...patch } : entry,
+      ),
+    );
   }
 
   async function save() {
-    const value = await request(
+    if (saving) return;
+    setSaving(true);
+    setSaveError(null);
+    const outcome = await performRequest<{ id?: string }>(
       initial ? `/api/sales-orders/${initial.id}` : "/api/sales-orders",
       initial ? "PATCH" : "POST",
       { draft: draftPayload() },
     );
-    if (value?.id) router.push(`/sales-orders/${value.id}`);
+    if (!outcome.ok) {
+      setSaveError(outcome.message);
+      setSaving(false);
+      return;
+    }
+    if (outcome.value?.id) router.push(`/sales-orders/${outcome.value.id}`);
     router.refresh();
+    setSaving(false);
   }
 
   async function action(name: "confirm" | "revision" | "void") {
@@ -157,253 +226,249 @@ export function SalesOrderEditor({
       setMessage("作廢理由必填");
       return;
     }
-    const value = await request(
+    setMessage("處理中…");
+    const outcome = await performRequest(
       `/api/sales-orders/${initial.id}/${name}`,
       "POST",
       name === "void" ? { reason } : {},
     );
-    if (value) router.refresh();
+    if (!outcome.ok) {
+      setMessage(outcome.message);
+      return;
+    }
+    setMessage("操作完成");
+    router.refresh();
   }
 
   return (
-    <div className="mt-8 space-y-6">
-      {initial ? (
-        <section className="grid gap-3 rounded-2xl border bg-white p-5 md:grid-cols-4">
-          <div>
-            <span className="text-xs text-slate-500">訂單號</span>
-            <p className="font-semibold">{initial.orderNumber}</p>
-          </div>
-          <div>
-            <span className="text-xs text-slate-500">狀態</span>
-            <p className="font-semibold">{initial.status}</p>
-          </div>
-          <div>
-            <span className="text-xs text-slate-500">修訂版次</span>
-            <p className="font-semibold">{initial.revisionNo}</p>
-          </div>
-          <div>
-            <span className="text-xs text-slate-500">金額</span>
-            <p className="font-semibold">
-              未稅 {initial.subtotal} + 運費 {initial.freightAmount} ={" "}
-              {initial.totalAmount}
-            </p>
-          </div>
-        </section>
-      ) : (
-        <p className="rounded-lg bg-teal-50 p-3 text-sm text-teal-900">
-          訂單號由系統在草稿建立成功時產生。
-        </p>
-      )}
+    <div className={pageStyles.pageStack}>
+      <Card>
+        {initial ? (
+          <dl className={soStyles.summaryGrid}>
+            <div>
+              <dt className={pageStyles.tableSubtext}>訂單號</dt>
+              <dd className="font-semibold">{initial.orderNumber}</dd>
+            </div>
+            <div>
+              <dt className={pageStyles.tableSubtext}>狀態</dt>
+              <dd className="font-semibold">{initial.status}</dd>
+            </div>
+            <div>
+              <dt className={pageStyles.tableSubtext}>修訂版次</dt>
+              <dd className="font-semibold">{initial.revisionNo}</dd>
+            </div>
+            <div>
+              <dt className={pageStyles.tableSubtext}>金額</dt>
+              <dd className="font-semibold">
+                未稅 {initial.subtotal} + 運費 {initial.freightAmount} ={" "}
+                {initial.totalAmount}
+              </dd>
+            </div>
+          </dl>
+        ) : (
+          <Alert tone="info">訂單號由系統在草稿建立成功時產生。</Alert>
+        )}
+      </Card>
 
-      <section className="grid gap-4 rounded-2xl border bg-white p-6 md:grid-cols-2">
-        <label>
-          訂單日期
-          <input
-            type="date"
-            value={orderDate}
-            disabled={!editable}
-            onChange={(event) => setOrderDate(event.target.value)}
-            className="mt-1 w-full rounded-lg border px-3 py-2"
-          />
-        </label>
-        <label>
-          客戶
-          <select
-            value={customerId}
-            disabled={!editable}
-            onChange={(event) => {
-              const next = customers.find(
-                (customer) => customer.id === event.target.value,
-              );
-              setCustomerId(event.target.value);
-              setDeliveryLocationId(next?.locations[0]?.id ?? "");
-              setCustomerContactId("");
-            }}
-            className="mt-1 w-full rounded-lg border px-3 py-2"
-          >
-            {customers.map((customer) => (
-              <option key={customer.id} value={customer.id}>
-                {customer.code}－{customer.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          送貨地點
-          <select
-            value={deliveryLocationId}
-            disabled={!editable}
-            onChange={(event) => setDeliveryLocationId(event.target.value)}
-            className="mt-1 w-full rounded-lg border px-3 py-2"
-          >
-            {selectedCustomer?.locations.map((location) => (
-              <option key={location.id} value={location.id}>
-                {location.code}－{location.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          聯絡人（可不選）
-          <select
-            value={customerContactId}
-            disabled={!editable}
-            onChange={(event) => setCustomerContactId(event.target.value)}
-            className="mt-1 w-full rounded-lg border px-3 py-2"
-          >
-            <option value="">預設主要聯絡人／不指定</option>
-            {selectedCustomer?.contacts.map((contact) => (
-              <option key={contact.id} value={contact.id}>
-                {contact.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="md:col-span-2">
-          付款條件文字
-          <input
-            value={paymentTermsText}
-            disabled={!editable}
-            onChange={(event) => setPaymentTermsText(event.target.value)}
-            className="mt-1 w-full rounded-lg border px-3 py-2"
-          />
-        </label>
-      </section>
-
-      <section className="rounded-2xl border bg-white p-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold">訂單明細</h2>
-          {editable ? (
-            <button
-              type="button"
-              onClick={() =>
-                setLines((current) => [
-                  ...current,
-                  {
-                    itemId: items[0]?.id ?? "",
-                    quantity: "1",
-                    unitPrice: "",
-                    manualPriceReason: "",
-                  },
-                ])
-              }
-              className="rounded-lg border px-3 py-2"
-            >
-              新增明細
-            </button>
-          ) : null}
-        </div>
-        <div className="mt-4 space-y-3">
-          {lines.map((line, index) => (
-            <div
-              key={line.id ?? index}
-              className="grid gap-3 rounded-xl border p-4 md:grid-cols-5"
-            >
-              <select
-                value={line.itemId}
+      <Card>
+        <Section title="客戶與送貨資料">
+          <div className={pageStyles.formGrid}>
+            <Field label="訂單日期">
+              <Input
+                type="date"
+                value={orderDate}
                 disabled={!editable}
-                onChange={(event) =>
-                  setLines((current) =>
-                    current.map((entry, position) =>
-                      position === index
-                        ? { ...entry, itemId: event.target.value }
-                        : entry,
-                    ),
-                  )
-                }
-                className="rounded-lg border px-3 py-2 md:col-span-2"
+                onChange={(event) => setOrderDate(event.target.value)}
+              />
+            </Field>
+            <Field label="客戶">
+              <Select
+                value={customerId}
+                disabled={!editable}
+                onChange={(event) => {
+                  const next = customers.find(
+                    (customer) => customer.id === event.target.value,
+                  );
+                  setCustomerId(event.target.value);
+                  setDeliveryLocationId(next?.locations[0]?.id ?? "");
+                  setCustomerContactId("");
+                }}
               >
-                {items.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.code}－{item.name}（{item.baseUnit}）
+                {customers.map((customer) => (
+                  <option key={customer.id} value={customer.id}>
+                    {customer.code}－{customer.name}
                   </option>
                 ))}
-              </select>
-              <input
-                value={line.quantity}
+              </Select>
+            </Field>
+            <Field label="送貨地點">
+              <Select
+                value={deliveryLocationId}
                 disabled={!editable}
-                aria-label="數量"
-                onChange={(event) =>
-                  setLines((current) =>
-                    current.map((entry, position) =>
-                      position === index
-                        ? { ...entry, quantity: event.target.value }
-                        : entry,
-                    ),
-                  )
-                }
-                placeholder="數量"
-                className="rounded-lg border px-3 py-2"
-              />
-              <input
-                value={line.unitPrice}
+                onChange={(event) => setDeliveryLocationId(event.target.value)}
+              >
+                {selectedCustomer?.locations.map((location) => (
+                  <option key={location.id} value={location.id}>
+                    {location.code}－{location.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="聯絡人（可不選）">
+              <Select
+                value={customerContactId}
                 disabled={!editable}
-                aria-label="未稅成交單價"
-                onChange={(event) =>
-                  setLines((current) =>
-                    current.map((entry, position) =>
-                      position === index
-                        ? { ...entry, unitPrice: event.target.value }
-                        : entry,
-                    ),
-                  )
-                }
-                placeholder="未稅成交單價；空白取標準價"
-                className="rounded-lg border px-3 py-2"
-              />
-              <div className="flex gap-2">
-                <input
-                  value={line.manualPriceReason}
-                  disabled={!editable}
-                  aria-label="人工價格理由"
-                  onChange={(event) =>
-                    setLines((current) =>
-                      current.map((entry, position) =>
-                        position === index
-                          ? {
-                              ...entry,
-                              manualPriceReason: event.target.value,
-                            }
-                          : entry,
-                      ),
-                    )
-                  }
-                  placeholder="人工價格理由"
-                  className="min-w-0 flex-1 rounded-lg border px-3 py-2"
-                />
-                {editable ? (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setLines((current) =>
-                        current.filter((_, position) => position !== index),
-                      )
-                    }
-                    className="rounded-lg border border-red-300 px-3 text-red-700"
-                  >
-                    移除
-                  </button>
+                onChange={(event) => setCustomerContactId(event.target.value)}
+              >
+                <option value="">預設主要聯絡人／不指定</option>
+                {selectedCustomer?.contacts.map((contact) => (
+                  <option key={contact.id} value={contact.id}>
+                    {contact.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </div>
+        </Section>
+
+        <Section title="付款條件">
+          <Field label="付款條件文字">
+            <Input
+              value={paymentTermsText}
+              disabled={!editable}
+              onChange={(event) => setPaymentTermsText(event.target.value)}
+            />
+          </Field>
+        </Section>
+      </Card>
+
+      <Card>
+        <Section
+          title="訂單明細"
+          actions={
+            editable ? (
+              <Button type="button" variant="secondary" onClick={addLine}>
+                新增明細
+              </Button>
+            ) : null
+          }
+        >
+          <TableContainer>
+            <Table className={soStyles.lineTable}>
+              <TableCaption>訂單明細</TableCaption>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>品項</TableHead>
+                  <TableHead>數量</TableHead>
+                  <TableHead>未稅成交單價</TableHead>
+                  <TableHead>人工價格理由</TableHead>
+                  {editable ? <TableHead>操作</TableHead> : null}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {lines.map((line, index) => (
+                  <TableRow key={line.id ?? index}>
+                    <TableCell className={soStyles.lineCell}>
+                      <ItemCombobox
+                        items={items}
+                        value={line.itemId}
+                        disabled={!editable}
+                        label="品項"
+                        onChange={(itemId) => updateLine(index, { itemId })}
+                      />
+                    </TableCell>
+                    <TableCell className={soStyles.lineCell}>
+                      <Input
+                        value={line.quantity}
+                        disabled={!editable}
+                        aria-label="數量"
+                        placeholder="數量"
+                        onChange={(event) =>
+                          updateLine(index, { quantity: event.target.value })
+                        }
+                      />
+                    </TableCell>
+                    <TableCell className={soStyles.lineCell}>
+                      <Input
+                        value={line.unitPrice}
+                        disabled={!editable}
+                        aria-label="未稅成交單價"
+                        placeholder="未稅成交單價；空白取標準價"
+                        onChange={(event) =>
+                          updateLine(index, { unitPrice: event.target.value })
+                        }
+                      />
+                    </TableCell>
+                    <TableCell className={soStyles.lineCell}>
+                      <Input
+                        value={line.manualPriceReason}
+                        disabled={!editable}
+                        aria-label="人工價格理由"
+                        placeholder="人工價格理由"
+                        onChange={(event) =>
+                          updateLine(index, {
+                            manualPriceReason: event.target.value,
+                          })
+                        }
+                      />
+                    </TableCell>
+                    {editable ? (
+                      <TableCell className={soStyles.lineCell}>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          aria-label={`移除第 ${index + 1} 列`}
+                          onClick={() => removeLine(index)}
+                        >
+                          移除
+                        </Button>
+                      </TableCell>
+                    ) : null}
+                  </TableRow>
+                ))}
+                {lines.length === 0 ? (
+                  <TableEmptyRow colSpan={editable ? 5 : 4}>
+                    <EmptyState
+                      variant="no-data"
+                      title="尚無明細"
+                      description="請新增至少一筆明細。"
+                    />
+                  </TableEmptyRow>
                 ) : null}
-              </div>
-            </div>
-          ))}
-        </div>
-        <p className="mt-4 text-sm text-slate-500">
-          數量最多四位小數，未稅單價最多五位小數；明細金額以 half-up
-          四捨五入至元。人工價格及標準價改價均須填寫理由。
-        </p>
-      </section>
+              </TableBody>
+            </Table>
+          </TableContainer>
+          <p className={pageStyles.tableSubtext}>
+            數量最多四位小數，未稅單價最多五位小數；明細金額以 half-up
+            四捨五入至元。人工價格及標準價改價均須填寫理由。
+          </p>
+        </Section>
+      </Card>
+
+      {editable ? (
+        <Card>
+          {saveError ? (
+            <Alert tone="danger" title="儲存失敗">
+              {saveError}
+            </Alert>
+          ) : null}
+          <FormActions
+            align="start"
+            primary={
+              <Button
+                type="button"
+                onClick={save}
+                pending={saving}
+                pendingLabel={initial ? "儲存中…" : "建立中…"}
+              >
+                {initial ? "儲存草稿" : "建立草稿"}
+              </Button>
+            }
+          />
+        </Card>
+      ) : null}
 
       <div className="flex flex-wrap gap-3">
-        {editable ? (
-          <button
-            type="button"
-            onClick={save}
-            className="rounded-lg bg-teal-700 px-4 py-2 text-white"
-          >
-            {initial ? "儲存草稿" : "建立草稿"}
-          </button>
-        ) : null}
         {initial?.status === "DRAFT" ? (
           <button
             type="button"
