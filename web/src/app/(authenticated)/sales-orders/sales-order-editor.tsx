@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import pageStyles from "@/components/app-shell/page-contract.module.css";
 import {
@@ -73,15 +73,18 @@ function idempotencyHeaders() {
   };
 }
 
-type RequestOutcome<T = unknown> =
+// P4.5b robust request handling is scoped to the draft save flow only (create/update).
+// Status actions (confirm/revision/void) intentionally keep their pre-P4.5b request()
+// behavior below — see the SalesOrderEditor component — and must not use this helper.
+type SaveRequestOutcome<T = unknown> =
   | { ok: true; value: T }
   | { ok: false; message: string };
 
-async function performRequest<T = unknown>(
+async function performSaveRequest<T = unknown>(
   url: string,
   method: "POST" | "PATCH",
   body: unknown,
-): Promise<RequestOutcome<T>> {
+): Promise<SaveRequestOutcome<T>> {
   let response: Response;
   try {
     response = await fetch(url, {
@@ -155,6 +158,7 @@ export function SalesOrderEditor({
   );
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const saveInFlightRef = useRef(false);
   const [message, setMessage] = useState("");
   const editable = !initial || initial.status === "DRAFT";
 
@@ -200,22 +204,44 @@ export function SalesOrderEditor({
   }
 
   async function save() {
-    if (saving) return;
+    if (saveInFlightRef.current) return;
+    saveInFlightRef.current = true;
     setSaving(true);
     setSaveError(null);
-    const outcome = await performRequest<{ id?: string }>(
-      initial ? `/api/sales-orders/${initial.id}` : "/api/sales-orders",
-      initial ? "PATCH" : "POST",
-      { draft: draftPayload() },
-    );
-    if (!outcome.ok) {
-      setSaveError(outcome.message);
+    try {
+      const outcome = await performSaveRequest<{ id?: string }>(
+        initial ? `/api/sales-orders/${initial.id}` : "/api/sales-orders",
+        initial ? "PATCH" : "POST",
+        { draft: draftPayload() },
+      );
+      if (!outcome.ok) {
+        setSaveError(outcome.message);
+        return;
+      }
+      if (outcome.value?.id) router.push(`/sales-orders/${outcome.value.id}`);
+      router.refresh();
+    } finally {
+      saveInFlightRef.current = false;
       setSaving(false);
-      return;
     }
-    if (outcome.value?.id) router.push(`/sales-orders/${outcome.value.id}`);
-    router.refresh();
-    setSaving(false);
+  }
+
+  // Pre-P4.5b request/error behavior, kept unchanged for status actions. Deliberately
+  // does not use performSaveRequest: confirm/revision/void robustness is P4.5c scope.
+  async function request(url: string, method: "POST" | "PATCH", body: unknown) {
+    setMessage("處理中…");
+    const response = await fetch(url, {
+      method,
+      headers: idempotencyHeaders(),
+      body: JSON.stringify(body),
+    });
+    const value = await response.json();
+    if (!response.ok) {
+      setMessage(value.error?.message ?? "操作失敗");
+      return null;
+    }
+    setMessage("操作完成");
+    return value;
   }
 
   async function action(name: "confirm" | "revision" | "void") {
@@ -226,18 +252,12 @@ export function SalesOrderEditor({
       setMessage("作廢理由必填");
       return;
     }
-    setMessage("處理中…");
-    const outcome = await performRequest(
+    const value = await request(
       `/api/sales-orders/${initial.id}/${name}`,
       "POST",
       name === "void" ? { reason } : {},
     );
-    if (!outcome.ok) {
-      setMessage(outcome.message);
-      return;
-    }
-    setMessage("操作完成");
-    router.refresh();
+    if (value) router.refresh();
   }
 
   return (

@@ -2,7 +2,20 @@
 
 文件狀態：P4.5b IMPLEMENTED AND LOCALLY VALIDATED（僅涵蓋草稿編輯器切片；不涵蓋 P4.5c／d）
 
-版本日期：2026-08-03
+版本日期：2026-08-03（含 2026-08-03 correction commit 修正）
+
+## 0. Correction Note（本次修正）
+
+遠端審查發現：初版 P4.5b 將 `save()` 與 `action()`（confirm／revision／void）共用同一個健壯性 `performRequest()` helper，導致狀態動作的 fetch rejection、JSON parse exception、非 2xx 錯誤處理也被提前改變——這超出 P4.5b 授權範圍（P4.5b 只授權 Draft Save 流程的 client robustness；狀態動作的 error behavior 屬 P4.5c）。
+
+本次 correction commit 修正如下（詳見第 5、10、11、13 節，已更新為修正後的準確敘述）：
+
+- 健壯性 helper 更名為 `performSaveRequest()`，**僅供 `save()` 使用**。
+- `action()` 恢復為 P4.5b 之前（commit `37d88e2`）逐字相同的 `request()` 實作與呼叫方式：`fetch()`／`response.json()` 皆無 try/catch，非 2xx 時 `setMessage(value.error?.message ?? "操作失敗")`，成功時 `setMessage("操作完成")` 並 `router.refresh()`——與修正前完全一致。
+- `save()` 新增同步 `saveInFlightRef`（`useRef`）防重入鎖，於函式最前同步檢查並於 `finally` 恢復，作為比 `saving` state 更嚴謹的 single-flight 證據。
+- 新增 6 項測試，明確證明狀態動作未套用 save 專用的錯誤轉換，且 save 的同步防重入鎖獨立於 `disabled` 屬性成立。
+
+## 1. Git 起始基線
 
 ## 1. Git 起始基線
 
@@ -21,7 +34,7 @@
 
 依使用者本次授權指示，放棄 Preflight 報告原提出的「Option 1：只建立 create-only 新元件」。改為直接遷移共用元件 [sales-order-editor.tsx](web/src/app/(authenticated)/sales-orders/sales-order-editor.tsx)：
 
-- `SalesOrderEditor` 同時服務 `/sales-orders/new`（無 `initial`）與既有 `/sales-orders/[id]` 的 DRAFT 編輯（有 `initial`），維持單一 `draftPayload()`、單一 `save()`／`performRequest()` mutation 實作、單一 customer/location/contact state 邏輯——未建立第二套。
+- `SalesOrderEditor` 同時服務 `/sales-orders/new`（無 `initial`）與既有 `/sales-orders/[id]` 的 DRAFT 編輯（有 `initial`），維持單一 `draftPayload()`、單一 customer/location/contact state 邏輯——未建立第二套。`save()`（create/update）使用 `performSaveRequest()`；`action()`（confirm/revision/void，P4.5c 範圍）維持修正前的獨立 `request()` 實作，兩者刻意不共用同一個 request helper（見第 0、5 節 correction note）。
 - P4.5c 保護區（confirm／revision／void 按鈕、`window.prompt`、其 `action()` 呼叫流程、raw JSON snapshot `<details>` 區塊）在檔案中**逐字保留**，僅在 JSX 結構上與 editable 區塊分離（允許範圍內的最小結構搬移），未改變其 class、文字、觸發條件或呼叫的 endpoint。
 - `/sales-orders/[id]/page.tsx` 本身（外層 `<main>`、`<h1>銷售訂單明細</h1>`、`DeliveryNoteOrderActions` 排列）**未修改**——`[id]` 頁面看到的變化僅來自其內嵌的 `SalesOrderEditor` 呈現更新，符合「本次只允許因共用 Draft Editor 而產生的 editable presentation 變化」。
 
@@ -31,7 +44,7 @@
 | --- | --- | --- |
 | `/sales-orders/new` | [new/page.tsx](web/src/app/(authenticated)/sales-orders/new/page.tsx) | 移除 route-local `<main>`／`<h1>`／raw 連結，改用 `PageHeader`＋`pageStyles.pageStack`；資料查詢（customer/item）、`requirePermission("sales_orders.manage")`、company context、catch/redirect 完全不變 |
 | `/sales-orders/[id]`（DRAFT 編輯／明細／狀態動作） | [id]/page.tsx | **未修改**（僅其子元件 `SalesOrderEditor` 的呈現受影響） |
-| 共用 editor | [sales-order-editor.tsx](web/src/app/(authenticated)/sales-orders/sales-order-editor.tsx) | 全面改用 P4.3 primitives；新增 `saving`／`saveError` state 與 `performRequest()` 健壯性 helper；狀態動作區塊與 raw snapshot 逐字保留 |
+| 共用 editor | [sales-order-editor.tsx](web/src/app/(authenticated)/sales-orders/sales-order-editor.tsx) | 全面改用 P4.3 primitives；新增 `saving`／`saveError`／`saveInFlightRef` 與僅供 `save()` 使用的 `performSaveRequest()` 健壯性 helper；`action()`／狀態動作區塊與 raw snapshot 逐字保留（含其原始 `request()` 呼叫路徑，見第 0 節 correction note） |
 | 新增：searchable combobox | [item-combobox.tsx](web/src/app/(authenticated)/sales-orders/item-combobox.tsx) | 新檔案，repository-native，無新 dependency |
 | 新增：route-local CSS | [sales-orders-ui.module.css](web/src/app/(authenticated)/sales-orders/sales-orders-ui.module.css) | 新檔案，沿用既有 design tokens（`--space-*`、`--color-*`、`--radius-control`），與 `customer-ui.module.css`／`pricing-ui.module.css` 同一慣例 |
 
@@ -42,7 +55,8 @@
 - Mutation：`POST /api/sales-orders`（create）／`PATCH /api/sales-orders/{id}`（edit），method、URL 規則、payload 外層 `{draft: draftPayload()}` 皆不變。
 - 成功後 `router.push('/sales-orders/${id}')` + `router.refresh()` 不變。
 - `editable = !initial || initial.status === "DRAFT"`（draft-only guard）不變；非 DRAFT 時所有欄位 `disabled`、儲存/新增/移除按鈕不渲染。
-- 內部把單一 `request()` 拆成不觸發 React state 的 `performRequest()`，供 `save()`（新 `saving`／`saveError` state）與 `action()`（沿用原 `message` state／文字序列）分別使用——這是唯一的「結構」變動，屬於使用者本次明確授權的「client robustness」修正（見第 12 節），未新增第二套 mutation 流程。
+- `save()`（create/update）使用新的 `performSaveRequest()`（不觸發 React state，回傳 `{ok, value}`／`{ok, message}`），並以 `saveInFlightRef`（同步 ref）＋`saving` state 管理 pending／防重入。
+- `action()`（confirm/revision/void）**未**改用 `performSaveRequest()`；維持修正前逐字相同的獨立 `request()` 函式（無 try/catch、`setMessage("處理中…")` → 成功 `setMessage("操作完成")` / 失敗 `setMessage(value.error?.message ?? "操作失敗")`、`fetch()`／`response.json()` 例外會如修正前一樣向上拋出）。兩者是**兩個獨立的 request 實作**，並非同一 helper 的兩種呼叫方式——初版 P4.5b 曾讓兩者共用同一個健壯性 helper，已於 correction commit 修正（見第 0 節），不屬於本次「唯一結構變動」的最終狀態。
 
 ## 6. Field／Payload Preservation
 
@@ -81,21 +95,31 @@ DOM 測試驗證：切換客戶後送貨地點重設為新客戶第一筆地點�
 
 ## 10. Pending／Single-Flight（僅 Save 流程；狀態動作不受影響）
 
-- 新增本地 `saving` boolean；儲存按鈕綁定 `Button` 的 `pending`／`pendingLabel`，pending 時自動 `disabled` 且 `aria-busy="true"`。
-- `save()` 開頭 `if (saving) return;` 防止重入；DOM 測試驗證快速兩次點擊只送出一次 `fetch`。
-- 成功或失敗後 `saving` 皆恢復 `false`（含 reject／JSON parse 失敗路徑）。
+- 新增本地 `saving` boolean（presentation state）；儲存按鈕綁定 `Button` 的 `pending`／`pendingLabel`，pending 時自動 `disabled` 且 `aria-busy="true"`。
+- **同步防重入鎖**：`save()` 函式最前以 `saveInFlightRef.current`（`useRef(false)`）同步檢查並立即設為 `true`，於 `try/finally` 的 `finally` 中恢復為 `false`（連同 `setSaving(false)`）。此鎖與 `saving` state／按鈕 `disabled` 屬性彼此獨立——即使按鈕的 `disabled` 因某種原因被繞過，`save()` 本身仍會在第二次呼叫時於函式最前直接 `return`，不會送出第二個 `fetch`。
+- 測試證據（`p4-5b-sales-order-draft-editor-ui.test.tsx`）：「blocks a second concurrent save via a synchronous guard, independent of the disabled attribute」——第一次點擊後手動清除按鈕的 `disabled` 屬性（`button.disabled = false`）再次點擊，驗證 `fetch` 仍只被呼叫一次；此測試不依賴 DOM `disabled` 語意，直接證明內部同步鎖有效，修正了初版僅以「點擊已 disabled 按鈕」作為間接證據的不足。
+- 成功或失敗後 `saving`／`saveInFlightRef` 皆恢復（含 reject／JSON parse 失敗路徑），使用者可立即再次提交。
 - 未修改 server idempotency 實作；每次有效提交仍呼叫 `crypto.randomUUID()` 產生新 key。
-- confirm／revision／void 按鈕**未**加上 pending／disabled／aria-busy（維持原樣，重複送出風險保留不變，屬 P4.5c 範圍）。
+- confirm／revision／void 按鈕**未**加上 pending／disabled／aria-busy、**未**加上任何同步防重入鎖（維持修正前原樣，重複送出風險保留不變，屬 P4.5c 範圍）。
 
-## 11. Error Recovery（Client Presentation Robustness）
+## 11. Error Recovery（Client Presentation Robustness — 僅 Save 流程）
 
-`performRequest()`：
+**修正後準確敘述**：以下 robust error handling **僅適用於 `save()`（create/update draft），不適用於 `action()`（confirm/revision/void）**。初版文件曾不準確地暗示健壯性處理對兩者一體適用，已於本次 correction 修正。
+
+`performSaveRequest()`（僅 `save()` 呼叫）：
 
 - `fetch()` 拋出 → 回傳通用訊息「網路連線異常，請稍後再試一次」（不再是 unhandled rejection）。
 - `response.json()` 拋出 → 回傳通用訊息「伺服器回應格式異常，請稍後再試一次」。
 - 非 2xx → 優先使用 `value.error?.message`，否則「操作失敗」（與原行為一致）。
 - 未修改 API、HTTP 狀態碼、server 錯誤 mapping；未新增 retry API；使用者可在任一失敗後立即再次提交（DOM 測試驗證重試成功路徑）。
-- Save 錯誤以 `Alert(tone="danger")` 呈現；狀態動作錯誤沿用原本 `<span>{message}</span>` 呈現，未改變其位置語意以外的行為。
+- Save 錯誤以 `Alert(tone="danger")` 呈現。
+
+`request()`（僅 `action()` 呼叫，逐字恢復修正前行為，**不套用上述 robustness**）：
+
+- `fetch()` 拋出 → **不被攔截**，向上拋出，`action()` 回傳的 promise 隨之 reject（與修正前完全一致的 unhandled rejection 行為，非本次授權修正範圍）。
+- `response.json()` 拋出 → 同樣**不被攔截**，向上拋出。
+- 非 2xx → `setMessage(value.error?.message ?? "操作失敗")`，沿用原本 `<span>{message}</span>` 呈現，不會顯示 `Alert` 或 save 專用的通用錯誤文字。
+- 測試證據：「does not convert a rejected fetch on a status action into the save-specific generic message」／「...JSON parse failure...」——以 `process.on("unhandledRejection", ...)` 安全捕捉（`finally` 中移除監聽，不影響其他測試），驗證原始例外原樣傳遞、且畫面上**不會**出現「網路連線異常，請稍後再試一次」或「伺服器回應格式異常，請稍後再試一次」；另以「keeps the pre-P4.5b non-2xx message behavior for status actions unchanged」驗證非 2xx 訊息沿用 `message` state、且不渲染 `role="alert"` 的 Alert 元件。
 
 ## 12. Totals Protection
 
@@ -103,7 +127,9 @@ DOM 測試驗證：切換客戶後送貨地點重設為新客戶第一筆地點�
 
 ## 13. P4.5c Status Actions Protection
 
-confirm／revision／void 按鈕的 class、文案、`window.prompt` 呼叫、endpoint（`POST /api/sales-orders/{id}/{confirm|revision|void}`）、body 規則、`router.refresh()`、可見性條件（`initial?.status==="DRAFT"`／`canStartSalesOrderRevision`／`canVoidSalesOrder`）、raw JSON snapshot `<details>` 區塊——全部逐字保留，未套用任何 P4.3 primitive、未新增 pending/disabled。DOM 測試明確斷言其 `className` 字串與原始值相等，且點擊後仍呼叫原本的 endpoint／payload。
+confirm／revision／void 按鈕的 class、文案、`window.prompt` 呼叫、endpoint（`POST /api/sales-orders/{id}/{confirm|revision|void}`）、body 規則、`router.refresh()`、可見性條件（`initial?.status==="DRAFT"`／`canStartSalesOrderRevision`／`canVoidSalesOrder`）、raw JSON snapshot `<details>` 區塊——全部逐字保留，未套用任何 P4.3 primitive、未新增 pending/disabled。
+
+**Correction 範圍澄清**：保護範圍不僅限於按鈕的 class／可見性／成功路徑的 endpoint／payload（這些初版即已正確保留），也包含 **request 層級的例外/錯誤處理路徑**——`action()` 使用的 `request()` 是與 `save()` 的 `performSaveRequest()` 完全獨立的實作，fetch rejection、JSON parse exception、非 2xx message 皆逐字保留修正前行為，未被 P4.5b 的 save 專用 error adapter 攔截或轉換。DOM 測試明確斷言：(a) 成功路徑呼叫原本的 endpoint／payload／`window.prompt`；(b) 非 2xx 時訊息與呈現方式不變、不渲染 `Alert`；(c) fetch rejection／JSON parse exception 不會被轉換成 save 專用的通用訊息，且原始例外仍會傳遞（以安全方式捕捉驗證，未吞掉）。狀態動作的 client robustness（pending、single-flight、正式 error UI）**延後至 P4.5c**，本次未實作。
 
 ## 14. Accessibility
 
@@ -143,9 +169,18 @@ confirm／revision／void 按鈕的 class、文案、`window.prompt` 呼叫、en
 
 ## 17. Targeted Automated Tests
 
-新增：`web/tests/unit/p4-5b-sales-order-draft-editor-ui.test.tsx`（29 tests，皆通過），涵蓋（節錄對應第十五節需求）：
+`web/tests/unit/p4-5b-sales-order-draft-editor-ui.test.tsx`：原 29 tests（P4.5b 初版）＋本次 correction 新增 6 tests，共 **35 tests，皆通過**。
 
-create/DRAFT edit 渲染與欄位綁定、non-DRAFT 唯讀鎖定、customer 切換重設 location／清空 contact、combobox 過濾／鍵盤選取／Escape／唯選既有 item（拒絕自由文字進 payload）／切換 item 不清空 unitPrice、add/remove line 與順序保留、`unitPrice` 條件式省略與既有 line id 保留、POST/PATCH 精確 payload 與 idempotency header、pending/disabled/aria-busy 與重複送出防護、成功導頁、HTTP 失敗／fetch reject／JSON parse 失敗的錯誤呈現與復原重試、server totals 僅呈現不重算、status actions（confirm/void）原樣不變且未加 pending、唯一 h1／單一 main、可及表格結構、未支援欄位缺席驗證、combobox 純函式（`formatItemOptionLabel`／`filterItemOptions`）、既有 `canStartSalesOrderRevision`/`canVoidSalesOrder` 契約不變。
+原 29 tests 涵蓋（節錄）：create/DRAFT edit 渲染與欄位綁定、non-DRAFT 唯讀鎖定、customer 切換重設 location／清空 contact、combobox 過濾／鍵盤選取／Escape／唯選既有 item（拒絕自由文字進 payload）／切換 item 不清空 unitPrice、add/remove line 與順序保留、`unitPrice` 條件式省略與既有 line id 保留、POST/PATCH 精確 payload 與 idempotency header、成功導頁、HTTP 失敗／fetch reject／JSON parse 失敗的 save 錯誤呈現與復原重試、server totals 僅呈現不重算、唯一 h1／單一 main、可及表格結構、未支援欄位缺席驗證、combobox 純函式、既有 `canStartSalesOrderRevision`/`canVoidSalesOrder` 契約不變。
+
+Correction 新增 6 tests（`describe("P4.5b correction: save robustness stays isolated from status actions")`）：
+
+1. `blocks a second concurrent save via a synchronous guard, independent of the disabled attribute` — 手動清除 `disabled` 屬性後再次點擊，證明同步 ref 鎖獨立於 DOM disabled 語意成立。
+2. `recovers save pending/disabled state after a rejected fetch and allows a fresh submit` — save 流程 reject 後仍可復原重試（沿用原有覆蓋，於此明確重申屬 save 專用）。
+3. `keeps the pre-P4.5b non-2xx message behavior for status actions unchanged` — 驗證非 2xx 訊息文字與呈現方式（無 `role="alert"`）與修正前一致。
+4. `does not convert a rejected fetch on a status action into the save-specific generic message` — 以 `process.on("unhandledRejection")` 安全捕捉，驗證原始例外訊息（非 save 專用通用訊息）且畫面停留於「處理中…」（修正前的真實行為）。
+5. `does not convert a JSON parse failure on a status action into the save-specific generic message` — 同上，針對 `response.json()` 拋出 `SyntaxError` 的情境。
+6. `keeps confirm/void endpoint, body and window.prompt behavior unchanged after the correction` — 修正後重新驗證成功路徑的 endpoint／payload／`window.prompt` 仍完全不變。
 
 既有測試 `web/tests/unit/sales-orders.test.ts`（7 tests）與 `web/tests/db/sales-order-workflow.test.ts`（service/DB 層，`test:db` 範圍，本次未執行、未修改）皆未變動，重跑後全部通過，無回歸。
 
@@ -157,7 +192,7 @@ create/DRAFT edit 渲染與欄位綁定、non-DRAFT 唯讀鎖定、customer 切�
 | --- | --- |
 | `npm run lint` | PASS（含新檔案，無新增 warning） |
 | `npm run typecheck` | PASS |
-| `npm run test` | PASS；43 files／378 tests（較 P4.5a 基線新增 1 files／29 tests，其餘不變，無 skip） |
+| `npm run test` | PASS；43 files／384 tests（P4.5b 初版 43 files／378 tests ＋本次 correction 新增 6 tests，其餘不變，無 skip） |
 | `npm run build` | PASS；37 pages generated，與 P4.5a/Preflight 基線一致 |
 | `git diff --check` | PASS |
 | `git diff --cached --check` | PASS |
@@ -184,4 +219,4 @@ Build 保留既有 Delivery Note font／renderer NFT tracing warning，未變化
 
 ## 21. P4.5b Closure Decision
 
-**P4.5b IMPLEMENTED AND LOCALLY VALIDATED**（僅草稿編輯器共用切片；不代表 P4.5 全部完成、不代表 `/sales-orders/[id]` 明細/狀態動作 UI 完成、不代表 Delivery Note UI 完成；正式互動式瀏覽器截圖驗證因環境限制延遲，已誠實記錄於第 15 節）。
+**P4.5b IMPLEMENTED AND LOCALLY VALIDATED**（僅草稿編輯器共用切片；不代表 P4.5 全部完成、不代表 `/sales-orders/[id]` 明細/狀態動作 UI 完成、不代表 P4.5c 已完成、不代表 Delivery Note UI 完成；正式互動式瀏覽器截圖驗證因環境限制延遲，已誠實記錄於第 15 節）。本文件已於 2026-08-03 correction commit（`fix(ui): isolate sales order save error handling`）後更新，修正初版對 status action error behavior 隔離程度的不準確敘述（見第 0 節）。

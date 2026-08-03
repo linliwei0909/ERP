@@ -654,3 +654,171 @@ describe("P4.5b pure helpers", () => {
     expect(canVoidSalesOrder("SHIPPED")).toBe(false);
   });
 });
+
+describe("P4.5b correction: save robustness stays isolated from status actions", () => {
+  it("blocks a second concurrent save via a synchronous guard, independent of the disabled attribute", async () => {
+    let resolveRequest!: (response: Response) => void;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        () =>
+          new Promise<Response>((resolve) => {
+            resolveRequest = resolve;
+          }),
+      ),
+    );
+    render(<SalesOrderEditor customers={customers} items={items} />);
+    const button = screen.getByRole("button", {
+      name: "建立草稿",
+    }) as HTMLButtonElement;
+
+    fireEvent.click(button);
+    // Forcibly clear the disabled attribute so a second click cannot be blocked
+    // by the DOM alone — only an internal synchronous re-entrancy guard can stop it.
+    button.disabled = false;
+    fireEvent.click(button);
+
+    resolveRequest(okResponse({ id: "10000000-0000-4000-8000-000000000099" }));
+    await waitFor(() => expect(pushMock).toHaveBeenCalledTimes(1));
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("recovers save pending/disabled state after a rejected fetch and allows a fresh submit", async () => {
+    let rejectRequest!: (reason: Error) => void;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        () =>
+          new Promise<Response>((_resolve, reject) => {
+            rejectRequest = reject;
+          }),
+      ),
+    );
+    render(<SalesOrderEditor customers={customers} items={items} />);
+    const button = screen.getByRole("button", {
+      name: "建立草稿",
+    }) as HTMLButtonElement;
+    fireEvent.click(button);
+    await waitFor(() => expect(button.disabled).toBe(true));
+    rejectRequest(new Error("network down"));
+    await screen.findByText("網路連線異常，請稍後再試一次");
+    await waitFor(() => expect(button.disabled).toBe(false));
+    expect(button.getAttribute("aria-busy")).toBeNull();
+  });
+
+  it("keeps the pre-P4.5b non-2xx message behavior for status actions unchanged", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => failedResponse("僅 CONFIRMED 可修訂")),
+    );
+    render(
+      <SalesOrderEditor
+        customers={customers}
+        items={items}
+        initial={initialDraft}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "確認訂單" }));
+    expect(await screen.findByText("僅 CONFIRMED 可修訂")).toBeTruthy();
+    // Status-action failures must not render the save-specific Alert/adapter UI.
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("does not convert a rejected fetch on a status action into the save-specific generic message", async () => {
+    const rejectionReasons: unknown[] = [];
+    const onUnhandledRejection = (reason: unknown) => {
+      rejectionReasons.push(reason);
+    };
+    process.on("unhandledRejection", onUnhandledRejection);
+    try {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(() => Promise.reject(new Error("network down"))),
+      );
+      render(
+        <SalesOrderEditor
+          customers={customers}
+          items={items}
+          initial={initialDraft}
+        />,
+      );
+      fireEvent.click(screen.getByRole("button", { name: "確認訂單" }));
+      await waitFor(() => expect(rejectionReasons.length).toBeGreaterThan(0));
+      expect((rejectionReasons[0] as Error).message).toBe("network down");
+      expect(
+        screen.queryByText("網路連線異常，請稍後再試一次"),
+      ).toBeNull();
+      // The original request() leaves "處理中…" on the screen when the fetch
+      // promise itself rejects — the pre-P4.5b behavior we are restoring here.
+      expect(screen.getByText("處理中…")).toBeTruthy();
+    } finally {
+      process.off("unhandledRejection", onUnhandledRejection);
+    }
+  });
+
+  it("does not convert a JSON parse failure on a status action into the save-specific generic message", async () => {
+    const rejectionReasons: unknown[] = [];
+    const onUnhandledRejection = (reason: unknown) => {
+      rejectionReasons.push(reason);
+    };
+    process.on("unhandledRejection", onUnhandledRejection);
+    try {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => ({
+          ok: true,
+          json: async () => {
+            throw new SyntaxError("Unexpected token");
+          },
+        })) as unknown as typeof fetch,
+      );
+      render(
+        <SalesOrderEditor
+          customers={customers}
+          items={items}
+          initial={initialDraft}
+        />,
+      );
+      fireEvent.click(screen.getByRole("button", { name: "確認訂單" }));
+      await waitFor(() => expect(rejectionReasons.length).toBeGreaterThan(0));
+      expect(rejectionReasons[0]).toBeInstanceOf(SyntaxError);
+      expect(
+        screen.queryByText("伺服器回應格式異常，請稍後再試一次"),
+      ).toBeNull();
+    } finally {
+      process.off("unhandledRejection", onUnhandledRejection);
+    }
+  });
+
+  it("keeps confirm/void endpoint, body and window.prompt behavior unchanged after the correction", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => okResponse({ id: ids.order })));
+    vi.spyOn(window, "prompt").mockReturnValue("資料錯誤");
+    render(
+      <SalesOrderEditor
+        customers={customers}
+        items={items}
+        initial={initialDraft}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "確認訂單" }));
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    expect(
+      (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0],
+    ).toBe(`/api/sales-orders/${ids.order}/confirm`);
+    expect(
+      JSON.parse(
+        (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1].body,
+      ),
+    ).toEqual({});
+    expect(await screen.findByText("操作完成")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "作廢訂單" }));
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    expect(window.prompt).toHaveBeenCalledWith("請輸入作廢理由");
+    expect(
+      JSON.parse(
+        (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[1][1].body,
+      ),
+    ).toEqual({ reason: "資料錯誤" });
+  });
+});
