@@ -17,8 +17,6 @@
 
 ## 1. Git 起始基線
 
-## 1. Git 起始基線
-
 - Branch：`codex/p4-5-sales-orders-ui`
 - 起始 HEAD／`origin/codex/p4-5-sales-orders-ui`：`37d88e24475ab11c4b502e67fe3c75b13666c583`
 - `origin/main`：`0bab47236a048be6df42a2012866cddebff89a90`

@@ -73,9 +73,9 @@ function idempotencyHeaders() {
   };
 }
 
-// P4.5b robust request handling is scoped to the draft save flow only (create/update).
-// Status actions (confirm/revision/void) intentionally keep their pre-P4.5b request()
-// behavior below — see the SalesOrderEditor component — and must not use this helper.
+// Scoped to the draft save flow only (create/update). Status actions live in
+// sales-order-status-actions.tsx with their own independent request helper —
+// they must not share this one.
 type SaveRequestOutcome<T = unknown> =
   | { ok: true; value: T }
   | { ok: false; message: string };
@@ -110,22 +110,24 @@ async function performSaveRequest<T = unknown>(
   return { ok: true, value: value as T };
 }
 
-export function canStartSalesOrderRevision(status: string): boolean {
-  return status === "CONFIRMED" || status === "DELIVERY_CREATED";
-}
-
-export function canVoidSalesOrder(status: string): boolean {
-  return ["DRAFT", "CONFIRMED", "DELIVERY_CREATED"].includes(status);
-}
+// Re-exported for backward compatibility with existing imports (e.g.
+// tests/unit/sales-orders.test.ts); canonical implementation now lives in
+// sales-order-status-actions.tsx, which owns all status-action presentation.
+export {
+  canStartSalesOrderRevision,
+  canVoidSalesOrder,
+} from "./sales-order-status-actions";
 
 export function SalesOrderEditor({
   customers,
   items,
   initial,
+  canManage = true,
 }: {
   customers: CustomerOption[];
   items: ItemOption[];
   initial?: InitialOrder;
+  canManage?: boolean;
 }) {
   const router = useRouter();
   const [orderDate, setOrderDate] = useState(
@@ -159,8 +161,7 @@ export function SalesOrderEditor({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const saveInFlightRef = useRef(false);
-  const [message, setMessage] = useState("");
-  const editable = !initial || initial.status === "DRAFT";
+  const editable = canManage && (!initial || initial.status === "DRAFT");
 
   function draftPayload() {
     return {
@@ -226,69 +227,13 @@ export function SalesOrderEditor({
     }
   }
 
-  // Pre-P4.5b request/error behavior, kept unchanged for status actions. Deliberately
-  // does not use performSaveRequest: confirm/revision/void robustness is P4.5c scope.
-  async function request(url: string, method: "POST" | "PATCH", body: unknown) {
-    setMessage("處理中…");
-    const response = await fetch(url, {
-      method,
-      headers: idempotencyHeaders(),
-      body: JSON.stringify(body),
-    });
-    const value = await response.json();
-    if (!response.ok) {
-      setMessage(value.error?.message ?? "操作失敗");
-      return null;
-    }
-    setMessage("操作完成");
-    return value;
-  }
-
-  async function action(name: "confirm" | "revision" | "void") {
-    if (!initial) return;
-    const reason =
-      name === "void" ? window.prompt("請輸入作廢理由")?.trim() : undefined;
-    if (name === "void" && !reason) {
-      setMessage("作廢理由必填");
-      return;
-    }
-    const value = await request(
-      `/api/sales-orders/${initial.id}/${name}`,
-      "POST",
-      name === "void" ? { reason } : {},
-    );
-    if (value) router.refresh();
-  }
-
   return (
     <div className={pageStyles.pageStack}>
-      <Card>
-        {initial ? (
-          <dl className={soStyles.summaryGrid}>
-            <div>
-              <dt className={pageStyles.tableSubtext}>訂單號</dt>
-              <dd className="font-semibold">{initial.orderNumber}</dd>
-            </div>
-            <div>
-              <dt className={pageStyles.tableSubtext}>狀態</dt>
-              <dd className="font-semibold">{initial.status}</dd>
-            </div>
-            <div>
-              <dt className={pageStyles.tableSubtext}>修訂版次</dt>
-              <dd className="font-semibold">{initial.revisionNo}</dd>
-            </div>
-            <div>
-              <dt className={pageStyles.tableSubtext}>金額</dt>
-              <dd className="font-semibold">
-                未稅 {initial.subtotal} + 運費 {initial.freightAmount} ={" "}
-                {initial.totalAmount}
-              </dd>
-            </div>
-          </dl>
-        ) : (
+      {!initial ? (
+        <Card>
           <Alert tone="info">訂單號由系統在草稿建立成功時產生。</Alert>
-        )}
-      </Card>
+        </Card>
+      ) : null}
 
       <Card>
         <Section title="客戶與送貨資料">
@@ -486,48 +431,6 @@ export function SalesOrderEditor({
             }
           />
         </Card>
-      ) : null}
-
-      <div className="flex flex-wrap gap-3">
-        {initial?.status === "DRAFT" ? (
-          <button
-            type="button"
-            onClick={() => action("confirm")}
-            className="rounded-lg bg-blue-700 px-4 py-2 text-white"
-          >
-            確認訂單
-          </button>
-        ) : null}
-        {initial && canStartSalesOrderRevision(initial.status) ? (
-          <button
-            type="button"
-            onClick={() => action("revision")}
-            className="rounded-lg border px-4 py-2"
-          >
-            開始修訂
-          </button>
-        ) : null}
-        {initial && canVoidSalesOrder(initial.status) ? (
-          <button
-            type="button"
-            onClick={() => action("void")}
-            className="rounded-lg border border-red-500 px-4 py-2 text-red-700"
-          >
-            作廢訂單
-          </button>
-        ) : null}
-        <span className="self-center text-sm text-slate-600">{message}</span>
-      </div>
-
-      {initial ? (
-        <details className="rounded-2xl border bg-white p-5">
-          <summary className="cursor-pointer font-semibold">
-            快照與來源資訊（唯讀）
-          </summary>
-          <pre className="mt-4 overflow-auto whitespace-pre-wrap text-xs">
-            {JSON.stringify(initial.snapshots, null, 2)}
-          </pre>
-        </details>
       ) : null}
     </div>
   );

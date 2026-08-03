@@ -141,7 +141,6 @@ describe("P4.5b shared create/edit contract", () => {
         initial={initialDraft}
       />,
     );
-    expect(screen.getByText("SO-IN-202607-000001")).toBeTruthy();
     expect(
       (screen.getByLabelText("訂單日期") as HTMLInputElement).value,
     ).toBe("2026-07-27");
@@ -187,7 +186,21 @@ describe("P4.5b shared create/edit contract", () => {
     expect(screen.queryByRole("button", { name: "儲存草稿" })).toBeNull();
     expect(screen.queryByRole("button", { name: "新增明細" })).toBeNull();
     expect(screen.queryByRole("button", { name: /移除第/ })).toBeNull();
-    expect(screen.getByText("CONFIRMED")).toBeTruthy();
+  });
+
+  it("disables editable controls when canManage is false, even for a DRAFT order", () => {
+    render(
+      <SalesOrderEditor
+        customers={customers}
+        items={items}
+        initial={initialDraft}
+        canManage={false}
+      />,
+    );
+    expect((screen.getByLabelText("客戶") as HTMLSelectElement).disabled).toBe(
+      true,
+    );
+    expect(screen.queryByRole("button", { name: "儲存草稿" })).toBeNull();
   });
 });
 
@@ -527,8 +540,8 @@ describe("P4.5b error recovery and pending", () => {
   });
 });
 
-describe("P4.5b server totals protection", () => {
-  it("displays server-provided totals verbatim and never recomputes them from line edits", () => {
+describe("P4.5c: status actions and raw snapshot moved out of SalesOrderEditor", () => {
+  it("does not render confirm/revision/void controls", () => {
     render(
       <SalesOrderEditor
         customers={customers}
@@ -536,59 +549,12 @@ describe("P4.5b server totals protection", () => {
         initial={initialDraft}
       />,
     );
-    expect(
-      screen.getByText("未稅 1000 + 運費 50 = 1050"),
-    ).toBeTruthy();
-    fireEvent.change(screen.getByLabelText("數量"), {
-      target: { value: "999" },
-    });
-    expect(
-      screen.getByText("未稅 1000 + 運費 50 = 1050"),
-    ).toBeTruthy();
-  });
-});
-
-describe("P4.5b status actions (P4.5c-protected, unchanged)", () => {
-  it("keeps confirm/void raw styling and endpoints untouched and never marks them busy", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => okResponse({ id: ids.order })));
-    vi.spyOn(window, "prompt").mockReturnValue("資料錯誤");
-    render(
-      <SalesOrderEditor
-        customers={customers}
-        items={items}
-        initial={initialDraft}
-      />,
-    );
-    const confirmButton = screen.getByRole("button", { name: "確認訂單" });
-    expect(confirmButton.className).toBe(
-      "rounded-lg bg-blue-700 px-4 py-2 text-white",
-    );
-    expect(confirmButton.getAttribute("aria-busy")).toBeNull();
-
-    fireEvent.click(confirmButton);
-    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
-    expect(
-      (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0],
-    ).toBe(`/api/sales-orders/${ids.order}/confirm`);
-    expect(
-      JSON.parse(
-        (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1].body,
-      ),
-    ).toEqual({});
-
-    const voidButton = screen.getByRole("button", { name: "作廢訂單" });
-    fireEvent.click(voidButton);
-    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
-    expect(
-      JSON.parse(
-        (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[1][1].body,
-      ),
-    ).toEqual({ reason: "資料錯誤" });
-    expect(await screen.findByText("操作完成")).toBeTruthy();
-    expect(refreshMock).toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "確認訂單" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "開始修訂" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "作廢訂單" })).toBeNull();
   });
 
-  it("still renders the raw read-only snapshot details block unchanged", () => {
+  it("does not render the raw JSON snapshot block", () => {
     render(
       <SalesOrderEditor
         customers={customers}
@@ -596,7 +562,20 @@ describe("P4.5b status actions (P4.5c-protected, unchanged)", () => {
         initial={initialDraft}
       />,
     );
-    expect(screen.getByText("快照與來源資訊（唯讀）")).toBeTruthy();
+    expect(screen.queryByText("快照與來源資訊（唯讀）")).toBeNull();
+    expect(screen.queryByText(/"customer":/)).toBeNull();
+  });
+
+  it("no longer displays the order summary (order number/status/totals); that now lives in SalesOrderDetailView", () => {
+    render(
+      <SalesOrderEditor
+        customers={customers}
+        items={items}
+        initial={initialDraft}
+      />,
+    );
+    expect(screen.queryByText("SO-IN-202607-000001")).toBeNull();
+    expect(screen.queryByText("未稅 1000 + 運費 50 = 1050")).toBeNull();
   });
 });
 
@@ -704,121 +683,5 @@ describe("P4.5b correction: save robustness stays isolated from status actions",
     await screen.findByText("網路連線異常，請稍後再試一次");
     await waitFor(() => expect(button.disabled).toBe(false));
     expect(button.getAttribute("aria-busy")).toBeNull();
-  });
-
-  it("keeps the pre-P4.5b non-2xx message behavior for status actions unchanged", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => failedResponse("僅 CONFIRMED 可修訂")),
-    );
-    render(
-      <SalesOrderEditor
-        customers={customers}
-        items={items}
-        initial={initialDraft}
-      />,
-    );
-    fireEvent.click(screen.getByRole("button", { name: "確認訂單" }));
-    expect(await screen.findByText("僅 CONFIRMED 可修訂")).toBeTruthy();
-    // Status-action failures must not render the save-specific Alert/adapter UI.
-    expect(screen.queryByRole("alert")).toBeNull();
-  });
-
-  it("does not convert a rejected fetch on a status action into the save-specific generic message", async () => {
-    const rejectionReasons: unknown[] = [];
-    const onUnhandledRejection = (reason: unknown) => {
-      rejectionReasons.push(reason);
-    };
-    process.on("unhandledRejection", onUnhandledRejection);
-    try {
-      vi.stubGlobal(
-        "fetch",
-        vi.fn(() => Promise.reject(new Error("network down"))),
-      );
-      render(
-        <SalesOrderEditor
-          customers={customers}
-          items={items}
-          initial={initialDraft}
-        />,
-      );
-      fireEvent.click(screen.getByRole("button", { name: "確認訂單" }));
-      await waitFor(() => expect(rejectionReasons.length).toBeGreaterThan(0));
-      expect((rejectionReasons[0] as Error).message).toBe("network down");
-      expect(
-        screen.queryByText("網路連線異常，請稍後再試一次"),
-      ).toBeNull();
-      // The original request() leaves "處理中…" on the screen when the fetch
-      // promise itself rejects — the pre-P4.5b behavior we are restoring here.
-      expect(screen.getByText("處理中…")).toBeTruthy();
-    } finally {
-      process.off("unhandledRejection", onUnhandledRejection);
-    }
-  });
-
-  it("does not convert a JSON parse failure on a status action into the save-specific generic message", async () => {
-    const rejectionReasons: unknown[] = [];
-    const onUnhandledRejection = (reason: unknown) => {
-      rejectionReasons.push(reason);
-    };
-    process.on("unhandledRejection", onUnhandledRejection);
-    try {
-      vi.stubGlobal(
-        "fetch",
-        vi.fn(async () => ({
-          ok: true,
-          json: async () => {
-            throw new SyntaxError("Unexpected token");
-          },
-        })) as unknown as typeof fetch,
-      );
-      render(
-        <SalesOrderEditor
-          customers={customers}
-          items={items}
-          initial={initialDraft}
-        />,
-      );
-      fireEvent.click(screen.getByRole("button", { name: "確認訂單" }));
-      await waitFor(() => expect(rejectionReasons.length).toBeGreaterThan(0));
-      expect(rejectionReasons[0]).toBeInstanceOf(SyntaxError);
-      expect(
-        screen.queryByText("伺服器回應格式異常，請稍後再試一次"),
-      ).toBeNull();
-    } finally {
-      process.off("unhandledRejection", onUnhandledRejection);
-    }
-  });
-
-  it("keeps confirm/void endpoint, body and window.prompt behavior unchanged after the correction", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => okResponse({ id: ids.order })));
-    vi.spyOn(window, "prompt").mockReturnValue("資料錯誤");
-    render(
-      <SalesOrderEditor
-        customers={customers}
-        items={items}
-        initial={initialDraft}
-      />,
-    );
-    fireEvent.click(screen.getByRole("button", { name: "確認訂單" }));
-    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
-    expect(
-      (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0],
-    ).toBe(`/api/sales-orders/${ids.order}/confirm`);
-    expect(
-      JSON.parse(
-        (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1].body,
-      ),
-    ).toEqual({});
-    expect(await screen.findByText("操作完成")).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: "作廢訂單" }));
-    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
-    expect(window.prompt).toHaveBeenCalledWith("請輸入作廢理由");
-    expect(
-      JSON.parse(
-        (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[1][1].body,
-      ),
-    ).toEqual({ reason: "資料錯誤" });
   });
 });
