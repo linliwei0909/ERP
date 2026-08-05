@@ -1,17 +1,21 @@
-import type { ReactNode } from "react";
 import Link from "next/link";
 import { PageHeader } from "@/components/app-shell/page-header";
 import pageStyles from "@/components/app-shell/page-contract.module.css";
 import {
   Button,
   Card,
+  DescriptionDetails,
+  DescriptionItem,
+  DescriptionList,
+  DescriptionTerm,
   EmptyState,
   Field,
   Input,
   LinkButton,
   Pagination,
+  Section,
   Select,
-  StatusBadge as SharedStatusBadge,
+  StatusBadge,
   Table,
   TableBody,
   TableCaption,
@@ -22,6 +26,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui";
+import type { StatusTone } from "@/components/ui";
 import type {
   DeliveryNoteActorDto,
   DeliveryNoteDetailDto,
@@ -38,6 +43,12 @@ const STATUS_LABELS: Record<string, string> = {
   RECEIVABLE_CREATED: "已建立應收",
   VOIDED: "已作廢",
 };
+
+export function deliveryNoteStatusTone(status: string): StatusTone {
+  if (status === "VOIDED") return "danger";
+  if (status === "ACTIVE") return "success";
+  return "info";
+}
 
 function objectValue(
   value: unknown,
@@ -68,20 +79,6 @@ export function formatTimestamp(value: string | null): string {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const style =
-    status === "VOIDED"
-      ? "bg-rose-100 text-rose-800"
-      : status === "ACTIVE"
-        ? "bg-emerald-100 text-emerald-800"
-        : "bg-slate-100 text-slate-700";
-  return (
-    <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${style}`}>
-      {STATUS_LABELS[status] ?? status}
-    </span>
-  );
 }
 
 export function DeliveryNoteListView({
@@ -193,9 +190,9 @@ export function DeliveryNoteListView({
                 <TableCell monospace>{note.salesOrderNumber}</TableCell>
                 <TableCell>{note.customer.name ?? "—"}</TableCell>
                 <TableCell>
-                  <SharedStatusBadge
+                  <StatusBadge
                     label={STATUS_LABELS[note.status] ?? note.status}
-                    tone={note.status === "VOIDED" ? "danger" : note.status === "ACTIVE" ? "success" : "info"}
+                    tone={deliveryNoteStatusTone(note.status)}
                   />
                 </TableCell>
                 <TableCell>{note.createdBy.username}</TableCell>
@@ -229,27 +226,10 @@ export function DeliveryNoteListView({
   );
 }
 
-function SummaryField({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}) {
-  return (
-    <div>
-      <dt className="text-xs font-medium text-slate-500">{label}</dt>
-      <dd className="mt-1 font-semibold text-slate-900">{children}</dd>
-    </div>
-  );
-}
-
 export function DeliveryNoteDetailView({
   note,
-  actions,
 }: {
   note: DeliveryNoteDetailDto;
-  actions?: ReactNode;
 }) {
   const deliveryName = objectValue(note.deliverySnapshot, "name");
   const deliveryAddress = objectValue(note.deliverySnapshot, "fullAddress");
@@ -259,201 +239,244 @@ export function DeliveryNoteDetailView({
     objectValue(note.companySnapshot, "companyName") ?? "—";
 
   return (
-    <div className="space-y-6">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="text-sm font-semibold text-teal-700">P3.2 銷貨單明細</p>
-          <h1 className="mt-1 text-3xl font-bold text-slate-950">
-            {note.deliveryNoteNumber}
-          </h1>
-          <div className="mt-3 flex items-center gap-3">
-            <StatusBadge status={note.status} />
-            <span className="text-sm text-slate-500">
-              銷貨日 {note.deliveryNoteDate}
-            </span>
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {actions}
-          <Link
-            href="/delivery-notes"
-            className="rounded-lg border border-slate-300 px-4 py-2"
-          >
-            返回清單
-          </Link>
-        </div>
-      </header>
-
-      <dl className="grid gap-5 rounded-2xl border border-slate-200 bg-white p-6 sm:grid-cols-2 lg:grid-cols-4">
-        <SummaryField label="公司">{companyName}</SummaryField>
-        <SummaryField label="來源訂單">
-          <Link className="text-teal-700" href={`/sales-orders/${note.salesOrderId}`}>
-            {note.salesOrderNumber}
-          </Link>
-        </SummaryField>
-        <SummaryField label="訂單 Revision">
-          {note.salesOrderRevisionNo}
-        </SummaryField>
-        <SummaryField label="客戶">{note.customer.name ?? "—"}</SummaryField>
-        <SummaryField label="建立者">{note.createdBy.username}</SummaryField>
-        <SummaryField label="建立時間">
-          {formatTimestamp(note.createdAt)}
-        </SummaryField>
-        <SummaryField label="付款條件">
-          {note.paymentTermsText ?? "—"}
-        </SummaryField>
-        <SummaryField label="狀態">
-          {STATUS_LABELS[note.status] ?? note.status}
-        </SummaryField>
-      </dl>
+    <div className={pageStyles.pageStack}>
+      <Card>
+        <DescriptionList columns={4}>
+          <DescriptionItem>
+            <DescriptionTerm>銷貨單號</DescriptionTerm>
+            <DescriptionDetails>{note.deliveryNoteNumber}</DescriptionDetails>
+          </DescriptionItem>
+          <DescriptionItem>
+            <DescriptionTerm>狀態</DescriptionTerm>
+            <DescriptionDetails>
+              <StatusBadge
+                label={STATUS_LABELS[note.status] ?? note.status}
+                tone={deliveryNoteStatusTone(note.status)}
+              />
+            </DescriptionDetails>
+          </DescriptionItem>
+          <DescriptionItem>
+            <DescriptionTerm>銷貨日</DescriptionTerm>
+            <DescriptionDetails>{note.deliveryNoteDate}</DescriptionDetails>
+          </DescriptionItem>
+          <DescriptionItem>
+            <DescriptionTerm>公司</DescriptionTerm>
+            <DescriptionDetails>{companyName}</DescriptionDetails>
+          </DescriptionItem>
+          <DescriptionItem>
+            <DescriptionTerm>來源訂單</DescriptionTerm>
+            <DescriptionDetails>
+              <Link
+                href={`/sales-orders/${note.salesOrderId}`}
+                className={pageStyles.tableLink}
+              >
+                {note.salesOrderNumber}
+              </Link>
+            </DescriptionDetails>
+          </DescriptionItem>
+          <DescriptionItem>
+            <DescriptionTerm>訂單 Revision</DescriptionTerm>
+            <DescriptionDetails>{note.salesOrderRevisionNo}</DescriptionDetails>
+          </DescriptionItem>
+          <DescriptionItem>
+            <DescriptionTerm>客戶</DescriptionTerm>
+            <DescriptionDetails>{note.customer.name ?? "—"}</DescriptionDetails>
+          </DescriptionItem>
+          <DescriptionItem>
+            <DescriptionTerm>付款條件</DescriptionTerm>
+            <DescriptionDetails>{note.paymentTermsText ?? "—"}</DescriptionDetails>
+          </DescriptionItem>
+          <DescriptionItem>
+            <DescriptionTerm>建立者</DescriptionTerm>
+            <DescriptionDetails>{note.createdBy.username}</DescriptionDetails>
+          </DescriptionItem>
+          <DescriptionItem>
+            <DescriptionTerm>建立時間</DescriptionTerm>
+            <DescriptionDetails>{formatTimestamp(note.createdAt)}</DescriptionDetails>
+          </DescriptionItem>
+        </DescriptionList>
+      </Card>
 
       {note.formalPdf ? (
-        <section className="rounded-2xl border border-teal-200 bg-teal-50 p-6">
-          <h2 className="text-lg font-bold text-teal-950">正式列印摘要</h2>
-          <dl className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <SummaryField label="實際出貨日">
-              {note.actualDeliveryDate ?? "—"}
-            </SummaryField>
-            <SummaryField label="首次正式列印">
-              {formatTimestamp(note.firstPrintedAt)}
-            </SummaryField>
-            <SummaryField label="首次列印者">
-              {note.firstPrintedBy?.username ?? "—"}
-            </SummaryField>
-            <SummaryField label="補印次數">
-              {note.reprintCount}
-            </SummaryField>
-            <SummaryField label="正式 PDF">
-              {note.formalPdf.filename}
-            </SummaryField>
-            <SummaryField label="檔案大小">
-              {note.formalPdf.byteSize.toLocaleString("zh-TW")} bytes
-            </SummaryField>
-            <SummaryField label="產生時間">
-              {formatTimestamp(note.formalPdf.generatedAt)}
-            </SummaryField>
-            <SummaryField label="產生者">
-              {note.formalPdf.generatedBy.username}
-            </SummaryField>
-          </dl>
-        </section>
+        <Card>
+          <Section title="正式列印摘要">
+            <DescriptionList columns={4}>
+              <DescriptionItem>
+                <DescriptionTerm>實際出貨日</DescriptionTerm>
+                <DescriptionDetails>{note.actualDeliveryDate ?? "—"}</DescriptionDetails>
+              </DescriptionItem>
+              <DescriptionItem>
+                <DescriptionTerm>首次正式列印</DescriptionTerm>
+                <DescriptionDetails>{formatTimestamp(note.firstPrintedAt)}</DescriptionDetails>
+              </DescriptionItem>
+              <DescriptionItem>
+                <DescriptionTerm>首次列印者</DescriptionTerm>
+                <DescriptionDetails>{note.firstPrintedBy?.username ?? "—"}</DescriptionDetails>
+              </DescriptionItem>
+              <DescriptionItem>
+                <DescriptionTerm>補印次數</DescriptionTerm>
+                <DescriptionDetails>{note.reprintCount}</DescriptionDetails>
+              </DescriptionItem>
+              <DescriptionItem>
+                <DescriptionTerm>正式 PDF</DescriptionTerm>
+                <DescriptionDetails>{note.formalPdf.filename}</DescriptionDetails>
+              </DescriptionItem>
+              <DescriptionItem>
+                <DescriptionTerm>檔案大小</DescriptionTerm>
+                <DescriptionDetails>
+                  {note.formalPdf.byteSize.toLocaleString("zh-TW")} bytes
+                </DescriptionDetails>
+              </DescriptionItem>
+              <DescriptionItem>
+                <DescriptionTerm>產生時間</DescriptionTerm>
+                <DescriptionDetails>{formatTimestamp(note.formalPdf.generatedAt)}</DescriptionDetails>
+              </DescriptionItem>
+              <DescriptionItem>
+                <DescriptionTerm>產生者</DescriptionTerm>
+                <DescriptionDetails>{note.formalPdf.generatedBy.username}</DescriptionDetails>
+              </DescriptionItem>
+            </DescriptionList>
+          </Section>
+        </Card>
       ) : null}
 
-      <section className="grid gap-5 rounded-2xl border border-slate-200 bg-white p-6 md:grid-cols-2">
-        <div>
-          <h2 className="text-lg font-bold">送貨資料</h2>
-          <p className="mt-3 font-semibold">{deliveryName ?? "—"}</p>
-          <p className="mt-1 text-sm text-slate-600">{deliveryAddress ?? "—"}</p>
-          <p className="mt-1 text-sm text-slate-600">
-            收件人：{recipient ?? "—"}
-          </p>
-        </div>
-        <div>
-          <h2 className="text-lg font-bold">聯絡資料</h2>
-          <p className="mt-3 text-sm text-slate-600">
-            聯絡人：{contactName ?? "—"}
-          </p>
-        </div>
-      </section>
+      <Card>
+        <Section title="送貨與聯絡資料">
+          <DescriptionList columns={2}>
+            <DescriptionItem>
+              <DescriptionTerm>送貨地點</DescriptionTerm>
+              <DescriptionDetails>
+                {deliveryName ?? "—"}
+                <div className={pageStyles.tableSubtext}>{deliveryAddress ?? "—"}</div>
+              </DescriptionDetails>
+            </DescriptionItem>
+            <DescriptionItem>
+              <DescriptionTerm>收件人</DescriptionTerm>
+              <DescriptionDetails>{recipient ?? "—"}</DescriptionDetails>
+            </DescriptionItem>
+            <DescriptionItem>
+              <DescriptionTerm>聯絡人</DescriptionTerm>
+              <DescriptionDetails>{contactName ?? "—"}</DescriptionDetails>
+            </DescriptionItem>
+          </DescriptionList>
+        </Section>
+      </Card>
 
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-        <div className="border-b px-6 py-4">
-          <h2 className="text-lg font-bold">銷貨明細</h2>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] text-left text-sm">
-            <thead className="bg-slate-50 text-xs text-slate-500">
-              <tr>
-                <th className="px-5 py-3">項次</th>
-                <th className="px-5 py-3">品項</th>
-                <th className="px-5 py-3">單位</th>
-                <th className="px-5 py-3 text-right">數量</th>
-                <th className="px-5 py-3 text-right">單價</th>
-                <th className="px-5 py-3 text-right">金額</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {note.lines.map((line) => (
-                <tr key={line.id}>
-                  <td className="px-5 py-4">{line.lineNumber}</td>
-                  <td className="px-5 py-4">
-                    <strong>{objectValue(line.itemSnapshot, "name") ?? line.itemId}</strong>
-                    <p className="text-xs text-slate-500">
-                      {objectValue(line.itemSnapshot, "companyItemCode") ??
-                        objectValue(line.itemSnapshot, "code") ??
-                        "—"}
-                    </p>
-                  </td>
-                  <td className="px-5 py-4">
-                    {objectValue(line.itemSnapshot, "baseUnit") ?? "—"}
-                  </td>
-                  <td className="px-5 py-4 text-right">{line.quantity}</td>
-                  <td className="px-5 py-4 text-right">
-                    NT$ {formatAmount(line.unitPrice)}
-                  </td>
-                  <td className="px-5 py-4 text-right font-semibold">
-                    NT$ {formatAmount(line.lineAmount)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <dl className="ml-auto grid max-w-sm gap-2 border-t px-6 py-5 text-sm">
-          <div className="flex justify-between">
-            <dt>小計</dt>
-            <dd>NT$ {formatAmount(note.subtotal)}</dd>
-          </div>
-          <div className="flex justify-between">
-            <dt>運費</dt>
-            <dd>NT$ {formatAmount(note.freightAmount)}</dd>
-          </div>
-          <div className="flex justify-between text-base font-bold">
-            <dt>總計</dt>
-            <dd>NT$ {formatAmount(note.totalAmount)}</dd>
-          </div>
-        </dl>
-      </section>
+      <Card>
+        <Section title="銷貨明細">
+          <TableContainer>
+            <Table>
+              <TableCaption>銷貨明細（唯讀）</TableCaption>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>項次</TableHead>
+                  <TableHead>品項</TableHead>
+                  <TableHead>單位</TableHead>
+                  <TableHead align="right">數量</TableHead>
+                  <TableHead align="right">單價</TableHead>
+                  <TableHead align="right">金額</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {note.lines.map((line) => (
+                  <TableRow key={line.id}>
+                    <TableCell>{line.lineNumber}</TableCell>
+                    <TableCell>
+                      <strong>{objectValue(line.itemSnapshot, "name") ?? line.itemId}</strong>
+                      <div className={pageStyles.tableSubtext}>
+                        {objectValue(line.itemSnapshot, "companyItemCode") ??
+                          objectValue(line.itemSnapshot, "code") ??
+                          "—"}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {objectValue(line.itemSnapshot, "baseUnit") ?? "—"}
+                    </TableCell>
+                    <TableCell align="right" numeric>
+                      {line.quantity}
+                    </TableCell>
+                    <TableCell align="right" numeric>
+                      NT$ {formatAmount(line.unitPrice)}
+                    </TableCell>
+                    <TableCell align="right" numeric>
+                      NT$ {formatAmount(line.lineAmount)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {note.lines.length === 0 ? (
+                  <TableEmptyRow colSpan={6}>
+                    <EmptyState variant="no-data" title="查無明細" />
+                  </TableEmptyRow>
+                ) : null}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </Section>
+      </Card>
+
+      <Card>
+        <DescriptionList columns={3}>
+          <DescriptionItem>
+            <DescriptionTerm>小計</DescriptionTerm>
+            <DescriptionDetails>NT$ {formatAmount(note.subtotal)}</DescriptionDetails>
+          </DescriptionItem>
+          <DescriptionItem>
+            <DescriptionTerm>運費</DescriptionTerm>
+            <DescriptionDetails>NT$ {formatAmount(note.freightAmount)}</DescriptionDetails>
+          </DescriptionItem>
+          <DescriptionItem>
+            <DescriptionTerm>總計</DescriptionTerm>
+            <DescriptionDetails>NT$ {formatAmount(note.totalAmount)}</DescriptionDetails>
+          </DescriptionItem>
+        </DescriptionList>
+      </Card>
 
       {note.replacedDeliveryNote || note.replacementDeliveryNote ? (
-        <section className="rounded-2xl border border-slate-200 bg-white p-6">
-          <h2 className="text-lg font-bold">重建歷程</h2>
-          <div className="mt-4 flex flex-wrap gap-3">
-            {note.replacedDeliveryNote ? (
-              <Link
-                href={`/delivery-notes/${note.replacedDeliveryNote.id}`}
-                className="rounded-lg border px-4 py-3 text-sm"
-              >
-                前一張：{note.replacedDeliveryNote.deliveryNoteNumber}
-              </Link>
-            ) : null}
-            {note.replacementDeliveryNote ? (
-              <Link
-                href={`/delivery-notes/${note.replacementDeliveryNote.id}`}
-                className="rounded-lg border px-4 py-3 text-sm"
-              >
-                替代單：{note.replacementDeliveryNote.deliveryNoteNumber}
-              </Link>
-            ) : null}
-          </div>
-        </section>
+        <Card>
+          <Section title="重建歷程">
+            <div className="flex flex-wrap gap-3">
+              {note.replacedDeliveryNote ? (
+                <LinkButton
+                  href={`/delivery-notes/${note.replacedDeliveryNote.id}`}
+                  variant="secondary"
+                  size="small"
+                >
+                  前一張：{note.replacedDeliveryNote.deliveryNoteNumber}
+                </LinkButton>
+              ) : null}
+              {note.replacementDeliveryNote ? (
+                <LinkButton
+                  href={`/delivery-notes/${note.replacementDeliveryNote.id}`}
+                  variant="secondary"
+                  size="small"
+                >
+                  替代單：{note.replacementDeliveryNote.deliveryNoteNumber}
+                </LinkButton>
+              ) : null}
+            </div>
+          </Section>
+        </Card>
       ) : null}
 
       {note.status === "VOIDED" ? (
-        <section className="rounded-2xl border border-rose-200 bg-rose-50 p-6">
-          <h2 className="text-lg font-bold text-rose-900">作廢資訊</h2>
-          <dl className="mt-4 grid gap-4 sm:grid-cols-3">
-            <SummaryField label="作廢原因">
-              {note.voidReason ?? "—"}
-            </SummaryField>
-            <SummaryField label="作廢者">
-              {note.voidedBy?.username ?? "系統"}
-            </SummaryField>
-            <SummaryField label="作廢時間">
-              {formatTimestamp(note.voidedAt)}
-            </SummaryField>
-          </dl>
-        </section>
+        <Card>
+          <Section title="作廢資訊">
+            <DescriptionList columns={3}>
+              <DescriptionItem>
+                <DescriptionTerm>作廢原因</DescriptionTerm>
+                <DescriptionDetails>{note.voidReason ?? "—"}</DescriptionDetails>
+              </DescriptionItem>
+              <DescriptionItem>
+                <DescriptionTerm>作廢者</DescriptionTerm>
+                <DescriptionDetails>{note.voidedBy?.username ?? "系統"}</DescriptionDetails>
+              </DescriptionItem>
+              <DescriptionItem>
+                <DescriptionTerm>作廢時間</DescriptionTerm>
+                <DescriptionDetails>{formatTimestamp(note.voidedAt)}</DescriptionDetails>
+              </DescriptionItem>
+            </DescriptionList>
+          </Section>
+        </Card>
       ) : null}
     </div>
   );
