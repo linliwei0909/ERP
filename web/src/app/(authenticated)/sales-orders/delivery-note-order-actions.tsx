@@ -1,8 +1,18 @@
 "use client";
 
 import { useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
+import pageStyles from "@/components/app-shell/page-contract.module.css";
+import {
+  Alert,
+  Button,
+  Card,
+  ConfirmDialog,
+  Field,
+  LinkButton,
+  Section,
+  Textarea,
+} from "@/components/ui";
 import type { DeliveryNoteSummaryDto } from "@/lib/delivery-notes/api-types";
 import {
   createDeliveryNote,
@@ -39,9 +49,11 @@ export function DeliveryNoteOrderActions({
 }) {
   const router = useRouter();
   const busy = useRef(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [reason, setReason] = useState("");
-  const [message, setMessage] = useState("");
+  const [reasonError, setReasonError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const action = deliveryNoteOrderAction({
     orderStatus,
     revisionNo,
@@ -50,31 +62,42 @@ export function DeliveryNoteOrderActions({
   });
   const current = notes.find((note) => note.status !== "VOIDED");
 
+  function openDialog() {
+    setError(null);
+    setReason("");
+    setReasonError(null);
+    setDialogOpen(true);
+  }
+
+  function closeDialog() {
+    if (pending) return;
+    setDialogOpen(false);
+    setError(null);
+    setReasonError(null);
+  }
+
   async function submit() {
     if (!action || busy.current) return;
-    if (action === "rebuild" && !reason.trim()) {
-      setMessage("重建理由必填");
+    const trimmedReason = reason.trim();
+    if (action === "rebuild" && !trimmedReason) {
+      setReasonError("重建理由必填");
       return;
     }
     busy.current = true;
     setPending(true);
-    setMessage("");
+    setError(null);
     try {
       const result =
         action === "create"
           ? await createDeliveryNote(salesOrderId, revisionNo)
-          : await rebuildDeliveryNote(
-              salesOrderId,
-              revisionNo,
-              reason,
-            );
-      setMessage(action === "create" ? "銷貨單建立成功" : "銷貨單重建成功");
+          : await rebuildDeliveryNote(salesOrderId, revisionNo, trimmedReason);
+      setDialogOpen(false);
       router.push(`/delivery-notes/${result.deliveryNote.id}`);
       router.refresh();
-    } catch (error) {
-      setMessage(
-        error instanceof DeliveryNoteClientError
-          ? error.message
+    } catch (err) {
+      setError(
+        err instanceof DeliveryNoteClientError
+          ? err.message
           : "銷貨單操作失敗，請稍後再試",
       );
     } finally {
@@ -84,83 +107,80 @@ export function DeliveryNoteOrderActions({
   }
 
   return (
-    <section className="rounded-2xl border border-teal-200 bg-teal-50 p-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-bold text-slate-950">銷貨單</h2>
-          <p className="mt-1 text-sm text-slate-600">
-            銷貨單只能由已確認訂單明確建立，不提供自由輸入表單。
-          </p>
-        </div>
-        {current ? (
-          <Link
-            href={`/delivery-notes/${current.id}`}
-            className="rounded-lg bg-teal-700 px-4 py-2 text-white"
-          >
-            查看目前銷貨單
-          </Link>
+    <Card>
+      <Section
+        title="銷貨單"
+        description="銷貨單只能由已確認訂單明確建立，不提供自由輸入表單。"
+        actions={
+          current ? (
+            <LinkButton href={`/delivery-notes/${current.id}`}>
+              查看目前銷貨單
+            </LinkButton>
+          ) : null
+        }
+      >
+        {notes.length ? (
+          <div className="flex flex-wrap gap-2">
+            {notes.map((note) => (
+              <LinkButton
+                key={note.id}
+                href={`/delivery-notes/${note.id}`}
+                variant="secondary"
+                size="small"
+              >
+                {note.deliveryNoteNumber}－
+                {note.status === "VOIDED" ? "已作廢" : "有效"}
+              </LinkButton>
+            ))}
+          </div>
+        ) : (
+          <p className={pageStyles.tableSubtext}>目前尚無銷貨單。</p>
+        )}
+
+        {action ? (
+          <div className="mt-4">
+            <Button type="button" disabled={pending} onClick={openDialog}>
+              {action === "create" ? "建立銷貨單" : "重建銷貨單"}
+            </Button>
+          </div>
         ) : null}
-      </div>
 
-      {notes.length ? (
-        <div className="mt-4 flex flex-wrap gap-2">
-          {notes.map((note) => (
-            <Link
-              key={note.id}
-              href={`/delivery-notes/${note.id}`}
-              className="rounded-lg border border-teal-200 bg-white px-3 py-2 text-sm"
-            >
-              {note.deliveryNoteNumber}－
-              {note.status === "VOIDED" ? "已作廢" : "有效"}
-            </Link>
-          ))}
-        </div>
-      ) : (
-        <p className="mt-4 text-sm text-slate-600">目前尚無銷貨單。</p>
-      )}
+        {!canManage ? (
+          <p className={pageStyles.tableSubtext}>
+            目前帳號只有檢視權限，無法建立或重建銷貨單。
+          </p>
+        ) : null}
+      </Section>
 
-      {action === "rebuild" ? (
-        <label className="mt-4 block max-w-xl text-sm font-semibold text-slate-800">
-          重建原因
-          <textarea
-            value={reason}
-            onChange={(event) => setReason(event.target.value)}
-            maxLength={1000}
-            rows={3}
-            className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2"
-          />
-        </label>
-      ) : null}
-
-      {message ? (
-        <p
-          role={message.includes("成功") ? "status" : "alert"}
-          className="mt-3 text-sm font-medium text-slate-700"
-        >
-          {message}
-        </p>
-      ) : null}
-
-      {action ? (
-        <button
-          type="button"
-          disabled={pending}
-          onClick={submit}
-          className="mt-4 rounded-lg bg-slate-900 px-4 py-2 text-white disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {pending
-            ? "處理中…"
-            : action === "create"
-              ? "建立銷貨單"
-              : "重建銷貨單"}
-        </button>
-      ) : null}
-
-      {!canManage ? (
-        <p className="mt-4 text-sm text-slate-500">
-          目前帳號只有檢視權限，無法建立或重建銷貨單。
-        </p>
-      ) : null}
-    </section>
+      <ConfirmDialog
+        open={dialogOpen}
+        title={action === "create" ? "確認建立銷貨單" : "確認重建銷貨單"}
+        description={
+          action === "create"
+            ? "系統會依目前訂單內容建立一張新的銷貨單。"
+            : "舊銷貨單將依既有 atomic rebuild 流程作廢，系統會建立一張 replacement 銷貨單；不支援分批出貨。"
+        }
+        confirmLabel={action === "create" ? "建立銷貨單" : "重建銷貨單"}
+        pending={pending}
+        onCancel={closeDialog}
+        onConfirm={() => void submit()}
+      >
+        {error ? (
+          <Alert tone="danger" title="操作失敗">
+            {error}
+          </Alert>
+        ) : null}
+        {action === "rebuild" ? (
+          <Field label="重建原因" error={reasonError} required>
+            <Textarea
+              value={reason}
+              disabled={pending}
+              rows={3}
+              onChange={(event) => setReason(event.target.value)}
+            />
+          </Field>
+        ) : null}
+      </ConfirmDialog>
+    </Card>
   );
 }

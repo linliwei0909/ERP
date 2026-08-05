@@ -31,24 +31,26 @@ describe("P3.2e delivery-note page integration contracts", () => {
     }
   });
 
-  it("keeps explicit list load-error and duplicate-submit guards", () => {
+  it("keeps explicit list load-error guards", () => {
     const listPage = source(
       "src/app/(authenticated)/delivery-notes/page.tsx",
     );
     expect(listPage).toContain("銷貨單清單載入失敗");
     expect(listPage).toContain("viewData = undefined");
+  });
 
-    for (const path of [
-      "src/app/(authenticated)/sales-orders/delivery-note-order-actions.tsx",
+  // src/app/(authenticated)/delivery-notes/[id]/delivery-note-actions.tsx is
+  // out of P4.5c scope (a different route) and is intentionally still verified
+  // with source-string assertions here — it has not been migrated.
+  it("keeps the delivery-notes/[id] duplicate-submit guard (not in P4.5c scope)", () => {
+    const action = source(
       "src/app/(authenticated)/delivery-notes/[id]/delivery-note-actions.tsx",
-    ]) {
-      const action = source(path);
-      expect(action).toMatch(/if \([^)]*busy\.current[^)]*\) return;/);
-      expect(action).toContain("busy.current = true");
-      expect(action).toContain("busy.current = false");
-      expect(action).toContain("disabled={pending}");
-      expect(action).toContain("router.refresh()");
-    }
+    );
+    expect(action).toMatch(/if \([^)]*busy\.current[^)]*\) return;/);
+    expect(action).toContain("busy.current = true");
+    expect(action).toContain("busy.current = false");
+    expect(action).toContain("disabled={pending}");
+    expect(action).toContain("router.refresh()");
   });
 
   it("keeps P3.3d confirmation, cancel and same-operation retry boundaries", () => {

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getPageRequestContext } from "@/lib/auth/request-context";
 import { hasPermission } from "@/lib/auth/rbac";
@@ -7,8 +6,13 @@ import { mapDeliveryNoteSummary } from "@/lib/delivery-notes/api";
 import { listDeliveryNotes } from "@/lib/delivery-notes/service";
 import { getSalesOrder } from "@/lib/sales-orders/service";
 import { prisma } from "@/lib/prisma";
+import pageStyles from "@/components/app-shell/page-contract.module.css";
+import { PageHeader } from "@/components/app-shell/page-header";
+import { LinkButton } from "@/components/ui";
 import { DeliveryNoteOrderActions } from "../delivery-note-order-actions";
+import { SalesOrderDetailView } from "../sales-order-detail-view";
 import { SalesOrderEditor } from "../sales-order-editor";
+import { SalesOrderStatusActions } from "../sales-order-status-actions";
 
 export default async function SalesOrderDetailPage({
   params,
@@ -105,6 +109,7 @@ export default async function SalesOrderDetailPage({
             quantity: line.quantity.toFixed(4),
             unitPrice: line.unitPrice.toFixed(5),
             manualPriceReason: line.manualPriceReason ?? "",
+            itemSnapshot: line.itemSnapshot,
           })),
         snapshots: {
           customer: order.customerSnapshot,
@@ -128,33 +133,52 @@ export default async function SalesOrderDetailPage({
         context.roleCodes,
         "delivery_notes.manage",
       ),
+      canManageSalesOrders: hasPermission(
+        context.roleCodes,
+        "sales_orders.manage",
+      ),
     };
   } catch {
     redirect("/sales-orders");
   }
 
+  const { initial, canManageSalesOrders, canManageDeliveryNotes } = data;
+  const showEditor = initial.status === "DRAFT" && canManageSalesOrders;
+
   return (
-    <main className="mx-auto min-h-screen max-w-6xl px-6 py-12">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">銷售訂單明細</h1>
-        <Link href="/sales-orders" className="rounded-lg border px-4 py-2">
-          返回清單
-        </Link>
-      </div>
-      <div className="mt-8 space-y-6">
-        <DeliveryNoteOrderActions
-          salesOrderId={data.initial.id}
-          orderStatus={data.initial.status}
-          revisionNo={data.initial.revisionNo}
-          notes={data.deliveryNotes}
-          canManage={data.canManageDeliveryNotes}
-        />
+    <main className={pageStyles.pageStack}>
+      <PageHeader
+        containerVariant="wide"
+        context="P3.1 銷售流程"
+        title="銷售訂單明細"
+        actions={
+          <LinkButton href="/sales-orders" variant="secondary">
+            返回清單
+          </LinkButton>
+        }
+      />
+      <SalesOrderStatusActions
+        orderId={initial.id}
+        status={initial.status}
+        canManage={canManageSalesOrders}
+      />
+      <DeliveryNoteOrderActions
+        salesOrderId={initial.id}
+        orderStatus={initial.status}
+        revisionNo={initial.revisionNo}
+        notes={data.deliveryNotes}
+        canManage={canManageDeliveryNotes}
+      />
+      {showEditor ? (
         <SalesOrderEditor
           customers={data.customers}
           items={data.items}
-          initial={data.initial}
+          initial={initial}
+          canManage={canManageSalesOrders}
         />
-      </div>
+      ) : (
+        <SalesOrderDetailView order={initial} />
+      )}
     </main>
   );
 }
