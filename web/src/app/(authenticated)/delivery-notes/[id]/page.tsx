@@ -8,6 +8,9 @@ import type { DeliveryNoteDetailDto } from "@/lib/delivery-notes/api-types";
 import { DeliveryNoteNotFoundError } from "@/lib/delivery-notes/errors";
 import { getDeliveryNote } from "@/lib/delivery-notes/service";
 import { prisma } from "@/lib/prisma";
+import pageStyles from "@/components/app-shell/page-contract.module.css";
+import { PageHeader } from "@/components/app-shell/page-header";
+import { Alert, Card, LinkButton, Section } from "@/components/ui";
 import { DeliveryNoteDetailView } from "../delivery-note-view";
 import {
   DeliveryNotePrintActions,
@@ -44,42 +47,50 @@ export default async function DeliveryNoteDetailPage({
 
   if (!note) {
     return (
-      <main className="mx-auto min-h-screen max-w-7xl px-6 py-12">
-        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-8">
-          <h1 className="text-xl font-bold text-rose-900">
-            銷貨單明細載入失敗
-          </h1>
-          <p className="mt-2 text-sm text-rose-800">
-            請返回清單後重試；若問題持續，請聯絡系統管理員。
-          </p>
-        </div>
+      <main className={pageStyles.pageStack}>
+        <PageHeader
+          containerVariant="wide"
+          context="銷貨作業"
+          title="銷貨單明細"
+          actions={
+            <LinkButton href="/delivery-notes" variant="secondary">
+              返回清單
+            </LinkButton>
+          }
+        />
+        <Alert tone="danger" title="銷貨單明細載入失敗">
+          請返回清單後重試；若問題持續，請聯絡系統管理員。
+        </Alert>
       </main>
     );
   }
 
   const canVoid =
     note.status === "ACTIVE" &&
-    hasPermission(
-      context.roleCodes,
-      "delivery_notes.admin_void",
-    );
+    hasPermission(context.roleCodes, "delivery_notes.admin_void");
 
   return (
-    <main className="mx-auto min-h-screen max-w-7xl px-6 py-12">
-      <DeliveryNoteDetailView
-        note={note}
+    <main className={pageStyles.pageStack}>
+      <PageHeader
+        containerVariant="wide"
+        context="銷貨作業"
+        title="銷貨單明細"
         actions={
-          <>
-            <DeliveryNotePrintActions
-              deliveryNoteId={note.id}
-              capabilities={note.printCapabilities}
-            />
-            {canVoid ? (
-              <DeliveryNoteVoidAction deliveryNoteId={note.id} />
-            ) : null}
-          </>
+          <LinkButton href="/delivery-notes" variant="secondary">
+            返回清單
+          </LinkButton>
         }
       />
+      <Card>
+        <Section title="銷貨單操作">
+          <DeliveryNotePrintActions
+            deliveryNoteId={note.id}
+            capabilities={note.printCapabilities}
+          />
+          {canVoid ? <DeliveryNoteVoidAction deliveryNoteId={note.id} /> : null}
+        </Section>
+      </Card>
+      <DeliveryNoteDetailView note={note} />
     </main>
   );
 }
