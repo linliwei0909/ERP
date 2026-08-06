@@ -40,9 +40,10 @@ describe("P3.2e delivery-note page integration contracts", () => {
   });
 
   // src/app/(authenticated)/delivery-notes/[id]/delivery-note-actions.tsx is
-  // out of P4.5c scope (a different route) and is intentionally still verified
-  // with source-string assertions here — it has not been migrated.
-  it("keeps the delivery-notes/[id] duplicate-submit guard (not in P4.5c scope)", () => {
+  // out of P4.5c scope (a different route). As of P4.6c1 it has been migrated
+  // to the shared ConfirmDialog/Button/Alert/Field/Textarea components; these
+  // assertions lock the equivalent business guarantees on the new structure.
+  it("keeps the delivery-notes/[id] duplicate-submit guard (P4.6c1 dialog shell)", () => {
     const action = source(
       "src/app/(authenticated)/delivery-notes/[id]/delivery-note-actions.tsx",
     );
@@ -57,7 +58,7 @@ describe("P3.2e delivery-note page integration contracts", () => {
     const action = source(
       "src/app/(authenticated)/delivery-notes/[id]/delivery-note-actions.tsx",
     );
-    expect(action).toContain('role="dialog"');
+    expect(action).toContain("ConfirmDialog");
     expect(action).toContain("確認正式列印");
     expect(action).toContain(
       "此操作會將銷貨單與來源訂單標記為已出貨、寫入實際出貨日，並建立不可變的正式 PDF。",
@@ -66,13 +67,36 @@ describe("P3.2e delivery-note page integration contracts", () => {
       "if (busy.current || !dialog || !session.current) return;",
     );
     expect(action).toContain("if (!session.current)");
-    expect(action).toContain("disabled={mutationPending}");
-    expect(action).toContain("onClick={() => setDialog(null)}");
+    expect(action).toContain("pending={mutationPending}");
+    expect(action).toContain("onCancel={() => setDialog(null)}");
     expect(action).toContain(
       "正式列印已完成，但 PDF 下載失敗；請使用「下載 PDF」重試",
     );
     expect(action).toContain(
       "補印紀錄已完成，但 PDF 下載失敗；請只重試下載",
     );
+  });
+
+  it("keeps the admin void idempotency-key behaviour untouched by the P4.6c1 dialog shell", () => {
+    const client = source("src/lib/delivery-notes/client.ts");
+    const action = source(
+      "src/app/(authenticated)/delivery-notes/[id]/delivery-note-actions.tsx",
+    );
+    // P4.6c1 is presentation-only: the void mutation call and its
+    // per-call idempotency key generation (Non-blocking deferred risk,
+    // see docs/P4_6C_DELIVERY_NOTE_PRINT_ACTIONS_UI_PREFLIGHT.md §18.1/§19)
+    // must not change until a separate authorization decides otherwise.
+    // Formatting-independent: locks the meaningful expression rather than
+    // exact indentation/line breaks, so it isn't brittle to unrelated
+    // reformatting of client.ts.
+    expect(client).toMatch(
+      /"idempotency-key":\s*createDeliveryNoteIdempotencyKey\(\)/,
+    );
+    const voidFunctionSource =
+      client.match(/export function voidDeliveryNote\([\s\S]*?\n\}/)?.[0] ?? "";
+    expect(voidFunctionSource).not.toBe("");
+    expect(voidFunctionSource).toContain("deliveryNoteMutation(");
+    expect(voidFunctionSource).not.toContain("createPrintMutationSession");
+    expect(action).toContain("await voidDeliveryNote(deliveryNoteId, reason)");
   });
 });
