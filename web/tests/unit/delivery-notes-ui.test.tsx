@@ -238,10 +238,16 @@ describe("delivery-note UI rendering", () => {
     expect(html).toContain("DN-IN-202607-000001.pdf");
   });
 
-  it("renders an accessible loading state", () => {
+  it("renders an accessible loading state using the shared design system", () => {
     const html = renderToStaticMarkup(<DeliveryNotesLoading />);
-    expect(html).toContain("animate-pulse");
-    expect(html).toContain("正在載入銷貨單");
+    expect(html).not.toContain("animate-pulse");
+    expect(html).toContain('role="status"');
+    expect(html).toContain('aria-live="polite"');
+    expect(html).toContain("正在載入銷貨單清單");
+    expect(html).toContain("銷貨單清單");
+    expect(html).toContain('data-variant="block"');
+    expect(html).toContain('data-variant="text"');
+    expect(html.match(/<main[\s>]/g)).toHaveLength(1);
   });
 });
 
